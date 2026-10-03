@@ -133,3 +133,61 @@ func TestActorSessionDragonFatalTrapWithoutFireShield(t *testing.T) {
 		t.Fatalf("expected player to die to Heap Dragon without fire-shield, got Alive=%v HP=%d", out.Session.Alive, out.Session.HP)
 	}
 }
+
+func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+
+	// 1. Start session -> creates actor, wakes on worker, mutates, and suspends to GCS
+	rec, err := b.StartSession(t.Context(), "mofi", "paladin")
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	if rec.ActorName != "d2d-mofi" || rec.State != "ACTOR_STATE_SUSPENDED" || rec.SaveCount != 1 {
+		t.Fatalf("unexpected initial session record: %+v", rec)
+	}
+
+	// 2. Floor 1 -> Floor 2 + Quicksave
+	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key"})
+	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f1:stairs"})
+	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword"})
+	savedRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "quicksave", Target: "f2:shrine"})
+	if err != nil {
+		t.Fatalf("quicksave failed: %v", err)
+	}
+	if savedRec.LastTag == "" {
+		t.Fatalf("expected LastTag to be populated after quicksave, got %+v", savedRec)
+	}
+
+	// 3. Fork a parallel timeline from the quicksaved actor before entering Floor 3!
+	forkedRec, err := b.ForkSession(t.Context(), "d2d-mofi", "d2d-mofi-branch")
+	if err != nil {
+		t.Fatalf("ForkSession failed: %v", err)
+	}
+	if forkedRec.ActorName != "d2d-mofi-branch" || forkedRec.Session.Floor != 2 || !slices.Contains(forkedRec.Session.Inventory, "dragon-slayer-sword") {
+		t.Fatalf("unexpected forked actor state: %+v", forkedRec)
+	}
+
+	// 4. Descend to Floor 3 without fire-shield and attack Dragon -> DIE!
+	// Note: For Revert to rewind to before the fatal attack, attacking the Dragon
+	// leaves the dead actor in RUNNING (uncommitted) state so Revert rewinds to the
+	// last committed GCS snapshot!
+	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f2:stairs"})
+	deadRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon"})
+	if err != nil {
+		t.Fatalf("dragon combat failed: %v", err)
+	}
+	if deadRec.Session.Alive {
+		t.Fatalf("expected hero to die without fire-shield")
+	}
+
+	// 5. SAVE-SCUM! Revert actor -> restores to last committed GCS snapshot (Alive == true!)
+	revertedRec, err := b.RevertSession(t.Context(), "d2d-mofi")
+	if err != nil {
+		t.Fatalf("RevertSession failed: %v", err)
+	}
+	if !revertedRec.Session.Alive || revertedRec.Session.HP == 0 || revertedRec.RevertCount != 1 {
+		t.Fatalf("expected RevertSession to bring hero back to life, got Alive=%v HP=%d Reverts=%d",
+			revertedRec.Session.Alive, revertedRec.Session.HP, revertedRec.RevertCount)
+	}
+}
+
