@@ -1,3 +1,3 @@
-module github.com/mofi/anything-but-agents
+module github.com/moficodes/anything-but-agents
 
 go 1.23.0

@@ -32,6 +32,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ATESPACE="anything-but-agents"
 ROUTER_URL="${ROUTER_URL:-http://localhost:8000}"
 PAUSE_BETWEEN_STEPS="${PAUSE_BETWEEN_STEPS:-1}"
+export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Load local .env if present; fall back to parent .ate-dev-env.sh if present.
 if [[ -f "${REPO_ROOT}/.env" ]]; then
@@ -60,9 +61,22 @@ apply_env_defaults() {
   export SUBNETWORK="${SUBNETWORK:-default}"
   export BUCKET_NAME="${BUCKET_NAME:-ate-snapshots-${PROJECT_ID}-${GCE_REGION}}"
   export KO_DOCKER_REPO="${KO_DOCKER_REPO:-gcr.io/${PROJECT_ID}/anything-but-agents}"
-  export ATE_CREDENTIAL_PROVIDER="${ATE_CREDENTIAL_PROVIDER:-{\"name\":\"k8s.io\"}}"
+  if [[ -z "${ATE_CREDENTIAL_PROVIDER:-}" ]]; then
+    export ATE_CREDENTIAL_PROVIDER='{"name":"k8s.io"}'
+  fi
   export KO_DEFAULTPLATFORMS="${KO_DEFAULTPLATFORMS:-linux/amd64}"
-  export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
+  if [[ -z "${SUBSTRATE_ROOT:-}" ]]; then
+    for candidate in \
+      "${REPO_ROOT}/.." \
+      "${REPO_ROOT}/../../agent-substrate/substrate" \
+      "${REPO_ROOT}/../../agent-substrate/b-substrate"; do
+      if [[ -d "${candidate}/tools/setup-gcp" ]]; then
+        SUBSTRATE_ROOT="$(cd "${candidate}" && pwd)"
+        break
+      fi
+    done
+    export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
+  fi
 }
 
 banner() {
@@ -94,12 +108,12 @@ resolve_gke_version() {
   local detected
   detected="$(gcloud container get-server-config \
     --project="${PROJECT_ID}" \
-    --location="${CLUSTER_LOCATION}" \
+    --zone="${CLUSTER_LOCATION}" \
     --format="value(validMasterVersions)" 2>/dev/null \
     | tr ';' '\n' \
     | grep -E '^1\.(36|37)\.' \
     | head -n 1 || true)"
-  export CLUSTER_VERSION="${detected:-1.36.3-gke.1767000}"
+  export CLUSTER_VERSION="${detected:-1.36.4-gke.1495000}"
 }
 
 bootstrap_gke() {
