@@ -27,15 +27,50 @@ import (
 func main() {
 	addr := flag.String("addr", ":80", "HTTP listen address")
 	mode := flag.String("mode", "actor", "Operating mode: actor | gateway | local")
+	atespace := flag.String("atespace", "anything-but-agents", "Agent Substrate atespace")
+	template := flag.String("template", "dungeon2d", "Agent Substrate ActorTemplate name")
+	routerURL := flag.String("router-url", "http://localhost:8000", "atenet-router HTTP URL")
+	ateEndpoint := flag.String("ate-endpoint", "", "Optional ate-api-server gRPC endpoint override for kubectl-ate")
+	kubectlAteBin := flag.String("kubectl-ate-bin", "kubectl-ate", "Path to kubectl-ate binary")
+	publicURL := flag.String("public-url", "", "Optional public base URL for QR code generation")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	if *mode == "actor" {
+
+	switch *mode {
+	case "actor":
 		session := NewActorSession()
 		slog.Info("Starting dungeon2d per-player actor server", slog.String("addr", *addr))
 		if err := http.ListenAndServe(*addr, NewActorMux(session)); err != nil {
-			slog.Error("Server exited", slog.Any("err", err))
+			slog.Error("Actor server exited", slog.Any("err", err))
 			os.Exit(1)
 		}
+
+	case "gateway":
+		backend := NewClusterAteBackend(*atespace, *template, *routerURL, *ateEndpoint, *kubectlAteBin)
+		gw := NewGatewayServer(backend, *publicURL)
+		slog.Info("Starting dungeon2d Gateway & Live Dashboard (cluster-ate mode)",
+			slog.String("addr", *addr),
+			slog.String("atespace", *atespace),
+			slog.String("template", *template),
+			slog.String("router_url", *routerURL))
+		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
+			slog.Error("Gateway server exited", slog.Any("err", err))
+			os.Exit(1)
+		}
+
+	case "local":
+		backend := NewLocalSimulatorBackend(*atespace, *template)
+		gw := NewGatewayServer(backend, *publicURL)
+		slog.Info("Starting dungeon2d Gateway & Live Dashboard (local simulator mode)",
+			slog.String("addr", *addr))
+		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
+			slog.Error("Local gateway server exited", slog.Any("err", err))
+			os.Exit(1)
+		}
+
+	default:
+		slog.Error("Unknown --mode (expected actor, gateway, or local)", slog.String("mode", *mode))
+		os.Exit(1)
 	}
 }

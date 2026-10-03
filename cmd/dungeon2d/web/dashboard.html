@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Substrate Mission Control — Dungeon 2D Multiplexer Dashboard</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --panel: #0f172a;
+      --panel-alt: #131d33;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --cyan: #38bdf8;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --violet: #a855f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .icon {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex-shrink: 0;
+    }
+    .icon-lg { width: 20px; height: 20px; }
+
+    /* Top Bar */
+    .topbar {
+      padding: 14px 24px;
+      background: #0b1120;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .kpi-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .kpi-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 12px;
+      display: flex;
+      flex-direction: column;
+      min-width: 104px;
+    }
+    .kpi-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .kpi-val {
+      font-size: 18px;
+      font-weight: 800;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: var(--text);
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { border-color: var(--cyan); }
+    .btn-primary {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: var(--cyan);
+    }
+    .btn-warn {
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+    }
+    .btn-fork {
+      background: rgba(168, 85, 247, 0.16);
+      border-color: rgba(168, 85, 247, 0.5);
+      color: #c084fc;
+    }
+    .btn-danger {
+      background: rgba(244, 63, 94, 0.14);
+      border-color: rgba(244, 63, 94, 0.4);
+      color: #fb7185;
+    }
+
+    /* Main Layout */
+    .dashboard-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 18px;
+      padding: 18px 24px;
+    }
+    @media (max-width: 1100px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+    .main-col {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .section-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 3-WorkerPool Multiplexer Cards */
+    .workers-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .worker-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .worker-card.busy {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: var(--emerald);
+      box-shadow: 0 0 24px rgba(16, 185, 129, 0.25);
+      transform: translateY(-2px);
+    }
+    .worker-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .worker-ip {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--cyan);
+      font-size: 13px;
+    }
+    .worker-slot-pill {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #090d16;
+      border: 1px dashed #334155;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .worker-card.busy .worker-slot-pill {
+      border-style: solid;
+      border-color: var(--emerald);
+      color: #6ee7b7;
+      font-weight: 700;
+    }
+
+    /* Actor Session Cards Grid */
+    .actors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+      gap: 14px;
+    }
+    .actor-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s ease;
+    }
+    .actor-card.state-dead {
+      border-color: rgba(244, 63, 94, 0.65);
+      background: linear-gradient(180deg, rgba(244, 63, 94, 0.08), var(--panel));
+    }
+    .actor-card.state-victory {
+      border-color: rgba(245, 158, 11, 0.7);
+      background: linear-gradient(180deg, rgba(245, 158, 11, 0.09), var(--panel));
+    }
+    .actor-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .actor-name {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .badge-suspended {
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--cyan);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .badge-running {
+      background: rgba(16, 185, 129, 0.16);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.45);
+    }
+    .badge-dead {
+      background: rgba(244, 63, 94, 0.18);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.5);
+    }
+    .badge-victory {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.55);
+    }
+
+    .hp-bar-outer {
+      width: 100%;
+      height: 8px;
+      background: #090d16;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #1e293b;
+    }
+    .hp-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      transition: width 0.25s ease;
+    }
+    .hp-bar-inner.low {
+      background: linear-gradient(90deg, #e11d48, #fb7185);
+    }
+
+    .inv-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .inv-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #090d16;
+      border: 1px solid #1e293b;
+      color: #475569;
+    }
+    .inv-chip.active {
+      border-color: rgba(16, 185, 129, 0.45);
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .pod-trail {
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--muted);
+      background: #090d16;
+      padding: 6px 8px;
+      border-radius: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Right Sidebar: QR + Live Telemetry Stream */
+    .side-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .qr-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .qr-img {
+      width: 112px;
+      height: 112px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .feed-card {
+      flex: 1;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      max-height: 620px;
+    }
+    .feed-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .feed-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #090d16;
+      border-left: 3px solid var(--cyan);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .feed-item.ev-DEATH { border-left-color: var(--rose); }
+    .feed-item.ev-REVERT { border-left-color: var(--amber); }
+    .feed-item.ev-FORK { border-left-color: var(--violet); }
+    .feed-item.ev-VICTORY { border-left-color: var(--emerald); }
+    .feed-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--cyan)"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+      <div>
+        <div class="brand-title">ANYTHING BUT AGENTS // DUNGEON-2D MULTIPLEXER</div>
+        <div class="brand-sub">Wake-on-HTTP via <code>atenet-router</code> &bull; 100% Go Heap State &bull; Immediate Suspend to GCS</div>
+      </div>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="kpi-box">
+        <span class="kpi-label">Game Actors</span>
+        <span id="kpiTotal" class="kpi-val">0</span>
+      </div>
+      <div class="kpi-box">
+        <span class="kpi-label">Suspended (GCS)</span>
+        <span id="kpiSuspended" class="kpi-val" style="color:var(--cyan)">0</span>
+      </div>
+      <div class="kpi-box">
+        <span class="kpi-label">GCS Saves</span>
+        <span id="kpiSaves" class="kpi-val" style="color:var(--emerald)">0</span>
+      </div>
+      <div class="kpi-box">
+        <span class="kpi-label">Save-Scums (Revert)</span>
+        <span id="kpiReverts" class="kpi-val" style="color:var(--amber)">0</span>
+      </div>
+      <div class="kpi-box">
+        <span class="kpi-label">Victories</span>
+        <span id="kpiVictories" class="kpi-val" style="color:#fbbf24">0</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn btn-primary" onclick="spawnDemoBot('full-demo')">
+        <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run Automated Demo Hero
+      </button>
+      <a class="btn" href="/play" target="_blank">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+        Open Phone View (/play)
+      </a>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <div class="main-col">
+      <!-- 3-WorkerPool Multiplexer Row -->
+      <section>
+        <div class="section-hdr">
+          <div class="section-title">
+            <svg class="icon" viewBox="0 0 24 24" style="color:var(--emerald)"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+            Shared 3-Replica WorkerPool (Actors Flash Into RAM Only During Milestones)
+          </div>
+          <span id="modeBadge" class="badge badge-suspended">CLUSTER-ATE</span>
+        </div>
+        <div id="workersRow" class="workers-row"></div>
+      </section>
+
+      <!-- All Active / Suspended Game Actors -->
+      <section>
+        <div class="section-hdr">
+          <div class="section-title">
+            <svg class="icon" viewBox="0 0 24 24" style="color:var(--cyan)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Player Actor Sessions (Go Heap Snapshots in GCS)
+          </div>
+        </div>
+        <div id="actorsGrid" class="actors-grid"></div>
+      </section>
+    </div>
+
+    <!-- Right Sidebar: Join QR Code + Live Event Stream -->
+    <aside class="side-col">
+      <div class="qr-card">
+        <img id="qrImage" class="qr-img" src="/api/qr.svg" alt="Join QR Code" />
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:14px;font-weight:800;color:var(--cyan);">Scan to Play on Phone</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.4;">
+            Every phone spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods.
+          </div>
+          <a id="joinLinkText" href="/play" target="_blank" style="font-size:12px;font-family:monospace;color:#fff;word-break:break-all;">/play</a>
+        </div>
+      </div>
+
+      <div class="feed-card">
+        <div class="section-hdr">
+          <div class="section-title">
+            <svg class="icon" viewBox="0 0 24 24" style="color:var(--amber)"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+            Live Wake / Commit / Revert Stream
+          </div>
+        </div>
+        <div id="feedList" class="feed-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const SVG_ICONS = {
+      key: `<svg class="icon" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
+      sword: `<svg class="icon" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>`,
+      shield: `<svg class="icon" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>`,
+      chalice: `<svg class="icon" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
+      potion: `<svg class="icon" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>`,
+      revert: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
+      fork: `<svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
+      trash: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`
+    };
+
+    function renderDashboard(snap) {
+      document.getElementById("modeBadge").textContent = (snap.mode || "cluster-ate").toUpperCase();
+      document.getElementById("kpiTotal").textContent = snap.stats.total_sessions;
+      document.getElementById("kpiSuspended").textContent = snap.stats.suspended_actors;
+      document.getElementById("kpiSaves").textContent = snap.stats.total_saves;
+      document.getElementById("kpiReverts").textContent = snap.stats.total_reverts;
+      document.getElementById("kpiVictories").textContent = snap.stats.victories;
+
+      const playURL = (snap.public_url || window.location.origin) + "/play";
+      document.getElementById("joinLinkText").textContent = playURL;
+      document.getElementById("joinLinkText").href = playURL;
+      document.getElementById("qrImage").src = "/api/qr.svg?url=" + encodeURIComponent(playURL);
+
+      // Render 3 WorkerPool Slots
+      const workersEl = document.getElementById("workersRow");
+      workersEl.innerHTML = (snap.workers || []).map(w => {
+        const busy = !!w.active_actor;
+        return `
+          <div class="worker-card ${busy ? 'busy' : ''}">
+            <div class="worker-top">
+              <span>Worker Pod #${w.index} (${w.worker_pod.slice(-5)})</span>
+              <span class="worker-ip">${w.ip}</span>
+            </div>
+            <div class="worker-slot-pill">
+              <span>${busy ? `WAKING: ${w.active_actor} (${w.active_action})` : 'IDLE — 0 ACTORS PINNED'}</span>
+              <span>Wakes: ${w.wake_count || 0}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Render Player Session Cards
+      const gridEl = document.getElementById("actorsGrid");
+      const sessions = snap.sessions || [];
+      if (sessions.length === 0) {
+        gridEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;border:1px dashed var(--border);border-radius:12px;">
+          No player actors yet. Scan the QR code, open <code>/play</code>, or click <strong>Run Automated Demo Hero</strong> above!
+        </div>`;
+      } else {
+        gridEl.innerHTML = sessions.map(rec => {
+          const s = rec.session;
+          const inv = s.inventory || [];
+          let statusBadge = `<span class="badge badge-suspended">SUSPENDED IN GCS</span>`;
+          let cardClass = "actor-card";
+          if (!s.alive) {
+            statusBadge = `<span class="badge badge-dead">DEAD (UNCOMMITTED RAM)</span>`;
+            cardClass += " state-dead";
+          } else if (s.victory) {
+            statusBadge = `<span class="badge badge-victory">VICTORY ESCAPED</span>`;
+            cardClass += " state-victory";
+          } else if (rec.state === "ACTOR_STATE_RUNNING") {
+            statusBadge = `<span class="badge badge-running">RUNNING ON POD</span>`;
+          }
+
+          const hpPct = Math.max(0, Math.min(100, Math.round((s.hp / (s.max_hp || 100)) * 100)));
+          const podTrail = (s.pod_ip_history && s.pod_ip_history.length > 0)
+            ? s.pod_ip_history.join(" -> ")
+            : (rec.assigned_worker_ip || "gs://snapshot");
+
+          return `
+            <div class="${cardClass}">
+              <div class="actor-hdr">
+                <div class="actor-name">
+                  <span>${s.hero_name || rec.actor_name}</span>
+                  <span style="font-size:11px;color:var(--muted);font-weight:500;">(${rec.actor_name})</span>
+                </div>
+                ${statusBadge}
+              </div>
+
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
+                <span>Floor <strong style="color:var(--text)">${s.floor} / 3</strong> &bull; Score <strong style="color:var(--cyan)">${s.score}</strong></span>
+                <span>HP <strong style="color:var(--text)">${s.hp}/${s.max_hp || 100}</strong> &bull; Saves: <strong>${rec.save_count}</strong> &bull; Reverts: <strong style="color:var(--amber)">${rec.revert_count}</strong></span>
+              </div>
+
+              <div class="hp-bar-outer">
+                <div class="hp-bar-inner ${hpPct <= 35 ? 'low' : ''}" style="width:${hpPct}%"></div>
+              </div>
+
+              <div class="inv-row">
+                <span class="inv-chip ${inv.includes('crypt-key') ? 'active' : ''}">${SVG_ICONS.key} Key</span>
+                <span class="inv-chip ${inv.includes('dragon-slayer-sword') ? 'active' : ''}">${SVG_ICONS.sword} Sword</span>
+                <span class="inv-chip ${inv.includes('fire-shield') ? 'active' : ''}">${SVG_ICONS.shield} Shield</span>
+                <span class="inv-chip ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
+              </div>
+
+              <div class="pod-trail" title="Worker Pod IP Hop History">Pod Hops: ${podTrail}</div>
+              <div style="font-size:11px;color:#cbd5e1;line-height:1.35;">${rec.last_message || s.last_event || ''}</div>
+
+              <div style="display:flex;gap:6px;margin-top:2px;">
+                <button class="btn btn-warn" style="flex:1;padding:6px 8px;" onclick="revertActor('${rec.actor_name}')">
+                  ${SVG_ICONS.revert} Revert
+                </button>
+                <button class="btn btn-fork" style="flex:1;padding:6px 8px;" onclick="forkActor('${rec.actor_name}')">
+                  ${SVG_ICONS.fork} Fork
+                </button>
+                <a class="btn" style="padding:6px 8px;" href="/play?actor=${encodeURIComponent(rec.actor_name)}" target="_blank">Play</a>
+                <button class="btn btn-danger" style="padding:6px 8px;" onclick="deleteActor('${rec.actor_name}')">
+                  ${SVG_ICONS.trash}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      // Render Event Feed
+      const feedEl = document.getElementById("feedList");
+      feedEl.innerHTML = (snap.events || []).slice(0, 30).map(ev => `
+        <div class="feed-item ev-${ev.type}">
+          <div class="feed-meta">
+            <span><strong>${ev.type}</strong> &bull; ${ev.actor_name}</span>
+            <span>${ev.worker_ip ? ev.worker_ip + ' (' + (ev.latency_ms || 0) + 'ms)' : ''}</span>
+          </div>
+          <div style="color:#e2e8f0;line-height:1.35;">${ev.message}</div>
+        </div>
+      `).join("");
+    }
+
+    async function refreshState() {
+      try {
+        const res = await fetch("/api/dashboard/state");
+        if (res.ok) {
+          const snap = await res.json();
+          renderDashboard(snap);
+        }
+      } catch (_) {}
+    }
+
+    async function revertActor(actorName) {
+      await fetch("/api/session/revert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actor_name: actorName })
+      });
+      refreshState();
+    }
+
+    async function forkActor(actorName) {
+      await fetch("/api/session/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_actor: actorName })
+      });
+      refreshState();
+    }
+
+    async function deleteActor(actorName) {
+      await fetch("/api/session/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actor_name: actorName })
+      });
+      refreshState();
+    }
+
+    async function spawnDemoBot(mode) {
+      const hero = "hero-" + Math.floor(100 + Math.random() * 900);
+      fetch("/api/session/bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hero_name: hero, mode: mode || "full-demo", delay_ms: 450 })
+      });
+    }
+
+    // Subscribe to real-time SSE + periodic reconciliation
+    try {
+      const es = new EventSource("/api/dashboard/events");
+      es.onmessage = () => refreshState();
+    } catch (_) {}
+    refreshState();
+    setInterval(refreshState, 1200);
+  </script>
+</body>
+</html>

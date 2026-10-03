@@ -191,3 +191,101 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 }
 
+func TestGatewayAndDashboardIntegration(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://localhost:8090")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	// 1. Verify /play and /dashboard serve embedded HTML with inline Lucide SVGs and zero emojis
+	for _, path := range []string{"/play", "/dashboard"} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		raw := new(bytes.Buffer)
+		_, _ = raw.ReadFrom(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s returned %d", path, resp.StatusCode)
+		}
+		html := raw.String()
+		if !bytes.Contains(raw.Bytes(), []byte("<svg")) {
+			t.Fatalf("expected inline Lucide <svg icons in %s", path)
+		}
+		for _, r := range html {
+			if r >= 0x1F300 && r <= 0x1FAFF {
+				t.Fatalf("found prohibited emoji character %U in %s", r, path)
+			}
+		}
+	}
+
+	// 2. Verify /api/qr.svg returns valid SVG QR code
+	qrResp, err := http.Get(srv.URL + "/api/qr.svg?url=http://localhost:8090/play")
+	if err != nil {
+		t.Fatalf("GET /api/qr.svg failed: %v", err)
+	}
+	qrBody := new(bytes.Buffer)
+	_, _ = qrBody.ReadFrom(qrResp.Body)
+	qrResp.Body.Close()
+	if qrResp.StatusCode != http.StatusOK || !bytes.Contains(qrBody.Bytes(), []byte("<svg")) {
+		t.Fatalf("unexpected /api/qr.svg response: status=%d", qrResp.StatusCode)
+	}
+
+	// 3. Start session via POST /api/session/start
+	postJSON := func(path string, payload any) *http.Response {
+		t.Helper()
+		b, _ := json.Marshal(payload)
+		r, err := http.Post(srv.URL+path, "application/json", bytes.NewReader(b))
+		if err != nil {
+			t.Fatalf("POST %s failed: %v", path, err)
+		}
+		return r
+	}
+
+	r := postJSON("/api/session/start", map[string]string{"hero_name": "aria", "character_class": "ranger"})
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /api/session/start, got %d", r.StatusCode)
+	}
+	r.Body.Close()
+
+	// 4. Execute milestone via POST /api/session/action
+	r = postJSON("/api/session/action", map[string]any{
+		"actor_name": "d2d-aria",
+		"action":     "pickup",
+		"target":     "crypt-key",
+		"entity_id":  "f1:key",
+		"x":          11,
+		"y":          3,
+	})
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /api/session/action, got %d", r.StatusCode)
+	}
+	r.Body.Close()
+
+	// 5. Run demo bot step via POST /api/session/bot
+	r = postJSON("/api/session/bot", map[string]any{
+		"hero_name": "bot-knight",
+		"mode":      "full-demo",
+	})
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /api/session/bot, got %d", r.StatusCode)
+	}
+	r.Body.Close()
+
+	// 6. Verify /api/dashboard/state includes both sessions and stats
+	stateResp, err := http.Get(srv.URL + "/api/dashboard/state")
+	if err != nil {
+		t.Fatalf("GET /api/dashboard/state failed: %v", err)
+	}
+	var dash DashboardSnapshot
+	if err := json.NewDecoder(stateResp.Body).Decode(&dash); err != nil {
+		t.Fatalf("failed to decode dashboard state: %v", err)
+	}
+	stateResp.Body.Close()
+	if dash.Stats.TotalSessions < 2 || dash.Stats.Victories < 1 || dash.Stats.TotalReverts < 1 {
+		t.Fatalf("expected bot-knight victory & revert in dashboard stats, got %+v", dash.Stats)
+	}
+}
+
+
