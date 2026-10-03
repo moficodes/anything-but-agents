@@ -2,3 +2,4 @@ bin/
 *.out
 .DS_Store
 .env
+.worktrees/
