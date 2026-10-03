@@ -10,18 +10,12 @@
 
 ## Additional Info (Notes for the Program Committee)
 
-> **Goal of the session:**
-> One of the best ways to understand a new piece of infrastructure is to use it the "wrong" way. By intentionally running non-agent workloads on Agent Substrate, we can isolate its underlying Kubernetes and runtime primitives without getting distracted by LLM logic. This approach teaches attendees two things at once: how stateful checkpoint/restore and pod-decoupled scheduling actually work under the hood, and what makes agentic workloads structurally different from traditional Kubernetes workloads in the first place.
+> The goal of this talk is to use Agent Substrate the "wrong" way so we can see how its Kubernetes primitives work without getting distracted by AI/LLM logic. By testing non-agent workloads on it, attendees learn both how stateful checkpoint/restore works under the hood and what makes agentic workloads unique.
 >
-> **Examples of candidate demos and experiments we are exploring (will select 2 to 3 to fit the 25-minute slot):**
-> - **Pure in-memory state ("Look Ma, No Database"):** Running a stateful application (such as a turn-based game) where state lives entirely in process RAM across suspends and worker-pod migrations, using snapshot revert and tagging as application-level undo and branching.
-> - **Taming heavy cold starts & per-tenant isolation:** Using Golden Snapshots (gated on `/readyz`) to skip slow initialization phases and clone warm processes in milliseconds, or pairing `DurableDir` volumes with split pause/commit snapshot scopes to run isolated single-tenant embedded databases or on-demand `gVisor` honeypots.
-> - **Where it breaks ("Don't Try This at Home"):** Intentionally suspending a workload that depends on continuous wall-clock time or distributed leases (such as a consensus node or heartbeat loop) and watching it fail on resume to show the real boundaries of checkpoint/restore.
->
-> **Session Flow:**
-> 1. **Under the Hood:** How Substrate decouples Actor state from warm Kubernetes `WorkerPool` Pods using `gVisor`/microVM snapshots and wake-on-HTTP routing.
-> 2. **Live Experiments (The Good, The Weird, and The Terrible):** Walking through 2 to 3 live demos that push memory snapshots, golden cloning, and process freeze to their limits.
-> 3. **The Takeaway:** A practical mental model for what makes a workload "agent-shaped" (high cardinality, low duty cycle, heavy state, untrusted execution) and why Substrate's primitives map so cleanly to that shape.
+> Candidate live demos we are exploring (will pick 2-3 for the slot):
+> - **Look Ma, No Database:** A game server where state lives purely in RAM across suspends and pod migrations, using snapshot `revert` to "save-scum."
+> - **Actually Useful Patterns:** Cloning slow-booting apps in ~100ms from Golden Snapshots, or running one isolated embedded database per user.
+> - **Don't Try This at Home:** Suspending a consensus/heartbeat node and watching it split-brain when wall-clock time jumps forward on resume.
 
 ---
 
