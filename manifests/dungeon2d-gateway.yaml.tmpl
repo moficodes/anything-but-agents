@@ -1,0 +1,130 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Optional in-cluster Gateway + Live Dashboard Deployment and LoadBalancer
+# Service so conference attendees can scan the projector QR code and play
+# /play on their phones over a public IP.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dungeon2d-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dungeon2d-gateway-ate-client
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["clustertrustbundles"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dungeon2d-gateway-ate-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dungeon2d-gateway-ate-client
+subjects:
+- kind: ServiceAccount
+  name: dungeon2d-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dungeon2d-gateway-token-minter
+  namespace: ate-system
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  resourceNames: ["ate-client"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dungeon2d-gateway-token-minter
+  namespace: ate-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dungeon2d-gateway-token-minter
+subjects:
+- kind: ServiceAccount
+  name: dungeon2d-gateway
+  namespace: anything-but-agents
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dungeon2d-gateway
+  namespace: anything-but-agents
+  labels:
+    app: dungeon2d-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dungeon2d-gateway
+  template:
+    metadata:
+      labels:
+        app: dungeon2d-gateway
+    spec:
+      serviceAccountName: dungeon2d-gateway
+      initContainers:
+      - name: copy-kubectl-ate
+        image: ${KUBECTL_ATE_IMAGE}
+        command: ["/ko-app/kubectl-ate", "--help"]
+        volumeMounts:
+        - name: ko-app-src
+          mountPath: /ko-app-unused
+      containers:
+      - name: gateway
+        image: ko://github.com/moficodes/anything-but-agents/cmd/dungeon2d
+        command:
+        - /ko-app/dungeon2d
+        - --mode=gateway
+        - --addr=:8080
+        - --atespace=anything-but-agents
+        - --template=dungeon2d
+        - --router-url=http://atenet-router.ate-system.svc.cluster.local:80
+        - --ate-endpoint=api.ate-system.svc:443
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+      volumes:
+      - name: ko-app-src
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dungeon2d-gateway
+  namespace: anything-but-agents
+spec:
+  type: LoadBalancer
+  selector:
+    app: dungeon2d-gateway
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

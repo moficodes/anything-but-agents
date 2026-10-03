@@ -73,14 +73,15 @@ sequenceDiagram
 * **Slide 6: What If We Stopped Writing Persistence Code Altogether?**
   * Think about how much code in a typical app exists just to translate in-memory structs into SQL rows or JSON blobs and back.
   * What if `main()` was just structs on the heap, and **the infrastructure checkpointed the heap**?
-* **Slide 7: Live Demo 1 — The "Zero-Database" Dungeon (`cmd/dungeon`)**
-  * **Show the code (`cmd/dungeon/main.go`):** Point out `type GameState struct`. No SQL driver, no `os.WriteFile`, no Redis client. Just a Go struct in RAM.
-  * **On Stage (`./hack/stage-demo.sh act1-dungeon`):**
-    1. Walk into the Armory, grab `dragon-slayer-sword` (intentionally leave `fire-shield` behind), walk into `dragon-lair`.
-    2. **Quicksave:** `kubectl ate suspend actor hero-mofi -a anything-but-agents` and `kubectl ate create tag before-dragon -a anything-but-agents --actor hero-mofi`.
-    3. **Die horribly:** `curl .../?cmd=attack` -> The Heap Dragon breathes fire; `player_hp: 0, alive: false`.
-    4. **Save-Scumming (`git reset --hard` for RAM):** Run `kubectl ate revert actor hero-mofi -a anything-but-agents`, then `curl .../?cmd=look`. You are alive at 100 HP again! Notice `pod_ip_history` shows the actor hopped across different Kubernetes worker pods without losing a single local variable.
-    5. **Fork the Multiverse:** Create `hero-timeline-b` using `--tag before-dragon`—two parallel universes forked from the same process memory!
+* **Slide 7: Live Demo 1 — The "Zero-Database" Dungeon (`cmd/dungeon` & `cmd/dungeon2d`)**
+  * **Show the code (`cmd/dungeon/main.go` & `cmd/dungeon2d/actor.go`):** Point out `type GameState struct` / `type ActorSession struct`. No SQL driver, no `os.WriteFile`, no Redis client. Just a Go struct in RAM.
+  * **CLI Walkthrough (`./hack/stage-demo.sh act1-dungeon`) & 2D Live Audience Game (`./hack/stage-demo.sh act1b-dungeon2d`):**
+    1. Open the **Live Mission-Control Dashboard (`/dashboard`)** on the projector and scan the QR code to open the **2D Mobile Dungeon (`/play`)**.
+    2. Walk around at 60fps in the browser (0 worker pods used while walking!). Clear Floor 1 (The Forgotten Crypt) and Floor 2 (Abandoned Armory) — watching the actor flash onto one of the 3 WorkerPool pods for ~100ms on each milestone and immediately suspend back to GCS.
+    3. **Quicksave Shrine:** Step onto the Floor 2 Quicksave Shrine (`kubectl ate suspend` + `kubectl ate create tag`).
+    4. **Die horribly on Floor 3:** Attack the Ancient Heap Dragon without the `fire-shield` -> The Heap Dragon breathes fire; `HP = 0, Alive = false`.
+    5. **Save-Scumming (`git reset --hard` for RAM):** Tap **Revert Actor** on the phone (`kubectl ate revert actor`), restoring the Floor 2 GCS snapshot! Grab the `fire-shield`, defeat the Dragon, claim the `golden-chalice`, and escape through the Ascension Portal.
+    6. **Fork the Multiverse:** Tap **Fork Timeline** (`--tag`)—two parallel universes forked from the same process memory!
 
 ---
 

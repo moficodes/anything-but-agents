@@ -11,6 +11,7 @@ If you strip the word **"Agent"** out of Agent Substrate, you have a **Kubernete
 ```text
 cmd/
   dungeon/     # Demo 1: "Look Ma, No Database" — Zork-style RPG in pure Go heap RAM (+ revert/tag save-scumming)
+  dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — Mobile 2D 3-floor game + Live Mission-Control Dashboard
   coldstart/   # Demo 2: "The Instant Cloner" — 12s cold-start prime sieve skipped via Golden Snapshot
   tenantdb/    # Demo 3: "One DB Per User" — Per-tenant embedded DB with DurableDir + FULL Pause / DATA Commit
   honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor deception sandbox
@@ -18,6 +19,8 @@ cmd/
 manifests/
   workerpool.yaml.tmpl          # Shared 3-worker gVisor WorkerPool (`anything-but-agents`)
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
+  dungeon2d-template.yaml.tmpl  # ActorTemplate for 2D multilevel dungeon actors (FULL pause, FULL commit)
+  dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phone QR access
   coldstart-template.yaml.tmpl  # ActorTemplate (12s warmup before /readyz -> Golden Snapshot)
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
   honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
@@ -32,16 +35,18 @@ docs/
 
 ## Deep Dive: Rationale Behind Each Demo
 
-Each of the five demos is designed to isolate and prove a specific architectural property of Agent Substrate—without a single AI agent in sight.
+Each of the demos is designed to isolate and prove a specific architectural property of Agent Substrate—without a single AI agent in sight.
 
 ---
 
-### Demo 1: "Look Ma, No Database" — Zork-Style Dungeon RPG (`cmd/dungeon`)
+### Demo 1: "Look Ma, No Database" — Zork-Style Dungeon RPG (`cmd/dungeon`) & 2D Edition (`cmd/dungeon2d`)
 
 * **Why this demo:**
   Most application code in the cloud exists for one boring reason: translating in-memory data structures into SQL rows, Redis keys, or JSON blobs before a stateless request finishes, and hydrating them back on the next request. This demo asks: *What if we deleted the database layer entirely and relied on the container runtime to checkpoint process RAM?*
 * **Why this demo specifically:**
-  A turn-based dungeon crawler (player HP, inventory, monsters in rooms, items dropped on the floor) has deeply nested, relational, mutable state—and gamers immediately understand the concepts of **quicksaving**, **save-scumming** (reloading after dying to a boss), and **branching timelines**. It makes memory checkpointing visceral and fun on stage.
+  A turn-based dungeon crawler (player HP, inventory, monsters in rooms, items dropped on the floor) has deeply nested, relational, mutable state—and gamers immediately understand the concepts of **quicksaving**, **save-scumming** (reloading after dying to a boss), and **branching timelines**.
+  * **`cmd/dungeon` (`act1-dungeon`)** shows the raw mechanics via CLI `curl` calls.
+  * **`cmd/dungeon2d` (`act1b-dungeon2d`)** takes the concept to the next level for a live conference audience: a **mobile-optimized 2D HTML5 Canvas 3-floor dungeon game (`/play`)** paired with a **projector Mission-Control Dashboard (`/dashboard`)**. Local 60fps movement runs in the player's browser; whenever a state milestone occurs (picking up gear, slaying a monster, descending stairs, touching a Quicksave Shrine, dying, or escaping with the Golden Chalice), the Gateway wakes the player's actor via `atenet-router`, mutates its Go heap RAM, and **immediately suspends it back to GCS**—allowing dozens of conference attendees on their phones to multiplex across just 3 `WorkerPool` pods!
 * **What do we learn:**
   1. Process memory (`SNAPSHOT_CONTENT_SCOPE_FULL`) is durable across node migrations: when an actor suspends on Worker Pod A and resumes on Worker Pod B, its `pod_ip_history` slice grows while every local variable on the Go heap remains intact.
   2. Infrastructure-level lifecycle operations (`suspend`, `revert`, `tag`) become application-level features (save points, undo, and multiverse forking) with zero application code.
@@ -194,8 +199,9 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ```bash
 ./hack/stage-demo.sh run-all         # Run all 5 demos in sequence (or run them individually below)
 
-./hack/stage-demo.sh act1-dungeon    # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
-./hack/stage-demo.sh act2-coldstart  # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
+./hack/stage-demo.sh act1-dungeon     # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
+./hack/stage-demo.sh act1b-dungeon2d  # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
+./hack/stage-demo.sh act2-coldstart   # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
 ./hack/stage-demo.sh act3-tenantdb   # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
 ./hack/stage-demo.sh act4-honeypot   # Act IV: Per-Attacker-IP gVisor Honeypot
 ./hack/stage-demo.sh act5-timewarp   # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
