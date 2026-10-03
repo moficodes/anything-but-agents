@@ -1,0 +1,46 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Shared WorkerPool for all 5 "Anything But Agents" demos.
+# Notice that we only run 3 warm worker pods (`replicas: 3`), yet we will
+# multiplex Dungeon instances, Cold-Start Clones, Per-Tenant Databases,
+# Honeypots, and Time-Warp nodes across these same 3 workers!
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: anything-but-agents
+
+---
+
+apiVersion: ate.dev/v1alpha1
+kind: WorkerPool
+metadata:
+  name: anything-but-agents
+  namespace: anything-but-agents
+  labels:
+    workload: anything-but-agents
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  template:
+    nodeSelector:
+      ate.dev/substrate-version: "${SUBSTRATE_VERSION}"
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 1Gi
