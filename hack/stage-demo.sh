@@ -392,11 +392,12 @@ act1b_dungeon2d() {
   step "4. Floor 3 Boss Fight: attack the Ancient Heap Dragon without Fire Shield -> YOU DIE (Alive=false in RAM)!"
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
 
-  step "5. SAVE-SCUM! Revert actor back to last committed GCS snapshot (kubectl ate revert)"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/revert" -d '{"actor_name":"d2d-mofi"}'
+  step "5. SAVE-SCUM! Revert actor directly back to Snapshot v6 (Floor 2 Shrine) via kubectl ate revert"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/revert" -d '{"actor_name":"d2d-mofi","target_version":6}'
 
-  step "6. Grab the Fire Shield, slay the Ancient Heap Dragon, claim the Golden Chalice, and escape through the Ascension Portal!"
+  step "6. Grab the Fire Shield on Floor 2, descend to Floor 3, slay the Ancient Heap Dragon, claim the Golden Chalice, and escape!"
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"fire-shield","entity_id":"f2:shield"}'
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"stairs","target":"f2:stairs"}'
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"golden-chalice","entity_id":"f3:chalice"}'
@@ -407,11 +408,83 @@ act1b_dungeon2d() {
 
   if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
     echo ""
-    echo ">>> Dashboard (${gateway_url}/dashboard) and 2D Game (${gateway_url}/play) are still live!"
+    echo ">>> Dashboard (${gateway_url}/dashboard?key=${presenter_token}) and 2D Game (${gateway_url}/play) are still live!"
     read -r -p "    [Press Enter when finished exploring the browser UI] " _
   fi
 
   kill "${GATEWAY_PID:-}" 2>/dev/null || true
+  free_workers
+}
+
+deploy_dungeon2d_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Dungeon 2D Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+
+  if ! kubectl get secret dungeon2d-gateway -n anything-but-agents >/dev/null 2>&1; then
+    kubectl create secret generic dungeon2d-gateway \
+      -n anything-but-agents \
+      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
+  fi
+
+  # Ensure ActorTemplate dungeon2d is up to date
+  kubectl ate delete actor-template dungeon2d -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/dungeon2d-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
+      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
+      KUBECTL_ATE_IMAGE="$(
+        cd "${SUBSTRATE_ROOT}"
+        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+      )"
+    else
+      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy dungeon2d-gateway." >&2
+      exit 1
+    fi
+  fi
+  export KUBECTL_ATE_IMAGE
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/dungeon2d-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/dungeon2d-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc dungeon2d-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Player 2D Game URL (Public) : http://${lb_ip:-<pending>}/play"
+  echo "  Presenter Dashboard Unlock  : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+}
+
+cleanup_dungeon2d_gateway() {
+  banner "Cleaning up Dungeon 2D Gateway Deployment & Actors"
+  for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^d2d-/ {print $2}' || true); do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+  done
+  for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-d2d-/ {print $2}' || true); do
+    kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount dungeon2d-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding dungeon2d-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding dungeon2d-gateway-ate-client --ignore-not-found
   free_workers
 }
 
@@ -516,6 +589,7 @@ run_all_acts() {
 
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
+  cleanup_dungeon2d_gateway
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
@@ -528,18 +602,20 @@ cleanup_all() {
 }
 
 case "${1:-}" in
-  bootstrap-gke)   bootstrap_gke ;;
-  deploy)          deploy_all ;;
-  run-all)         run_all_acts ;;
-  act1-dungeon)    act1_dungeon ;;
-  act1b-dungeon2d) act1b_dungeon2d ;;
-  act2-coldstart)  act2_coldstart ;;
-  act3-tenantdb)   act3_tenantdb ;;
-  act4-honeypot)   act4_honeypot ;;
-  act5-timewarp)   act5_timewarp ;;
-  cleanup)         cleanup_all ;;
+  bootstrap-gke)     bootstrap_gke ;;
+  deploy)            deploy_all ;;
+  deploy-dungeon2d)  deploy_dungeon2d_gateway ;;
+  cleanup-dungeon2d) cleanup_dungeon2d_gateway ;;
+  run-all)           run_all_acts ;;
+  act1-dungeon)      act1_dungeon ;;
+  act1b-dungeon2d)   act1b_dungeon2d ;;
+  act2-coldstart)    act2_coldstart ;;
+  act3-tenantdb)     act3_tenantdb ;;
+  act4-honeypot)     act4_honeypot ;;
+  act5-timewarp)     act5_timewarp ;;
+  cleanup)           cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

@@ -197,14 +197,16 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 `hack/stage-demo.sh` automatically port-forwards `svc/atenet-router` on `localhost:8000` if needed. Each step pauses for `<Enter>` so you can narrate on stage (set `PAUSE_BETWEEN_STEPS=0` to run non-interactively):
 
 ```bash
-./hack/stage-demo.sh run-all         # Run all 5 demos in sequence (or run them individually below)
+./hack/stage-demo.sh run-all           # Run all 5 demos in sequence (or run them individually below)
 
-./hack/stage-demo.sh act1-dungeon     # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
-./hack/stage-demo.sh act1b-dungeon2d  # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
-./hack/stage-demo.sh act2-coldstart   # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
-./hack/stage-demo.sh act3-tenantdb   # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
-./hack/stage-demo.sh act4-honeypot   # Act IV: Per-Attacker-IP gVisor Honeypot
-./hack/stage-demo.sh act5-timewarp   # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
+./hack/stage-demo.sh act1-dungeon      # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
+./hack/stage-demo.sh act1b-dungeon2d   # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
+./hack/stage-demo.sh deploy-dungeon2d  # Deploy in-cluster Dungeon 2D Gateway + LoadBalancer + PRESENTER_TOKEN Secret
+./hack/stage-demo.sh cleanup-dungeon2d # Clean up in-cluster Dungeon 2D Gateway & d2d-* actors
+./hack/stage-demo.sh act2-coldstart    # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
+./hack/stage-demo.sh act3-tenantdb     # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
+./hack/stage-demo.sh act4-honeypot     # Act IV: Per-Attacker-IP gVisor Honeypot
+./hack/stage-demo.sh act5-timewarp     # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
 ```
 
 ### 4. Cleanup
