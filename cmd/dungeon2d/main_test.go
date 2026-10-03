@@ -105,12 +105,41 @@ func TestActorSessionDragonFatalTrapWithoutFireShield(t *testing.T) {
 	session := NewActorSession()
 	mux := NewActorMux(session)
 
-	// Rush to Floor 3 with sword but WITHOUT fire-shield
+	// 1. Rush to Floor 2 and fight Shadow Guard WITHOUT dragon-slayer-sword -> fatal!
 	session.Mutate(MutateRequest{Action: "init", HeroName: "rush-hero"}, "10.120.0.11")
 	session.Mutate(MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key"}, "10.120.0.11")
 	session.Mutate(MutateRequest{Action: "stairs", Target: "f1:stairs"}, "10.120.0.11")
-	session.Mutate(MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword"}, "10.120.0.11")
+
+	guardResp := session.Mutate(MutateRequest{Action: "combat", Target: "Shadow Guard", EntityID: "f2:guard"}, "10.120.0.11")
+	if guardResp.Session.Alive || guardResp.Session.HP != 0 {
+		t.Fatalf("expected player to die to Shadow Guard without dragon-slayer-sword, got Alive=%v HP=%d", guardResp.Session.Alive, guardResp.Session.HP)
+	}
+	// Restore Floor 2 checkpoint
+	session.Mutate(MutateRequest{Action: "restore_checkpoint"}, "10.120.0.11")
+
+	// 2. Rush to Floor 3 with fire-shield ONLY (no sword) -> Dragon is fatal without sword!
+	session.Mutate(MutateRequest{Action: "pickup", Target: "fire-shield", EntityID: "f2:shield"}, "10.120.0.11")
 	session.Mutate(MutateRequest{Action: "stairs", Target: "f2:stairs"}, "10.120.0.11")
+	noSwordResp := session.Mutate(MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon"}, "10.120.0.11")
+	if noSwordResp.Session.Alive || noSwordResp.Session.HP != 0 {
+		t.Fatalf("expected player to die to Heap Dragon without dragon-slayer-sword, got Alive=%v HP=%d", noSwordResp.Session.Alive, noSwordResp.Session.HP)
+	}
+
+	// 3. Restore Floor 3 checkpoint and take stairs_up back to Floor 2 to prevent soft-lock!
+	session.Mutate(MutateRequest{Action: "restore_checkpoint"}, "10.120.0.11")
+	upResp := session.Mutate(MutateRequest{Action: "stairs_up", Target: "f3:stairs_up"}, "10.120.0.11")
+	if upResp.Session.Floor != 2 {
+		t.Fatalf("expected stairs_up to return player from Floor 3 to Floor 2, got Floor=%d", upResp.Session.Floor)
+	}
+
+	// 4. Also verify Dragon is fatal with sword but WITHOUT fire-shield
+	session2 := NewActorSession()
+	mux = NewActorMux(session2)
+	session2.Mutate(MutateRequest{Action: "init", HeroName: "rush-hero-2"}, "10.120.0.11")
+	session2.Mutate(MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key"}, "10.120.0.11")
+	session2.Mutate(MutateRequest{Action: "stairs", Target: "f1:stairs"}, "10.120.0.11")
+	session2.Mutate(MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword"}, "10.120.0.11")
+	session2.Mutate(MutateRequest{Action: "stairs", Target: "f2:stairs"}, "10.120.0.11")
 
 	body, _ := json.Marshal(MutateRequest{
 		Action:   "combat",

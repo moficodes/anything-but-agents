@@ -383,9 +383,17 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 			}
 
 		case "f2:guard":
+			if !slices.Contains(s.Inventory, "dragon-slayer-sword") {
+				s.LastDamageDealt = 15
+				s.LastDamageTaken = max(100, s.HP)
+				s.HP = 0
+				s.Alive = false
+				s.DeathReason = "Cut down by the Shadow Guard (-100 HP — missing dragon-slayer-sword! Grab the Sword in the NW alcove first)!"
+				msg = fmt.Sprintf("LETHAL COUNTER-ATTACK! Without the dragon-slayer-sword, your weapon bounced off %s and its shadow halberd dealt -100 HP! YOU DIED (HP=0). Tap REVERT ACTOR to save-scum!", target)
+				eventType = "DEATH"
+				break
+			}
 			counterDmg := 25
-			s.MonsterHP[entityID] = 0
-			s.Cleared[entityID] = true
 			s.LastDamageDealt = playerDmg
 			s.LastDamageTaken = counterDmg
 			s.HP = max(0, s.HP-counterDmg)
@@ -395,6 +403,8 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 				msg = fmt.Sprintf("CLASH! %s struck you for -%d HP! YOU DIED (HP=0). Tap REVERT ACTOR to restore your last GCS snapshot!", target, counterDmg)
 				eventType = "DEATH"
 			} else {
+				s.MonsterHP[entityID] = 0
+				s.Cleared[entityID] = true
 				s.Gold += 75
 				s.Score += 250
 				msg = fmt.Sprintf("CLASH! You vanquished %s (%d DMG), but its shadow halberd counter-attacked for -%d HP (Your HP: %d/%d)! Fire Shield vault unlocked.", target, playerDmg, counterDmg, s.HP, s.MaxHP)
@@ -403,6 +413,40 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 			}
 
 		case "f3:dragon":
+			hasSword := slices.Contains(s.Inventory, "dragon-slayer-sword")
+			hasShield := slices.Contains(s.Inventory, "fire-shield")
+
+			if !hasShield && !hasSword {
+				s.LastDamageDealt = 10
+				s.LastDamageTaken = max(100, s.HP)
+				s.HP = 0
+				s.Alive = false
+				s.DeathReason = "Obliterated by the Ancient Heap Dragon (-100 HP — missing both dragon-slayer-sword and fire-shield from Floor 2)!"
+				msg = fmt.Sprintf("LETHAL BOSS WIPE! You fought %s without the Dragon-Slayer Sword or Fire Shield (-100 HP)! YOU DIED (HP=0). Tap REVERT ACTOR, then take the Up-Stairs back to Floor 2!", target)
+				eventType = "DEATH"
+				break
+			}
+			if !hasShield {
+				s.LastDamageDealt = playerDmg
+				s.LastDamageTaken = max(100, s.HP)
+				s.HP = 0
+				s.Alive = false
+				s.DeathReason = "Incinerated by unbuffered Heap Dragon fire breath (-100 HP — missing fire-shield)!"
+				msg = fmt.Sprintf("LETHAL COUNTER-ATTACK! You struck %s for %d DMG, but without the fire-shield its fire breath dealt -100 HP! YOU DIED (HP=0). Tap REVERT ACTOR to time-travel back to your last GCS snapshot!", target, playerDmg)
+				eventType = "DEATH"
+				break
+			}
+			if !hasSword {
+				s.LastDamageDealt = 10
+				s.LastDamageTaken = max(100, s.HP)
+				s.HP = 0
+				s.Alive = false
+				s.DeathReason = "Crushed by the Ancient Heap Dragon (-100 HP — missing dragon-slayer-sword! Your starting weapon shattered against its scales)!"
+				msg = fmt.Sprintf("LETHAL COUNTER-ATTACK! Without the dragon-slayer-sword, your blade shattered against %s's scales and its jaws dealt -100 HP! YOU DIED (HP=0). Tap REVERT ACTOR, then take the Up-Stairs to Floor 2!", target)
+				eventType = "DEATH"
+				break
+			}
+
 			curHP := s.BossHP
 			if curHP <= 0 {
 				curHP = 100
@@ -412,14 +456,7 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 			s.MonsterHP[entityID] = curHP
 			s.LastDamageDealt = playerDmg
 
-			if !slices.Contains(s.Inventory, "fire-shield") {
-				s.LastDamageTaken = max(100, s.HP)
-				s.HP = 0
-				s.Alive = false
-				s.DeathReason = "Incinerated by unbuffered Heap Dragon fire breath (-100 HP — missing fire-shield)!"
-				msg = fmt.Sprintf("LETHAL COUNTER-ATTACK! You struck %s for %d DMG, but without the fire-shield its fire breath dealt -100 HP! YOU DIED (HP=0). Tap REVERT ACTOR to time-travel back to your last GCS snapshot!", target, playerDmg)
-				eventType = "DEATH"
-			} else if curHP == 0 {
+			if curHP == 0 {
 				counter := 10
 				s.LastDamageTaken = counter
 				s.HP = max(1, s.HP-counter)
@@ -458,9 +495,12 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 		if req.X > 0 || req.Y > 0 {
 			s.X, s.Y = req.X, req.Y
 		}
-		s.Cleared["f2:shrine"] = true
-		s.Score += 50
-		msg = fmt.Sprintf("QUICKSAVE SHRINE ACTIVATED on Floor %d! Full Go heap checkpointed to GCS and tagged.", s.Floor)
+		s.HP = s.MaxHP
+		if !s.Cleared["f2:shrine_bonus"] {
+			s.Cleared["f2:shrine_bonus"] = true
+			s.Score += 50
+		}
+		msg = fmt.Sprintf("SHRINE ACTIVATED on Floor %d! Restored HP to %d/%d, checkpointed Go heap to GCS, and tagged snapshot.", s.Floor, s.HP, s.MaxHP)
 		eventType = "QUICKSAVE"
 		checkpointLabel = "quicksave shrine"
 
@@ -472,20 +512,43 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 			} else {
 				s.Floor = 2
 				s.X, s.Y = 1, 5
-				s.Score += 200
-				msg = "Descended to Floor 2: The Abandoned Armory! Grab the Dragon-Slayer Sword & Fire Shield!"
+				if !s.Cleared["f1:stairs_score"] {
+					s.Cleared["f1:stairs_score"] = true
+					s.Score += 200
+				}
+				msg = "Descended to Floor 2: The Abandoned Armory! Explore the alcoves for the Dragon-Slayer Sword & Fire Shield, or rush ahead at your own peril!"
 				eventType = "FLOOR_CHANGE"
 				checkpointLabel = "descend to Floor 2"
 			}
 		} else if s.Floor == 2 {
 			s.Floor = 3
 			s.X, s.Y = 7, 9
-			s.Score += 300
-			msg = "Descended to Floor 3: Cavern of the Ancient Heap Dragon!"
+			if !s.Cleared["f2:stairs_score"] {
+				s.Cleared["f2:stairs_score"] = true
+				s.Score += 300
+			}
+			msg = "Descended to Floor 3: Cavern of the Ancient Heap Dragon! (Use the Up-Stairs at the bottom-right anytime to return to Floor 2.)"
 			eventType = "FLOOR_CHANGE"
 			checkpointLabel = "descend to Floor 3"
 		} else {
 			msg = "Already on the deepest floor (Floor 3)."
+		}
+
+	case "stairs_up":
+		if s.Floor == 3 {
+			s.Floor = 2
+			s.X, s.Y = 12, 5
+			msg = "Climbed the stairs back to Floor 2: The Abandoned Armory! Grab the Dragon-Slayer Sword (NW), Fire Shield (NE), or heal at the Shrine!"
+			eventType = "FLOOR_CHANGE"
+			checkpointLabel = "return to Floor 2"
+		} else if s.Floor == 2 {
+			s.Floor = 1
+			s.X, s.Y = 12, 9
+			msg = "Climbed the stairs back to Floor 1: The Forgotten Crypt."
+			eventType = "FLOOR_CHANGE"
+			checkpointLabel = "return to Floor 1"
+		} else {
+			msg = "Already on Floor 1."
 		}
 
 	case "escape":

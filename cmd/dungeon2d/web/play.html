@@ -969,24 +969,25 @@
         name: "Floor 2: The Abandoned Armory",
         grid: [
           "###############",
-          "#..#.......#..#",
-          "#..#.#####.#..#",
-          "#..#.#...#....#",
-          "#....#...####.#",
+          "#...#.........#",
+          "#...#.........#",
+          "#...#.#####...#",
           "#.............#",
-          "#.####.######.#",
-          "#.#.........#.#",
-          "#.#.#######.#.#",
+          "#.............#",
+          "#.###.###.###.#",
+          "#.#...#.#...#.#",
+          "#.....#.....#.#",
           "#.............#",
           "###############"
         ],
         entities: [
-          { id: "f2:sword",   type: "item",    sprite: "sword",  target: "dragon-slayer-sword", label: "Sword (55 DMG)", x: 5, y: 5, color: "#38bdf8" },
-          { id: "f2:guard",   type: "monster", sprite: "guard",  target: "Shadow Guard",        label: "Shadow Guard", atk: 25, maxHp: 45, x: 8, y: 3, color: "#a855f7" },
-          { id: "f2:shield",  type: "item",    sprite: "shield", target: "fire-shield",         label: "Fire Shield",    x: 10, y: 1, color: "#10b981" },
-          { id: "f2:potion2", type: "item",    sprite: "potion", target: "healing-potion",      label: "Potion (+50 HP)", x: 3, y: 9, color: "#f43f5e" },
-          { id: "f2:shrine",  type: "shrine",  target: "f2:shrine", label: "Quicksave Shrine", x: 10, y: 5, color: "#f59e0b" },
-          { id: "f2:stairs",  type: "stairs",  target: "f2:stairs", label: "Stairs -> Floor 3", x: 13, y: 5, color: "#38bdf8" }
+          { id: "f2:sword",     type: "item",      sprite: "sword",  target: "dragon-slayer-sword", label: "Sword (55 DMG)",    x: 2,  y: 2, color: "#38bdf8" },
+          { id: "f2:guard",     type: "monster",   sprite: "guard",  target: "Shadow Guard",        label: "Shadow Guard",      atk: 25, maxHp: 45, x: 8,  y: 2, color: "#a855f7" },
+          { id: "f2:shield",    type: "item",      sprite: "shield", target: "fire-shield",         label: "Fire Shield",       x: 12, y: 2, color: "#10b981" },
+          { id: "f2:stairs_up", type: "stairs_up", target: "f2:stairs_up", label: "Stairs -> Floor 1", x: 1, y: 8, color: "#94a3b8" },
+          { id: "f2:potion2",   type: "item",      sprite: "potion", target: "healing-potion",      label: "Potion (+50 HP)",   x: 5,  y: 8, color: "#f43f5e" },
+          { id: "f2:shrine",    type: "shrine",    target: "f2:shrine", label: "Heal & Save Shrine", x: 10, y: 8, color: "#f59e0b" },
+          { id: "f2:stairs",    type: "stairs",    target: "f2:stairs", label: "Stairs -> Floor 3", x: 13, y: 5, color: "#38bdf8" }
         ]
       },
       3: {
@@ -1005,9 +1006,11 @@
           "###############"
         ],
         entities: [
-          { id: "f3:portal",  type: "portal", target: "f3:portal",           label: "EXIT PORTAL",         x: 7, y: 1, color: "#38bdf8" },
-          { id: "f3:chalice", type: "item",   sprite: "chalice",             target: "golden-chalice",      label: "Golden Chalice",      x: 7, y: 2, color: "#fbbf24" },
-          { id: "f3:dragon",  type: "boss",   sprite: "dragon",              target: "Ancient Heap Dragon", label: "Ancient Heap Dragon", atk: 20, maxHp: 100, x: 7, y: 4, color: "#f43f5e" }
+          { id: "f3:portal",    type: "portal",    target: "f3:portal",           label: "EXIT PORTAL",         x: 7,  y: 1, color: "#38bdf8" },
+          { id: "f3:chalice",   type: "item",      sprite: "chalice",             target: "golden-chalice",      label: "Golden Chalice",      x: 7,  y: 2, color: "#fbbf24" },
+          { id: "f3:dragon",    type: "boss",      sprite: "dragon",              target: "Ancient Heap Dragon", label: "Ancient Heap Dragon", atk: 20, maxHp: 100, x: 7,  y: 4, color: "#f43f5e" },
+          { id: "f3:potion3",   type: "item",      sprite: "potion",              target: "healing-potion",      label: "Potion (+50 HP)",     x: 2,  y: 9, color: "#f43f5e" },
+          { id: "f3:stairs_up", type: "stairs_up", target: "f3:stairs_up",        label: "Stairs -> Floor 2",   x: 12, y: 9, color: "#94a3b8" }
         ]
       }
     };
@@ -1362,7 +1365,7 @@
         if (ent.type === "shrine") {
           state.x = nx;
           state.y = ny;
-          addFloatText(nx, ny, "QUICKSAVE TAG!", "#f59e0b");
+          addFloatText(nx, ny, "HEALED 100HP & SAVED!", "#f59e0b");
           sendMilestone("quicksave", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
@@ -1374,6 +1377,12 @@
           state.x = nx;
           state.y = ny;
           sendMilestone("stairs", ent.target, ent.id, nx, ny, prevX, prevY);
+          return;
+        }
+        if (ent.type === "stairs_up") {
+          state.x = nx;
+          state.y = ny;
+          sendMilestone("stairs_up", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
         if (ent.type === "portal") {
@@ -1471,28 +1480,32 @@
 
         if (ent.type === "boss") {
           drawPixelSprite(ctx, SPRITES.dragon, px, py + bob, 2);
-          // Boss HP Bar + Lethal Fire warning
+          // Boss HP Bar + Lethal Sword/Shield warning
           ctx.fillStyle = "rgba(9,13,22,0.88)";
-          ctx.fillRect(px - 24, py - 16, 80, 14);
+          ctx.fillRect(px - 28, py - 16, 88, 14);
           ctx.fillStyle = "#1f2937";
-          ctx.fillRect(px - 22, py - 6, 76, 4);
+          ctx.fillRect(px - 26, py - 6, 84, 4);
           ctx.fillStyle = "#f43f5e";
-          ctx.fillRect(px - 22, py - 6, Math.max(0, (state.bossHp / state.bossMaxHp) * 76), 4);
+          ctx.fillRect(px - 26, py - 6, Math.max(0, (state.bossHp / state.bossMaxHp) * 84), 4);
           ctx.fillStyle = "#fda4af";
           ctx.font = "bold 8px ui-monospace, monospace";
-          const atkLabel = state.inventory.includes("fire-shield") ? `DRAGON ${state.bossHp}HP | ATK 20` : `DRAGON ${state.bossHp}HP | 100 DMG!`;
-          ctx.fillText(atkLabel, px - 22, py - 8);
+          const hasBoth = state.inventory.includes("fire-shield") && state.inventory.includes("dragon-slayer-sword");
+          const atkLabel = hasBoth ? `DRAGON ${state.bossHp}HP | ATK 20` : `NEED SWORD+SHIELD|100DMG`;
+          ctx.fillText(atkLabel, px - 26, py - 8);
         } else if (ent.type === "monster") {
           drawPixelSprite(ctx, SPRITES[ent.sprite] || SPRITES.skeleton, px, py + bob, 2);
           // Monster HP & Counter-Attack DMG Tag
           ctx.fillStyle = "rgba(9,13,22,0.88)";
-          ctx.fillRect(px - 14, py - 14, 60, 12);
+          ctx.fillRect(px - 18, py - 14, 68, 12);
           ctx.strokeStyle = "#f43f5e88";
           ctx.lineWidth = 1;
-          ctx.strokeRect(px - 14, py - 14, 60, 12);
+          ctx.strokeRect(px - 18, py - 14, 68, 12);
           ctx.fillStyle = "#fecdd3";
           ctx.font = "bold 8px ui-monospace, monospace";
-          ctx.fillText(`${ent.maxHp}HP|-${ent.atk}HP`, px - 11, py - 5);
+          const mLabel = (ent.id === "f2:guard" && !state.inventory.includes("dragon-slayer-sword"))
+            ? "NEED SWORD|-100HP"
+            : `${ent.maxHp}HP|-${ent.atk}HP`;
+          ctx.fillText(mLabel, px - 15, py - 5);
         } else if (ent.type === "portal") {
           // Glowing Ascension Portal Door Archway
           ctx.fillStyle = "#0ea5e9";
@@ -1517,6 +1530,27 @@
           ctx.fillRect(px + 7, py + 8, 18, 3);
           ctx.fillRect(px + 9, py + 14, 14, 3);
           ctx.fillRect(px + 11, py + 20, 10, 3);
+          ctx.fillStyle = "rgba(9,13,22,0.85)";
+          ctx.fillRect(px - 8, py - 11, 48, 10);
+          ctx.fillStyle = "#38bdf8";
+          ctx.font = "bold 8px ui-monospace, monospace";
+          ctx.fillText(`DOWN FL${state.floor + 1}`, px - 5, py - 3);
+        } else if (ent.type === "stairs_up") {
+          // Pixel-art stone staircase up (return to previous floor)
+          ctx.fillStyle = "#0f172a";
+          ctx.fillRect(px + 4, py + 4, 24, 24);
+          ctx.strokeStyle = "#94a3b8";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 4, py + 4, 24, 24);
+          ctx.fillStyle = "#cbd5e1";
+          ctx.fillRect(px + 11, py + 8, 10, 3);
+          ctx.fillRect(px + 9, py + 14, 14, 3);
+          ctx.fillRect(px + 7, py + 20, 18, 3);
+          ctx.fillStyle = "rgba(9,13,22,0.85)";
+          ctx.fillRect(px - 6, py - 11, 44, 10);
+          ctx.fillStyle = "#cbd5e1";
+          ctx.font = "bold 8px ui-monospace, monospace";
+          ctx.fillText(`UP FL${state.floor - 1}`, px - 2, py - 3);
         } else if (ent.type === "shrine") {
           // Golden Quicksave Crystal Shrine
           ctx.fillStyle = "#78350f";
