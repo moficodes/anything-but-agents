@@ -74,6 +74,10 @@ func (n *NaiveClusterNode) ObserveClock(now time.Time, podIP string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if n.LastHeartbeatAt.IsZero() {
+		return
+	}
+
 	n.TotalTicks++
 	gap := now.Sub(n.LastHeartbeatAt)
 	n.LastHeartbeatAt = now
@@ -103,6 +107,12 @@ func (n *NaiveClusterNode) ObserveClock(now time.Time, podIP string) {
 }
 
 func (n *NaiveClusterNode) Report(now time.Time, podIP string) map[string]any {
+	n.mu.Lock()
+	if n.LastHeartbeatAt.IsZero() {
+		n.LastHeartbeatAt = now
+	}
+	n.mu.Unlock()
+
 	n.ObserveClock(now, podIP)
 
 	n.mu.Lock()
@@ -160,7 +170,9 @@ func main() {
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	node := newNaiveClusterNode(time.Now())
+	// Pass zero time so the leader lease clock starts on the actor's first HTTP
+	// request rather than during ActorTemplate Golden Snapshot creation.
+	node := newNaiveClusterNode(time.Time{})
 
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)

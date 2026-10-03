@@ -8,9 +8,8 @@ This is the companion repository (Go demo services, Substrate manifests, live-st
 
 Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native, sub-second memory-checkpointing, wake-on-HTTP, gVisor-sandboxed actor runtime**. This project demonstrates its architectural primitives—and its failure modes—by multiplexing five non-agent workloads across a single 3-replica `WorkerPool`:
 
-1. **`cmd/dungeon` ("Look Ma, No Database") & `cmd/dungeon2d` ("Save-Scumming the Heap Dragon — 2D Edition")**:
-   - `cmd/dungeon`: Zork-style RPG where 100% of state (`GameState`: HP, inventory, room items, monster HP, `pod_ip_history`) lives in Go heap RAM with zero database or disk I/O. Demonstrates `SNAPSHOT_CONTENT_SCOPE_FULL` across pod migrations, save-scumming via `kubectl ate revert actor`, and timeline branching via `kubectl ate create tag` + `--tag`.
-   - `cmd/dungeon2d`: Takes the zero-DB game concept to the next level with a mobile-optimized 2D 3-floor HTML5 Canvas game (`/play`) and a live projector Mission-Control Dashboard (`/dashboard`) using inline Lucide SVG icons. Wakes the player's actor via `atenet-router` only on state milestones, mutates Go heap RAM, and immediately suspends back to GCS so dozens of players multiplex across the 3-replica `WorkerPool`.
+1. **`cmd/dungeon` ("Look Ma, No Database")**: Zork-style RPG where 100% of state (`GameState`: HP, inventory, room items, monster HP, `pod_ip_history`) lives in Go heap RAM with zero database or disk I/O. Demonstrates `SNAPSHOT_CONTENT_SCOPE_FULL` across pod migrations, save-scumming via `kubectl ate revert actor`, and timeline branching via `kubectl ate create tag` + `--tag`.
+1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a 2D canvas roguelike (`/play`, public) and a Kubernetes Secret token-gated presenter leaderboard (`/dashboard?token=...`). Demonstrates milestone-driven `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
 2. **`cmd/coldstart` ("The Instant Cloner")**: Simulates a 12-second heavy initialization (`--init-delay=12s` and Sieve of Eratosthenes up to `1,000,000`) before `/readyz` flips from `503` to `200 OK`. Demonstrates how `ActorTemplate` `wakeupProbe` captures a post-init **Golden Snapshot** (`golden_heap_fingerprint`) so new actors clone in ~100ms.
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Single-tenant embedded key-value store backed by a `DurableDir` volume (`/data/wal.jsonl`) plus an in-memory buffer pool and query counter. Demonstrates split snapshot scopes (`onPause: SNAPSHOT_CONTENT_SCOPE_FULL` for hot local resume vs. `onCommit: SNAPSHOT_CONTENT_SCOPE_DATA` for compact GCS storage + WAL replay on boot) and 1-command GDPR deletion (`kubectl ate delete actor ... --any-state`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Per-attacker-IP deception sandbox running in `gVisor` (`SANDBOX_CLASS_GVISOR`). Uses `SNAPSHOT_CONTENT_SCOPE_FULL` to persist both container rootfs overlay modifications (`/tmp/honeypot/*`) and in-memory forensic audit logs across suspends at $0 idle compute cost.
@@ -21,7 +20,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 ```text
 cmd/
   dungeon/                      # Demo 1: Zero-DB RPG in Go heap RAM (main.go, main_test.go)
-  dungeon2d/                    # Demo 1B: 2D 3-floor mobile game (/play) + Live Dashboard (/dashboard)
+  dungeon2d/                    # Demo 1b: 2D Canvas Roguelike & Presenter Gateway (actor + gateway)
   coldstart/                    # Demo 2: 12s cold-start prime sieve -> Golden Snapshot clone
   tenantdb/                     # Demo 3: Per-tenant embedded DB with DurableDir (/data/wal.jsonl)
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox with rootfs delta persistence
@@ -29,8 +28,8 @@ cmd/
 manifests/
   workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1alpha1 WorkerPool
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
-  dungeon2d-template.yaml.tmpl  # ActorTemplate for 2D multilevel dungeon actors
-  dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phones
+  dungeon2d-template.yaml.tmpl  # ActorTemplate (2D Roguelike actor, FULL pause, FULL commit)
+  dungeon2d-gateway.yaml.tmpl   # K8s Secret, RBAC, Deployment & Service for dungeon2d-gateway
   coldstart-template.yaml.tmpl  # ActorTemplate (12s warmup before /readyz -> Golden Snapshot)
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
   honeypot-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, gVisor sandbox)
@@ -39,7 +38,7 @@ hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
 docs/
   talk-outline.md               # 4-act talk outline, sequence diagram, speaker notes & litmus test
-.ko.yaml                        # ko build config (distroless static-debian13, linux/amd64 & arm64)
+.ko.yaml                        # ko build config (distroless static-debian13, debian13 for dungeon2d)
 .env.example                    # Template for local .env (GCP PROJECT_ID, region/cluster defaults)
 ```
 
@@ -47,7 +46,7 @@ docs/
 
 ### Unit Tests (Local, No Cluster Required)
 
-All five demo binaries have unit tests under `cmd/*/*_test.go` using only the Go standard library:
+All demo binaries have unit tests under `cmd/*/*_test.go` using only the Go standard library:
 
 ```bash
 go test -v ./...
@@ -63,12 +62,14 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    - `SUBSTRATE_ROOT`: Path to the `agent-substrate` checkout (needed only for `bootstrap-gke` or building `ateom-gvisor` / `kubectl-ate` from source; auto-detected from `..` or `../../agent-substrate/*` if unset).
 2. **Stage script (`hack/stage-demo.sh`)**:
    ```bash
-   ./hack/stage-demo.sh bootstrap-gke   # Provision GKE (1.36+), install ate-system, and deploy all 5 demos
-   ./hack/stage-demo.sh deploy          # Deploy WorkerPool + build/register all 5 ActorTemplates via ko
-   ./hack/stage-demo.sh run-all         # Run all 5 live demos interactively
+   ./hack/stage-demo.sh bootstrap-gke     # Provision GKE (1.36+), install ate-system, and deploy all demos
+   ./hack/stage-demo.sh deploy            # Deploy WorkerPool + build/register all ActorTemplates via ko
+   ./hack/stage-demo.sh deploy-dungeon2d  # Deploy interactive 2D Dungeon Gateway (prints presenter auth URL)
+   ./hack/stage-demo.sh cleanup-dungeon2d # Clean up 2D Dungeon Gateway deployment/secret/actors/tags
+   ./hack/stage-demo.sh run-all           # Run all 5 live demos interactively
    PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
-   ./hack/stage-demo.sh act1-dungeon    # Run individual act (act1-dungeon .. act5-timewarp) in any order
-   ./hack/stage-demo.sh cleanup         # Delete demo actors, tags, templates, atespace, and namespace
+   ./hack/stage-demo.sh act1-dungeon      # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)
+   ./hack/stage-demo.sh cleanup           # Delete demo actors, tags, templates, atespace, and namespace
    ```
    Each `act*` target is idempotent and self-contained: `reset_act_resources` deletes that act's prior actors/tags before starting, and `free_workers` suspends any `RUNNING` or `PAUSED` actors before and after each act so the 3-replica `WorkerPool` is never exhausted across runs.
 
