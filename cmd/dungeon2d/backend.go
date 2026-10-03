@@ -672,9 +672,53 @@ func (c *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName string,
 	return actorResp, time.Since(start).Milliseconds(), nil
 }
 
-func (c *ClusterAteBackend) markWorkerBusyLocked(ip, actorName, heroName, action string) string {
+func (c *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName string) (workerIP, workerPod, snapshotURI string) {
+	raw, err := c.runAte(ctx, "get", "actors", actorName, "-a", c.atespace, "-o", "json")
+	if err != nil {
+		return "", "", ""
+	}
+	var parsed struct {
+		Status struct {
+			ExternalSnapshot struct {
+				SnapshotURI string `json:"snapshotUri"`
+			} `json:"externalSnapshot"`
+			WorkerAssignment struct {
+				WorkerPod   string `json:"workerPod"`
+				WorkerPodIP string `json:"workerPodIp"`
+			} `json:"workerAssignment"`
+		} `json:"status"`
+	}
+	if json.Unmarshal(raw, &parsed) != nil {
+		return "", "", ""
+	}
+	return parsed.Status.WorkerAssignment.WorkerPodIP, parsed.Status.WorkerAssignment.WorkerPod, parsed.Status.ExternalSnapshot.SnapshotURI
+}
+
+func appendPodIPHop(history []string, ip string) []string {
+	if ip == "" {
+		return history
+	}
+	out := make([]string, 0, len(history)+1)
+	for _, h := range history {
+		if h != "" && !strings.HasPrefix(h, "169.254.") {
+			out = append(out, h)
+		}
+	}
+	if len(out) == 0 || out[len(out)-1] != ip {
+		out = append(out, ip)
+	}
+	return out
+}
+
+func (c *ClusterAteBackend) markWorkerBusyLocked(ip, podName, actorName, heroName, action string) string {
 	for i := range c.workers {
-		if c.workers[i].IP == ip {
+		if (ip != "" && c.workers[i].IP == ip) || (podName != "" && c.workers[i].WorkerPod == podName) {
+			if ip != "" {
+				c.workers[i].IP = ip
+			}
+			if podName != "" {
+				c.workers[i].WorkerPod = podName
+			}
 			c.workers[i].ActiveActor = actorName
 			c.workers[i].ActiveHero = heroName
 			c.workers[i].ActiveAction = action
@@ -685,13 +729,21 @@ func (c *ClusterAteBackend) markWorkerBusyLocked(ip, actorName, heroName, action
 	}
 	if len(c.workers) > 0 {
 		idx := len(actorName) % len(c.workers)
-		c.workers[idx].IP = ip
+		if ip != "" {
+			c.workers[idx].IP = ip
+		}
+		if podName != "" {
+			c.workers[idx].WorkerPod = podName
+		}
 		c.workers[idx].ActiveActor = actorName
 		c.workers[idx].ActiveHero = heroName
 		c.workers[idx].ActiveAction = action
 		c.workers[idx].BusyUntil = time.Now().UTC().Add(1200 * time.Millisecond)
 		c.workers[idx].WakeCount++
 		return c.workers[idx].WorkerPod
+	}
+	if podName != "" {
+		return podName
 	}
 	return "worker-pod"
 }
@@ -714,19 +766,29 @@ func (c *ClusterAteBackend) StartSession(ctx context.Context, heroName, charClas
 		return SessionRecord{}, err
 	}
 
+	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, actorName)
+	if workerIP != "" {
+		actorResp.Session.CurrentPodIP = workerIP
+		actorResp.Session.PodIPHistory = appendPodIPHop(nil, workerIP)
+	}
+
 	// Immediately suspend actor to GCS to persist initial Go heap and free the worker pod!
 	if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace); err != nil {
 		slog.Warn("Failed to suspend actor after StartSession", slog.String("actor", actorName), slog.Any("err", err))
 	}
 
+	if snapURI == "" {
+		snapURI = fmt.Sprintf("gs://ate-snapshots/%s/%s/actors/%s", c.atespace, c.template, actorName)
+	}
+
 	c.mu.Lock()
-	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, actorName, actorResp.Session.HeroName, "init")
+	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, workerPodName, actorName, actorResp.Session.HeroName, "init")
 	rec := &SessionRecord{
 		ActorName:         actorName,
 		Atespace:          c.atespace,
 		Template:          c.template,
 		State:             "ACTOR_STATE_SUSPENDED",
-		SnapshotURI:       fmt.Sprintf("gs://ate-snapshots/%s/%s/actors/%s", c.atespace, c.template, actorName),
+		SnapshotURI:       snapURI,
 		SnapshotVersion:   1,
 		LastWakeMs:        latencyMs,
 		SaveCount:         1,
@@ -783,6 +845,8 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 		return SessionRecord{}, err
 	}
 
+	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, actorName)
+
 	evType := "GCS_COMMIT"
 	newState := "ACTOR_STATE_SUSPENDED"
 	var newTag string
@@ -817,7 +881,14 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 		rec = &SessionRecord{ActorName: actorName, Atespace: c.atespace, Template: c.template}
 		c.records[actorName] = rec
 	}
-	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, actorName, actorResp.Session.HeroName, req.Action)
+	if workerIP != "" {
+		actorResp.Session.CurrentPodIP = workerIP
+		actorResp.Session.PodIPHistory = appendPodIPHop(rec.Session.PodIPHistory, workerIP)
+	}
+	if snapURI != "" {
+		rec.SnapshotURI = snapURI
+	}
+	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, workerPodName, actorName, actorResp.Session.HeroName, req.Action)
 	rec.State = newState
 	if newState == "ACTOR_STATE_SUSPENDED" {
 		rec.SnapshotVersion++
@@ -866,6 +937,8 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 		return SessionRecord{}, err
 	}
 
+	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, actorName)
+
 	// Suspend it back to GCS so the worker pod is freed
 	_, _ = c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace)
 
@@ -875,7 +948,14 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 		rec = &SessionRecord{ActorName: actorName, Atespace: c.atespace, Template: c.template}
 		c.records[actorName] = rec
 	}
-	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, actorName, actorResp.Session.HeroName, "revert")
+	if workerIP != "" {
+		actorResp.Session.CurrentPodIP = workerIP
+		actorResp.Session.PodIPHistory = appendPodIPHop(rec.Session.PodIPHistory, workerIP)
+	}
+	if snapURI != "" {
+		rec.SnapshotURI = snapURI
+	}
+	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, workerPodName, actorName, actorResp.Session.HeroName, "revert")
 	rec.State = "ACTOR_STATE_SUSPENDED"
 	rec.RevertCount++
 	rec.LastWakeMs = latencyMs
@@ -926,16 +1006,28 @@ func (c *ClusterAteBackend) ForkSession(ctx context.Context, sourceActor, newAct
 	if err != nil {
 		return SessionRecord{}, err
 	}
+	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, newActor)
 	_, _ = c.runAte(ctx, "suspend", "actor", newActor, "-a", c.atespace)
 
 	c.mu.Lock()
-	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, newActor, actorResp.Session.HeroName, "fork")
+	var baseHops []string
+	if srcRec := c.records[sourceActor]; srcRec != nil {
+		baseHops = srcRec.Session.PodIPHistory
+	}
+	if workerIP != "" {
+		actorResp.Session.CurrentPodIP = workerIP
+		actorResp.Session.PodIPHistory = appendPodIPHop(baseHops, workerIP)
+	}
+	if snapURI == "" {
+		snapURI = fmt.Sprintf("gs://ate-snapshots/%s/%s/tags/%s", c.atespace, c.template, tagName)
+	}
+	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, workerPodName, newActor, actorResp.Session.HeroName, "fork")
 	forkRec := &SessionRecord{
 		ActorName:         newActor,
 		Atespace:          c.atespace,
 		Template:          c.template,
 		State:             "ACTOR_STATE_SUSPENDED",
-		SnapshotURI:       fmt.Sprintf("gs://ate-snapshots/%s/%s/tags/%s", c.atespace, c.template, tagName),
+		SnapshotURI:       snapURI,
 		SnapshotVersion:   1,
 		LastWakeMs:        latencyMs,
 		SaveCount:         1,
@@ -995,11 +1087,12 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 	if rawWorkers, err := c.runAte(ctx, "get", "workers", "-o", "json"); err == nil {
 		var parsed struct {
 			Workers []struct {
-				IPs        []string          `json:"ips"`
-				Labels     map[string]string `json:"labels"`
-				NodeName   string            `json:"nodeName"`
-				WorkerPod  string            `json:"workerPod"`
-				Status     struct {
+				IP        string            `json:"ip"`
+				IPs       []string          `json:"ips"`
+				Labels    map[string]string `json:"labels"`
+				NodeName  string            `json:"nodeName"`
+				WorkerPod string            `json:"workerPod"`
+				Status    struct {
 					State string `json:"state"`
 				} `json:"status"`
 			} `json:"workers"`
@@ -1008,8 +1101,8 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 			c.mu.Lock()
 			slots := make([]WorkerSlot, 0, len(parsed.Workers))
 			for idx, w := range parsed.Workers {
-				ip := ""
-				if len(w.IPs) > 0 {
+				ip := w.IP
+				if ip == "" && len(w.IPs) > 0 {
 					ip = w.IPs[0]
 				}
 				slot := WorkerSlot{
@@ -1019,9 +1112,9 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 					NodeName:  w.NodeName,
 					State:     w.Status.State,
 				}
-				// Preserve active animation fields from existing slot with same IP
+				// Preserve active animation fields from existing slot with same IP or pod name
 				for _, old := range c.workers {
-					if old.IP == ip {
+					if (ip != "" && old.IP == ip) || (w.WorkerPod != "" && old.WorkerPod == w.WorkerPod) {
 						slot.ActiveActor = old.ActiveActor
 						slot.ActiveHero = old.ActiveHero
 						slot.ActiveAction = old.ActiveAction

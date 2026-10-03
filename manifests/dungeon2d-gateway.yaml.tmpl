@@ -89,10 +89,10 @@ spec:
       initContainers:
       - name: copy-kubectl-ate
         image: ${KUBECTL_ATE_IMAGE}
-        command: ["/ko-app/kubectl-ate", "--help"]
+        command: ["/bin/cp", "/ko-app/kubectl-ate", "/tools/kubectl-ate"]
         volumeMounts:
-        - name: ko-app-src
-          mountPath: /ko-app-unused
+        - name: tools
+          mountPath: /tools
       containers:
       - name: gateway
         image: ko://github.com/moficodes/anything-but-agents/cmd/dungeon2d
@@ -104,6 +104,10 @@ spec:
         - --template=dungeon2d
         - --router-url=http://atenet-router.ate-system.svc.cluster.local:80
         - --ate-endpoint=api.ate-system.svc:443
+        - --kubectl-ate-bin=/tools/kubectl-ate
+        volumeMounts:
+        - name: tools
+          mountPath: /tools
         ports:
         - containerPort: 8080
           name: http
@@ -112,7 +116,7 @@ spec:
             path: /readyz
             port: 8080
       volumes:
-      - name: ko-app-src
+      - name: tools
         emptyDir: {}
 ---
 apiVersion: v1
