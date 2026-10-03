@@ -1367,12 +1367,20 @@
           return;
         }
         if (ent.type === "stairs") {
+          if (ent.id === "f1:stairs" && !state.inventory.includes("crypt-key")) {
+            setToast("The Crypt stairs are locked! Collect the Crypt Key on Floor 1 first.");
+            return;
+          }
           state.x = nx;
           state.y = ny;
           sendMilestone("stairs", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
         if (ent.type === "portal") {
+          if (!state.inventory.includes("golden-chalice")) {
+            setToast("The Ascension Portal is sealed! Defeat the Heap Dragon and claim the Golden Chalice first.");
+            return;
+          }
           state.x = nx;
           state.y = ny;
           sendMilestone("escape", ent.target, ent.id, nx, ny, prevX, prevY);
