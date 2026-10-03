@@ -10,22 +10,18 @@
 
 ## Additional Info (Notes for the Program Committee)
 
-> **Why this talk:** Conference tracks are flooded with high-level "how to build an AI agent" talks. This session takes the opposite approach: zero LLMs, 100% Kubernetes systems engineering. Because the public abstract keeps the specific workloads as a hook, here is what we actually build, run, and break live on stage:
+> **Goal of the session:**
+> One of the best ways to understand a new piece of infrastructure is to use it the "wrong" way. By intentionally running non-agent workloads on Agent Substrate, we can isolate its underlying Kubernetes and runtime primitives without getting distracted by LLM logic. This approach teaches attendees two things at once: how stateful checkpoint/restore and pod-decoupled scheduling actually work under the hood, and what makes agentic workloads structurally different from traditional Kubernetes workloads in the first place.
 >
-> **Concrete Demos (already built and running on a 3-worker gVisor pool):**
-> 1. **The Weird ("Look Ma, No Database"):** A Zork-style game server written in Go with zero database or file I/O. All state lives in heap variables across suspends and worker-pod migrations. We use `kubectl ate revert` on stage to "save-scum" process RAM after dying to a boss, and snapshot tags to fork parallel timelines.
-> 2. **The Good (Taming Cold-Start Monsters & Per-Tenant DBs):**
->    - Using `ActorTemplate` Golden Snapshots (gated on `/readyz`) to run a 12+ second initialization once and clone warm process heaps in ~100ms.
->    - Running one isolated embedded database process per customer (`DurableDir` volumes paired with `FULL` memory snapshots on short pause and `DATA`-only WAL snapshots on long suspend, plus 1-command GDPR tenant deletion).
->    - On-demand `gVisor` honeypots keyed by scanner IP that cost $0 when idle and preserve attacker-dropped files in `/tmp` across weeks.
-> 3. **The Terrible (Don't Try This at Home):** We suspend a simulated Raft leader with a 3-second lease and a 100ms heartbeat loop, then resume it 5 seconds later to trigger a live wall-clock time-jump panic and split-brain.
+> **Examples of candidate demos and experiments we are exploring (will select 2 to 3 to fit the 25-minute slot):**
+> - **Pure in-memory state ("Look Ma, No Database"):** Running a stateful application (such as a turn-based game) where state lives entirely in process RAM across suspends and worker-pod migrations, using snapshot revert and tagging as application-level undo and branching.
+> - **Taming heavy cold starts & per-tenant isolation:** Using Golden Snapshots (gated on `/readyz`) to skip slow initialization phases and clone warm processes in milliseconds, or pairing `DurableDir` volumes with split pause/commit snapshot scopes to run isolated single-tenant embedded databases or on-demand `gVisor` honeypots.
+> - **Where it breaks ("Don't Try This at Home"):** Intentionally suspending a workload that depends on continuous wall-clock time or distributed leases (such as a consensus node or heartbeat loop) and watching it fail on resume to show the real boundaries of checkpoint/restore.
 >
-> **Session Breakdown (35 min):**
-> - **0–6 min:** Architecture under the hood (decoupling Actor state from warm Kubernetes WorkerPool Pods, gVisor/microVM checkpointing, and Envoy `ext_proc` wake-on-HTTP routing with request parking).
-> - **6–14 min:** Live Demo 1 (Pure-RAM Dungeon + `revert` and `tag` time travel).
-> - **14–26 min:** Live Demos 2–4 (Golden Snapshot cold-start cloner, Per-Tenant DB, and per-IP Honeypot).
-> - **26–33 min:** Live Demo 5 (Breaking distributed consensus and wall-clock loops with checkpoint/restore).
-> - **33–35 min:** The Litmus Test: a practical decision matrix for when a workload belongs on a checkpoint/restore actor runtime vs. standard Kubernetes `Deployments` or `StatefulSets`.
+> **Session Flow:**
+> 1. **Under the Hood:** How Substrate decouples Actor state from warm Kubernetes `WorkerPool` Pods using `gVisor`/microVM snapshots and wake-on-HTTP routing.
+> 2. **Live Experiments (The Good, The Weird, and The Terrible):** Walking through 2 to 3 live demos that push memory snapshots, golden cloning, and process freeze to their limits.
+> 3. **The Takeaway:** A practical mental model for what makes a workload "agent-shaped" (high cardinality, low duty cycle, heavy state, untrusted execution) and why Substrate's primitives map so cleanly to that shape.
 
 ---
 
