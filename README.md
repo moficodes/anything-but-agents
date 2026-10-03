@@ -166,30 +166,34 @@ Each of the five demos is designed to isolate and prove a specific architectural
 
 ---
 
-## Quickstart
+## Quickstart (GKE in `us-west3` Salt Lake City)
 
-### 1. Run Unit Tests Locally
+### 1. Configure `.env`
 
-All five demo workloads are pure standard-library Go and can be tested without a cluster:
-
-```bash
-go test -v ./...
-```
-
-### 2. Deploy to an Agent Substrate Cluster
-
-Ensure your cluster has Agent Substrate (`ate-system`) installed, `kubectl-ate` on your `PATH`, and `atenet-router` port-forwarded (`kubectl port-forward -n ate-system svc/atenet-router 8000:80`):
+Copy [`.env.example`](.env.example) to `.env` and set your GCP `PROJECT_ID`. All other settings default automatically (`GCE_REGION=us-west3` for Salt Lake City, `CLUSTER_LOCATION=us-west3-a`, `CLUSTER_NAME=anything-but-agents`, `BUCKET_NAME`, and `KO_DOCKER_REPO`), and any of them can be overridden in `.env`:
 
 ```bash
-export BUCKET_NAME="<your-snapshot-gcs-bucket>"
-./hack/stage-demo.sh deploy
+cp .env.example .env
+# Edit .env and set: export PROJECT_ID="your-gcp-project-id"
 ```
+
+### 2. Provision GKE Cluster, Install Substrate & Deploy All 5 Demos
+
+If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 demos deployed:
+
+```bash
+./hack/stage-demo.sh bootstrap-gke
+```
+
+*(If you already have an Agent Substrate cluster running, run `./hack/stage-demo.sh deploy` instead.)*
 
 ### 3. Run the Live Stage Demos
 
-Each act pauses before executing each command so you can narrate on stage (set `PAUSE_BETWEEN_STEPS=0` to run non-interactively):
+`hack/stage-demo.sh` automatically port-forwards `svc/atenet-router` on `localhost:8000` if needed. Each step pauses for `<Enter>` so you can narrate on stage (set `PAUSE_BETWEEN_STEPS=0` to run non-interactively):
 
 ```bash
+./hack/stage-demo.sh run-all         # Run all 5 demos in sequence (or run them individually below)
+
 ./hack/stage-demo.sh act1-dungeon    # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
 ./hack/stage-demo.sh act2-coldstart  # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
 ./hack/stage-demo.sh act3-tenantdb   # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
