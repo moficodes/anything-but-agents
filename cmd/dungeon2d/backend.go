@@ -398,18 +398,27 @@ func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName strin
 		return SessionRecord{}, fmt.Errorf("actor %q not found", actorName)
 	}
 
-	// Restore from last committed GCS snapshot (or LastTag if needed)
+	slot := b.pickWorkerLocked(actorName, rec.Session.HeroName, "revert")
 	var restored *ActorSession
-	if snap := b.gcsSnapshots[actorName]; snap != nil && snap.Alive {
-		restored = snap.Clone()
-	} else if rec.LastTag != "" && b.tagSnapshots[rec.LastTag] != nil {
-		restored = b.tagSnapshots[rec.LastTag].Clone()
+	var snapResp ActorResponse
+
+	if !rec.Session.Alive && b.gcsSnapshots[actorName] != nil && b.gcsSnapshots[actorName].Alive {
+		// Player was dead (uncommitted RAM): restore last committed GCS snapshot directly
+		restored = b.gcsSnapshots[actorName].Clone()
+		snapResp = restored.Snapshot(slot.IP)
+		rec.LastMessage = fmt.Sprintf("SAVE-SCUM SUCCESS (`kubectl ate revert actor %s`): discarded dead RAM and restored GCS snapshot v%d on Floor %d (HP: %d/%d)!",
+			actorName, rec.SnapshotVersion, snapResp.Session.Floor, snapResp.Session.HP, snapResp.Session.MaxHP)
+	} else if b.liveActors[actorName] != nil {
+		// Player was alive: rewind actor heap to its last Quicksave / Floor-Entry Checkpoint
+		restored = b.liveActors[actorName].Clone()
+		snapResp = restored.Mutate(MutateRequest{Action: "restore_checkpoint"}, slot.IP)
+		rec.LastMessage = snapResp.Message
 	} else {
 		restored = NewActorSession()
+		snapResp = restored.Snapshot(slot.IP)
+		rec.LastMessage = snapResp.Message
 	}
 
-	slot := b.pickWorkerLocked(actorName, restored.HeroName, "revert")
-	snapResp := restored.Snapshot(slot.IP)
 	b.liveActors[actorName] = restored
 	b.gcsSnapshots[actorName] = restored.Clone()
 
@@ -419,8 +428,6 @@ func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName strin
 	rec.AssignedWorkerPod = slot.WorkerPod
 	rec.LastWakeMs = 78
 	rec.LastEventType = "REVERT"
-	rec.LastMessage = fmt.Sprintf("SAVE-SCUM SUCCESS (`kubectl ate revert actor %s`): discarded dead/mutated RAM and restored GCS snapshot v%d on Floor %d (HP: %d)!",
-		actorName, rec.SnapshotVersion, snapResp.Session.Floor, snapResp.Session.HP)
 	snapResp.Session.LastEvent = rec.LastMessage
 	rec.Session = snapResp.Session
 	rec.UpdatedAt = time.Now().UTC()
@@ -925,16 +932,57 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string) (SessionRecord, error) {
 	actorName = sanitizeActorName(actorName)
 
-	// Call `kubectl ate revert actor <name> -a <atespace>` to rewind the running actor
-	// back to its last committed GCS snapshot!
-	if _, err := c.runAte(ctx, "revert", "actor", actorName, "-a", c.atespace); err != nil {
-		return SessionRecord{}, err
-	}
+	c.mu.Lock()
+	existingRec := c.records[actorName]
+	wasDead := existingRec != nil && !existingRec.Session.Alive
+	c.mu.Unlock()
 
-	// Wake the reverted actor via atenet-router to read back its resurrected Go heap state
-	actorResp, latencyMs, err := c.callActorHTTP(ctx, actorName, http.MethodGet, "/state", nil)
-	if err != nil {
-		return SessionRecord{}, err
+	var actorResp ActorResponse
+	var latencyMs int64
+	var err error
+
+	if wasDead {
+		// Player died in RAM (actor was left ACTOR_STATE_RUNNING uncommitted):
+		// Call `kubectl ate revert actor <name> -a <atespace>` to discard the fatal RAM
+		// mutation and restore the last committed GCS snapshot!
+		if _, revErr := c.runAte(ctx, "revert", "actor", actorName, "-a", c.atespace); revErr != nil {
+			// If actor was already suspended, wake it first so revert can run
+			_, _, _ = c.callActorHTTP(ctx, actorName, http.MethodGet, "/state", nil)
+			if _, revErr2 := c.runAte(ctx, "revert", "actor", actorName, "-a", c.atespace); revErr2 != nil {
+				slog.Warn("kubectl-ate revert returned warning", slog.String("actor", actorName), slog.Any("err", revErr2))
+			}
+		}
+		actorResp, latencyMs, err = c.callActorHTTP(ctx, actorName, http.MethodGet, "/state", nil)
+		if err != nil {
+			return SessionRecord{}, err
+		}
+		// If the restored snapshot somehow still had !Alive, restore checkpoint
+		if !actorResp.Session.Alive {
+			actorResp, latencyMs, err = c.callActorHTTP(ctx, actorName, http.MethodPost, "/mutate", MutateRequest{
+				Action: "restore_checkpoint",
+			})
+			if err != nil {
+				return SessionRecord{}, err
+			}
+		} else {
+			actorResp.Message = fmt.Sprintf("SAVE-SCUMMED (`kubectl ate revert actor %s`): discarded dead RAM and restored GCS snapshot on Floor %d (HP: %d/%d)!",
+				actorName, actorResp.Session.Floor, actorResp.Session.HP, actorResp.Session.MaxHP)
+		}
+	} else {
+		// Player clicked "Revert Actor (Save-Scum)" while alive (actor is SUSPENDED in GCS):
+		// 1. Wake the actor via atenet-router so it is ACTOR_STATE_RUNNING (required by `kubectl-ate revert`).
+		_, _, _ = c.callActorHTTP(ctx, actorName, http.MethodGet, "/state", nil)
+		// 2. Execute `kubectl-ate revert actor <name> -a <atespace>` to revert the running execution.
+		if _, revErr := c.runAte(ctx, "revert", "actor", actorName, "-a", c.atespace); revErr != nil {
+			slog.Warn("kubectl-ate revert on live session returned warning", slog.String("actor", actorName), slog.Any("err", revErr))
+		}
+		// 3. Rewind the actor's Go heap to its last Quicksave / Floor-Entry Checkpoint!
+		actorResp, latencyMs, err = c.callActorHTTP(ctx, actorName, http.MethodPost, "/mutate", MutateRequest{
+			Action: "restore_checkpoint",
+		})
+		if err != nil {
+			return SessionRecord{}, err
+		}
 	}
 
 	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, actorName)
@@ -962,8 +1010,7 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 	rec.AssignedWorkerIP = actorResp.Session.CurrentPodIP
 	rec.AssignedWorkerPod = workerPod
 	rec.LastEventType = "REVERT"
-	rec.LastMessage = fmt.Sprintf("SAVE-SCUMMED (`kubectl ate revert actor %s`): restored GCS snapshot on Floor %d (HP: %d)!",
-		actorName, actorResp.Session.Floor, actorResp.Session.HP)
+	rec.LastMessage = actorResp.Message
 	actorResp.Session.LastEvent = rec.LastMessage
 	rec.Session = actorResp.Session
 	rec.UpdatedAt = time.Now().UTC()

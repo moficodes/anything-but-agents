@@ -189,6 +189,23 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 		t.Fatalf("expected RevertSession to bring hero back to life, got Alive=%v HP=%d Reverts=%d",
 			revertedRec.Session.Alive, revertedRec.Session.HP, revertedRec.RevertCount)
 	}
+
+	// 6. Also test live-session Revert (when player is ALIVE after taking enemy counter-damage):
+	// Fight Shadow Guard (takes -25 HP counter damage), then click Revert Actor -> rewinds HP back to checkpoint!
+	damagedRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "combat", Target: "Shadow Guard", EntityID: "f2:guard"})
+	if err != nil {
+		t.Fatalf("guard combat failed: %v", err)
+	}
+	if damagedRec.Session.LastDamageTaken != 25 || damagedRec.Session.HP >= 100 {
+		t.Fatalf("expected enemy counter-attack damage (25), got LastDamageTaken=%d HP=%d", damagedRec.Session.LastDamageTaken, damagedRec.Session.HP)
+	}
+	liveRevertedRec, err := b.RevertSession(t.Context(), "d2d-mofi")
+	if err != nil {
+		t.Fatalf("live RevertSession failed: %v", err)
+	}
+	if liveRevertedRec.Session.HP != 100 || liveRevertedRec.RevertCount != 2 {
+		t.Fatalf("expected live RevertSession to restore checkpoint HP=100, got HP=%d Reverts=%d", liveRevertedRec.Session.HP, liveRevertedRec.RevertCount)
+	}
 }
 
 func TestGatewayAndDashboardIntegration(t *testing.T) {
@@ -216,6 +233,11 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 		for _, r := range html {
 			if r >= 0x1F300 && r <= 0x1FAFF {
 				t.Fatalf("found prohibited emoji character %U in %s", r, path)
+			}
+		}
+		if path == "/play" {
+			if !bytes.Contains(raw.Bytes(), []byte("helpModal")) || !bytes.Contains(raw.Bytes(), []byte("preview-paladin")) {
+				t.Fatalf("expected How-to-Play modal and pixel-art class previews in /play")
 			}
 		}
 	}

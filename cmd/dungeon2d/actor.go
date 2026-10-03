@@ -26,36 +26,56 @@ import (
 	"time"
 )
 
+// ActorCheckpoint stores the last explicit Quicksave or Floor-Entry state
+// inside the actor's Go heap so `Revert Actor (Save-Scum)` can rewind a live
+// or suspended session even after intermediate milestone suspends.
+type ActorCheckpoint struct {
+	Label     string          `json:"label"`
+	Floor     int             `json:"floor"`
+	X         int             `json:"x"`
+	Y         int             `json:"y"`
+	HP        int             `json:"hp"`
+	Gold      int             `json:"gold"`
+	Score     int             `json:"score"`
+	Inventory []string        `json:"inventory"`
+	Cleared   map[string]bool `json:"cleared"`
+	MonsterHP map[string]int  `json:"monster_hp"`
+	BossHP    int             `json:"boss_hp"`
+}
+
 // ActorSession holds 100% of a player's 2D multilevel dungeon game state in
 // ordinary Go heap variables. When running under Agent Substrate with
 // SNAPSHOT_CONTENT_SCOPE_FULL, suspending the actor checkpoints this entire
 // heap struct to GCS, and reverting the actor rewinds it in place.
 type ActorSession struct {
-	mu             sync.Mutex      `json:"-"`
-	BootedAt       time.Time       `json:"booted_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	HeroName       string          `json:"hero_name"`
-	CharacterClass string          `json:"character_class"`
-	Floor          int             `json:"floor"`
-	X              int             `json:"x"`
-	Y              int             `json:"y"`
-	HP             int             `json:"hp"`
-	MaxHP          int             `json:"max_hp"`
-	Gold           int             `json:"gold"`
-	Score          int             `json:"score"`
-	Alive          bool            `json:"alive"`
-	Victory        bool            `json:"victory"`
-	DeathReason    string          `json:"death_reason,omitempty"`
-	Inventory      []string        `json:"inventory"`
-	Cleared        map[string]bool `json:"cleared"`
-	MonsterHP      map[string]int  `json:"monster_hp"`
-	BossHP         int             `json:"boss_hp"`
-	BossMaxHP      int             `json:"boss_max_hp"`
-	Turn           int             `json:"turn"`
-	MilestoneCount int             `json:"milestone_count"`
-	LastEvent      string          `json:"last_event"`
-	CurrentPodIP   string          `json:"current_pod_ip"`
-	PodIPHistory   []string        `json:"pod_ip_history"`
+	mu              sync.Mutex       `json:"-"`
+	BootedAt        time.Time        `json:"booted_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+	HeroName        string           `json:"hero_name"`
+	CharacterClass  string           `json:"character_class"`
+	Floor           int              `json:"floor"`
+	X               int              `json:"x"`
+	Y               int              `json:"y"`
+	HP              int              `json:"hp"`
+	MaxHP           int              `json:"max_hp"`
+	Gold            int              `json:"gold"`
+	Score           int              `json:"score"`
+	Alive           bool             `json:"alive"`
+	Victory         bool             `json:"victory"`
+	DeathReason     string           `json:"death_reason,omitempty"`
+	Inventory       []string         `json:"inventory"`
+	Cleared         map[string]bool  `json:"cleared"`
+	MonsterHP       map[string]int   `json:"monster_hp"`
+	BossHP          int              `json:"boss_hp"`
+	BossMaxHP       int              `json:"boss_max_hp"`
+	Turn            int              `json:"turn"`
+	MilestoneCount  int              `json:"milestone_count"`
+	LastDamageDealt int              `json:"last_damage_dealt,omitempty"`
+	LastDamageTaken int              `json:"last_damage_taken,omitempty"`
+	LastEvent       string           `json:"last_event"`
+	CurrentPodIP    string           `json:"current_pod_ip"`
+	PodIPHistory    []string         `json:"pod_ip_history"`
+	Checkpoint      *ActorCheckpoint `json:"checkpoint,omitempty"`
 }
 
 // MutateRequest describes a state milestone sent from the browser via the
@@ -75,17 +95,19 @@ type MutateRequest struct {
 type ActorResponse struct {
 	Message     string       `json:"message"`
 	EventType   string       `json:"event_type"`
+	DamageDealt int          `json:"damage_dealt,omitempty"`
+	DamageTaken int          `json:"damage_taken,omitempty"`
 	Session     ActorSession `json:"session"`
 	Persistence string       `json:"persistence"`
 }
 
 func NewActorSession() *ActorSession {
 	now := time.Now().UTC()
-	return &ActorSession{
+	s := &ActorSession{
 		BootedAt:       now,
 		UpdatedAt:      now,
 		HeroName:       "adventurer",
-		CharacterClass: "knight",
+		CharacterClass: "paladin",
 		Floor:          1,
 		X:              1,
 		Y:              1,
@@ -106,6 +128,70 @@ func NewActorSession() *ActorSession {
 		BossMaxHP: 100,
 		LastEvent: "Entered Floor 1: The Forgotten Crypt (100% Go heap state).",
 	}
+	s.saveCheckpointLocked("Floor 1 Entrance")
+	return s
+}
+
+func (s *ActorSession) saveCheckpointLocked(label string) {
+	inv := make([]string, len(s.Inventory))
+	copy(inv, s.Inventory)
+	cleared := make(map[string]bool, len(s.Cleared))
+	for k, v := range s.Cleared {
+		cleared[k] = v
+	}
+	mhp := make(map[string]int, len(s.MonsterHP))
+	for k, v := range s.MonsterHP {
+		mhp[k] = v
+	}
+	s.Checkpoint = &ActorCheckpoint{
+		Label:     label,
+		Floor:     s.Floor,
+		X:         s.X,
+		Y:         s.Y,
+		HP:        s.HP,
+		Gold:      s.Gold,
+		Score:     s.Score,
+		Inventory: inv,
+		Cleared:   cleared,
+		MonsterHP: mhp,
+		BossHP:    s.BossHP,
+	}
+}
+
+func (s *ActorSession) restoreCheckpointLocked() string {
+	if s.Checkpoint == nil {
+		s.Floor = 1
+		s.X, s.Y = 1, 1
+		s.HP = s.MaxHP
+		s.Alive = true
+		s.Victory = false
+		s.DeathReason = ""
+		return "SAVE-SCUM REVERT COMPLETE: Restored Floor 1 Entrance checkpoint (HP: 100/100)!"
+	}
+	cp := s.Checkpoint
+	s.Floor = cp.Floor
+	s.X = cp.X
+	s.Y = cp.Y
+	s.HP = max(1, cp.HP)
+	s.Gold = cp.Gold
+	s.Score = cp.Score
+	s.Alive = true
+	s.Victory = false
+	s.DeathReason = ""
+	s.BossHP = cp.BossHP
+
+	s.Inventory = make([]string, len(cp.Inventory))
+	copy(s.Inventory, cp.Inventory)
+	s.Cleared = make(map[string]bool, len(cp.Cleared))
+	for k, v := range cp.Cleared {
+		s.Cleared[k] = v
+	}
+	s.MonsterHP = make(map[string]int, len(cp.MonsterHP))
+	for k, v := range cp.MonsterHP {
+		s.MonsterHP[k] = v
+	}
+	return fmt.Sprintf("SAVE-SCUM REVERT (`kubectl ate revert`): Rewound heap to checkpoint %q on Floor %d (Pos %d,%d | HP %d/%d)!",
+		cp.Label, s.Floor, s.X, s.Y, s.HP, s.MaxHP)
 }
 
 func (s *ActorSession) recordPodIP(ip string) {
@@ -149,10 +235,18 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 
 	s.recordPodIP(podIP)
 	s.UpdatedAt = time.Now().UTC()
+	s.LastDamageDealt = 0
+	s.LastDamageTaken = 0
 
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" || action == "state" || action == "look" {
 		return s.responseLocked(s.LastEvent, "STATE")
+	}
+
+	if action == "restore_checkpoint" {
+		msg := s.restoreCheckpointLocked()
+		s.LastEvent = msg
+		return s.responseLocked(msg, "REVERT")
 	}
 
 	if req.X > 0 || req.Y > 0 {
@@ -170,6 +264,7 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 		if s.X == 0 && s.Y == 0 {
 			s.X, s.Y = 1, 1
 		}
+		s.saveCheckpointLocked("Floor 1 Entrance")
 		msg := fmt.Sprintf("Hero %s (%s) entered Floor 1: The Forgotten Crypt.", s.HeroName, s.CharacterClass)
 		s.LastEvent = msg
 		return s.responseLocked(msg, "INIT")
@@ -256,22 +351,42 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 
 		switch entityID {
 		case "f1:skeleton":
+			counterDmg := 20
 			s.MonsterHP[entityID] = 0
 			s.Cleared[entityID] = true
-			s.HP = max(1, s.HP-10)
-			s.Gold += 50
-			s.Score += 200
-			msg = fmt.Sprintf("Shattered %s! (-10 HP, +200 Score). The path to the Crypt Key is clear.", target)
-			eventType = "COMBAT_WIN"
+			s.LastDamageDealt = playerDmg
+			s.LastDamageTaken = counterDmg
+			s.HP = max(0, s.HP-counterDmg)
+			if s.HP == 0 {
+				s.Alive = false
+				s.DeathReason = fmt.Sprintf("Slain by %s's rusty bone scimitar (-%d HP)!", target, counterDmg)
+				msg = fmt.Sprintf("CLASH! %s slashed you for -%d HP! YOU DIED (HP=0). Tap REVERT ACTOR to restore your last GCS snapshot!", target, counterDmg)
+				eventType = "DEATH"
+			} else {
+				s.Gold += 50
+				s.Score += 200
+				msg = fmt.Sprintf("CLASH! You shattered %s (%d DMG), but its bone blade slashed you for -%d HP (Your HP: %d/%d)! Path to Crypt Key is clear.", target, playerDmg, counterDmg, s.HP, s.MaxHP)
+				eventType = "COMBAT_WIN"
+			}
 
 		case "f2:guard":
+			counterDmg := 25
 			s.MonsterHP[entityID] = 0
 			s.Cleared[entityID] = true
-			s.HP = max(1, s.HP-15)
-			s.Gold += 75
-			s.Score += 250
-			msg = fmt.Sprintf("Vanquished %s! (-15 HP, +250 Score). The Fire Shield vault is unlocked.", target)
-			eventType = "COMBAT_WIN"
+			s.LastDamageDealt = playerDmg
+			s.LastDamageTaken = counterDmg
+			s.HP = max(0, s.HP-counterDmg)
+			if s.HP == 0 {
+				s.Alive = false
+				s.DeathReason = fmt.Sprintf("Cut down by %s's shadow halberd (-%d HP)!", target, counterDmg)
+				msg = fmt.Sprintf("CLASH! %s struck you for -%d HP! YOU DIED (HP=0). Tap REVERT ACTOR to restore your last GCS snapshot!", target, counterDmg)
+				eventType = "DEATH"
+			} else {
+				s.Gold += 75
+				s.Score += 250
+				msg = fmt.Sprintf("CLASH! You vanquished %s (%d DMG), but its shadow halberd counter-attacked for -%d HP (Your HP: %d/%d)! Fire Shield vault unlocked.", target, playerDmg, counterDmg, s.HP, s.MaxHP)
+				eventType = "COMBAT_WIN"
+			}
 
 		case "f3:dragon":
 			curHP := s.BossHP
@@ -281,30 +396,36 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 			curHP = max(0, curHP-playerDmg)
 			s.BossHP = curHP
 			s.MonsterHP[entityID] = curHP
+			s.LastDamageDealt = playerDmg
 
 			if !slices.Contains(s.Inventory, "fire-shield") {
+				s.LastDamageTaken = max(100, s.HP)
 				s.HP = 0
 				s.Alive = false
-				s.DeathReason = "Incinerated by unbuffered Heap Dragon fire breath (missing fire-shield)!"
-				msg = fmt.Sprintf("You struck %s for %d damage, but without the fire-shield its unbuffered fire breath incinerates your heap! YOU DIED (HP=0). Tap REVERT ACTOR to time-travel back to your last GCS snapshot!", target, playerDmg)
+				s.DeathReason = "Incinerated by unbuffered Heap Dragon fire breath (-100 HP — missing fire-shield)!"
+				msg = fmt.Sprintf("LETHAL COUNTER-ATTACK! You struck %s for %d DMG, but without the fire-shield its fire breath dealt -100 HP! YOU DIED (HP=0). Tap REVERT ACTOR to time-travel back to your last GCS snapshot!", target, playerDmg)
 				eventType = "DEATH"
 			} else if curHP == 0 {
+				counter := 10
+				s.LastDamageTaken = counter
+				s.HP = max(1, s.HP-counter)
 				s.Cleared[entityID] = true
 				s.Gold += 500
 				s.Score += 1000
-				msg = fmt.Sprintf("SLAYED THE %s! Your fire-shield absorbed the flames and your dragon-slayer-sword shattered its scales! Claim the Golden Chalice of State!", strings.ToUpper(target))
+				msg = fmt.Sprintf("SLAYED THE %s (%d DMG)! Your fire-shield absorbed the flames (-%d HP; Your HP: %d/%d)! Grab the Golden Chalice and enter the top Portal Door!", strings.ToUpper(target), playerDmg, counter, s.HP, s.MaxHP)
 				eventType = "BOSS_DEFEATED"
 			} else {
-				counter := 15
+				counter := 20
+				s.LastDamageTaken = counter
 				s.HP = max(0, s.HP-counter)
 				if s.HP == 0 {
 					s.Alive = false
-					s.DeathReason = "Fell in battle against the Ancient Heap Dragon."
-					msg = fmt.Sprintf("You struck %s (%d HP left), but its tail swipe finished you off! YOU DIED.", target, curHP)
+					s.DeathReason = "Fell in battle against the Ancient Heap Dragon (-20 HP tail swipe)."
+					msg = fmt.Sprintf("You struck %s (%d HP left), but its tail swipe dealt -%d HP and finished you off! YOU DIED.", target, curHP, counter)
 					eventType = "DEATH"
 				} else {
 					s.Score += 150
-					msg = fmt.Sprintf("Struck %s for %d DMG (%d/%d Boss HP left)! Your fire-shield deflected its lethal breath (-%d HP; Your HP: %d).", target, playerDmg, curHP, s.BossMaxHP, counter, s.HP)
+					msg = fmt.Sprintf("CLASH! You struck %s for %d DMG (%d/%d Boss HP left) — Dragon counter-attacked for -%d HP (Your HP: %d/%d)! Strike again!", target, playerDmg, curHP, s.BossMaxHP, counter, s.HP, s.MaxHP)
 					eventType = "COMBAT"
 				}
 			}
@@ -319,6 +440,7 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 	case "quicksave":
 		s.Cleared["f2:shrine"] = true
 		s.Score += 50
+		s.saveCheckpointLocked(fmt.Sprintf("Floor %d Quicksave", s.Floor))
 		msg = fmt.Sprintf("QUICKSAVE SHRINE ACTIVATED on Floor %d! Full Go heap checkpointed to GCS and tagged.", s.Floor)
 		eventType = "QUICKSAVE"
 
@@ -331,14 +453,16 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 				s.Floor = 2
 				s.X, s.Y = 1, 5
 				s.Score += 200
-				msg = "Descended to Floor 2: The Abandoned Armory! Tip: grab the dragon-slayer-sword, unlock the northern Fire Shield vault, and touch the Quicksave Shrine."
+				s.saveCheckpointLocked("Floor 2 Entrance")
+				msg = "Descended to Floor 2: The Abandoned Armory! Checkpoint saved. Grab the Dragon-Slayer Sword & Fire Shield!"
 				eventType = "FLOOR_CHANGE"
 			}
 		} else if s.Floor == 2 {
 			s.Floor = 3
 			s.X, s.Y = 7, 9
 			s.Score += 300
-			msg = "Descended to Floor 3: Cavern of the Ancient Heap Dragon!"
+			s.saveCheckpointLocked("Floor 3 Entrance")
+			msg = "Descended to Floor 3: Cavern of the Ancient Heap Dragon! Checkpoint saved."
 			eventType = "FLOOR_CHANGE"
 		} else {
 			msg = "Already on the deepest floor (Floor 3)."
@@ -346,12 +470,12 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 
 	case "escape":
 		if !slices.Contains(s.Inventory, "golden-chalice") {
-			msg = "The Ascension Portal requires the golden-chalice! Defeat the Ancient Heap Dragon first."
+			msg = "The Ascension Portal requires the golden-chalice! Defeat the Ancient Heap Dragon and pick up the Golden Chalice first."
 			eventType = "BLOCKED"
 		} else {
 			s.Victory = true
 			s.Score += 1500 + (s.HP * 5)
-			msg = fmt.Sprintf("VICTORY! %s escaped the 3-Floor Dungeon with the Golden Chalice of State (Final Score: %d, Pod IPs visited: %d)!", s.HeroName, s.Score, len(s.PodIPHistory))
+			msg = fmt.Sprintf("VICTORY! %s escaped the 3-Floor Dungeon through the Ascension Portal with the Golden Chalice of State (Final Score: %d, Pod IPs visited: %d)!", s.HeroName, s.Score, len(s.PodIPHistory))
 			eventType = "VICTORY"
 		}
 
@@ -377,35 +501,49 @@ func (s *ActorSession) responseLocked(msg, eventType string) ActorResponse {
 	ips := make([]string, len(s.PodIPHistory))
 	copy(ips, s.PodIPHistory)
 
+	var cpCopy *ActorCheckpoint
+	if s.Checkpoint != nil {
+		rawCP, _ := json.Marshal(s.Checkpoint)
+		var outCP ActorCheckpoint
+		if json.Unmarshal(rawCP, &outCP) == nil {
+			cpCopy = &outCP
+		}
+	}
+
 	snap := ActorSession{
-		BootedAt:       s.BootedAt,
-		UpdatedAt:      s.UpdatedAt,
-		HeroName:       s.HeroName,
-		CharacterClass: s.CharacterClass,
-		Floor:          s.Floor,
-		X:              s.X,
-		Y:              s.Y,
-		HP:             s.HP,
-		MaxHP:          s.MaxHP,
-		Gold:           s.Gold,
-		Score:          s.Score,
-		Alive:          s.Alive,
-		Victory:        s.Victory,
-		DeathReason:    s.DeathReason,
-		Inventory:      inv,
-		Cleared:        cleared,
-		MonsterHP:      mhp,
-		BossHP:         s.BossHP,
-		BossMaxHP:      s.BossMaxHP,
-		Turn:           s.Turn,
-		MilestoneCount: s.MilestoneCount,
-		LastEvent:      s.LastEvent,
-		CurrentPodIP:   s.CurrentPodIP,
-		PodIPHistory:   ips,
+		BootedAt:        s.BootedAt,
+		UpdatedAt:       s.UpdatedAt,
+		HeroName:        s.HeroName,
+		CharacterClass:  s.CharacterClass,
+		Floor:           s.Floor,
+		X:               s.X,
+		Y:               s.Y,
+		HP:              s.HP,
+		MaxHP:           s.MaxHP,
+		Gold:            s.Gold,
+		Score:           s.Score,
+		Alive:           s.Alive,
+		Victory:         s.Victory,
+		DeathReason:     s.DeathReason,
+		Inventory:       inv,
+		Cleared:         cleared,
+		MonsterHP:       mhp,
+		BossHP:          s.BossHP,
+		BossMaxHP:       s.BossMaxHP,
+		Turn:            s.Turn,
+		MilestoneCount:  s.MilestoneCount,
+		LastDamageDealt: s.LastDamageDealt,
+		LastDamageTaken: s.LastDamageTaken,
+		LastEvent:       s.LastEvent,
+		CurrentPodIP:    s.CurrentPodIP,
+		PodIPHistory:    ips,
+		Checkpoint:      cpCopy,
 	}
 	return ActorResponse{
 		Message:     msg,
 		EventType:   eventType,
+		DamageDealt: s.LastDamageDealt,
+		DamageTaken: s.LastDamageTaken,
 		Session:     snap,
 		Persistence: "ZERO_DATABASE_PURE_PROCESS_RAM_GCS_CHECKPOINT",
 	}
