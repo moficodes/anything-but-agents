@@ -2,23 +2,19 @@
 
 ## CFP Abstracts
 
-### KubeCon Version (Your Voice + Concrete K8s Primitives)
+### KubeCon Version (Humanized — your voice + KubeCon detail)
 
-> Agent Substrate is for Agents. It’s in the name. Or is it?
+> Agent Substrate is for Agents. It's in the name. Or is it?
 >
-> Under the hood, Substrate adds a set of new primitives on top of Kubernetes: pre-warmed worker pods, gVisor and microVM memory checkpoint/restore, golden snapshots, and wake-on-HTTP routing. None of those primitives care if your container is actually an AI agent.
+> Substrate brings a lot of cool new primitives to Kubernetes: warm worker pools, gVisor and microVM memory snapshots, golden-image cloning, and wake-on-HTTP routing. None of these primitives actually care if your container is an AI agent.
 >
-> So in this session, we are going to ignore agents completely. Instead, we will take the fundamental building blocks of Substrate and try to run everything else on them. We will look at storing application state purely in process RAM with no database, cloning slow-booting apps in milliseconds from a golden snapshot, and spinning up one isolated database process per user.
+> This session detaches Substrate from the agent view to see what happens when we use its fundamental building blocks for other workloads. We will run a game server with zero database where state lives purely in process RAM, clone slow-booting apps in milliseconds from a golden snapshot, and spin up one embedded database process per user.
 >
-> Some of these ideas are actually decent. Some of them—like suspending a Raft node and watching it split-brain when time jumps forward—are bad and should not be tried at home. Through this exercise of treating Substrate as a solution looking for a problem, we will gain a better understanding of how stateful checkpoint/restore works on Kubernetes, where it breaks, and why it turns out to be such a great fit for agentic workloads.
+> Some of these ideas are actually decent. Some of them, like suspending a Raft node and watching it split-brain when time jumps forward, are bad and should not be tried at home. Through this exercise of a solution looking for a problem, we will all gain a better understanding of how stateful checkpoint and restore works on Kubernetes, where it breaks, and why Substrate is such a great fit for agentic workloads.
 
-### Shorter Version (If character/word limit is tight)
+### Single-Paragraph Version (Closest to your original draft)
 
-> Agent Substrate is for Agents. It’s in the name. Or is it?
->
-> Substrate provides a lot of cool new primitives on Kubernetes—warm worker pools, gVisor/microVM memory snapshots, instant cloning, and wake-on-request routing—that can be used for things that are not agents at all. Some of these ideas are actually decent, like skipping 30-second cold starts or running one embedded database per user. Some of them are bad and should not be tried at home, like running a game server with zero database in RAM or suspending a consensus node.
->
-> This session looks at Substrate detached from the agent view to see what happens when we use its building blocks for weird and unexpected workloads. Through this exercise of a solution looking for a problem, we will all gain a better understanding of how Substrate works on Kubernetes and why it is such a great fit for agentic workloads.
+> Agent Substrate is for Agents. It's in the name. Or is it? Substrate provides a lot of cool new primitives on Kubernetes, like warm worker pools, gVisor and microVM memory snapshots, instant cloning, and wake-on-HTTP routing, that can be used for things that are not agents at all. Some of these ideas are actually decent, such as skipping 30-second cold starts or running one embedded database per user. Some of them are bad and should not be tried at home, like running a game server with no database in RAM or suspending a Raft consensus node. This session will cover Substrate detached from the agent view and test its fundamental building blocks on other use cases. Through this exercise of a solution looking for a problem, we will all gain a better understanding of Substrate on Kubernetes and why it is such a great fit for agentic workloads.
 
 ---
 
