@@ -12,10 +12,10 @@
 
 > The goal of this talk is to use Agent Substrate the "wrong" way so we can see how its Kubernetes primitives work without getting distracted by AI/LLM logic. By testing non-agent workloads on it, attendees learn both how stateful checkpoint/restore works under the hood and what makes agentic workloads unique.
 >
-> Candidate live demos we are exploring (will pick 2-3 for the slot):
-> - **Look Ma, No Database:** A game server where state lives purely in RAM across suspends and pod migrations, using snapshot `revert` to "save-scum."
-> - **Actually Useful Patterns:** Cloning slow-booting apps in ~100ms from Golden Snapshots, or running one isolated embedded database per user.
-> - **Don't Try This at Home:** Suspending a consensus/heartbeat node and watching it split-brain when wall-clock time jumps forward on resume.
+> Candidate live demos we are exploring:
+> - A game server where state lives purely in RAM across suspends and pod migrations, using snapshot revert to "save-scum."
+> - Cloning slow-booting apps in ~100ms from Golden Snapshots, or running one isolated embedded database per user.
+> - (Don't Try This at Home): Suspending a consensus/heartbeat node and watching it split-brain when wall-clock time jumps forward on resume.
 
 ---
 
