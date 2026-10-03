@@ -6,24 +6,27 @@
   <title>Dungeon 2D — Agent Substrate Live Game</title>
   <style>
     :root {
-      --bg: #090d16;
-      --panel: #111827;
-      --panel-border: #1f2937;
+      --bg: #0b0e14;
+      --panel: #141923;
+      --panel-inner: #0e121a;
+      --border: #2c3548;
+      --amber-border: #c28d42;
+      --amber-dim: #6e5025;
       --text: #f3f4f6;
-      --muted: #9ca3af;
+      --muted: #94a3b8;
       --accent: #38bdf8;
       --amber: #f59e0b;
       --emerald: #10b981;
-      --rose: #f43f5e;
+      --rose: #e11d48;
       --violet: #a855f7;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
     body {
       margin: 0;
       padding: 0;
-      background: var(--bg);
+      background: radial-gradient(circle at 50% 20%, #151b28 0%, #0b0e14 75%);
       color: var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       display: flex;
       flex-direction: column;
       min-height: 100dvh;
@@ -39,173 +42,286 @@
       fill: none;
       flex-shrink: 0;
     }
-    .icon-lg { width: 22px; height: 22px; }
-    .icon-xl { width: 34px; height: 34px; }
+    .icon-sm { width: 13px; height: 13px; }
+    .icon-lg { width: 20px; height: 20px; }
+    .icon-xl { width: 32px; height: 32px; }
 
-    /* Top Substrate Actor Status Bar */
-    .actor-bar {
-      background: #0d1322;
-      border-bottom: 1px solid var(--panel-border);
-      padding: 8px 12px;
+    /* Compact Single-Strip Top RPG HUD */
+    .top-hud {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 8px 12px 4px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
+      gap: 10px;
+      position: relative;
+      z-index: 30;
     }
-    .actor-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      color: var(--accent);
-      transition: all 0.2s ease;
-    }
-    .actor-pill.waking {
-      background: rgba(245, 158, 11, 0.18);
-      border-color: var(--amber);
-      color: var(--amber);
-      box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
-    }
-    .actor-pill.reverted {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: var(--emerald);
-      color: #34d399;
-      box-shadow: 0 0 14px rgba(16, 185, 129, 0.35);
-    }
-    .actor-pill.dead {
-      background: rgba(244, 63, 94, 0.18);
-      border-color: var(--rose);
-      color: var(--rose);
-    }
-    .pod-meta {
-      font-size: 11px;
-      color: var(--muted);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    .hero-cluster {
       display: flex;
       align-items: center;
-      gap: 8px;
-    }
-    .help-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 9px;
-      border-radius: 6px;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      color: var(--accent);
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    /* Hero HUD */
-    .hud-bar {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-      padding: 8px 12px;
+      gap: 10px;
       background: var(--panel);
-      border-bottom: 1px solid var(--panel-border);
+      border: 1.5px solid var(--amber-dim);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 4px 12px rgba(0, 0, 0, 0.5);
+      border-radius: 6px;
+      padding: 5px 10px 5px 6px;
+      min-width: 0;
+      flex: 1;
+      transition: border-color 0.2s ease, transform 0.15s ease;
     }
-    .hud-stat {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 8px;
-      padding: 6px 8px;
+    .hero-cluster.damage-pulse {
+      border-color: var(--rose);
+      background: rgba(225, 29, 72, 0.22);
+      transform: scale(1.02);
+    }
+    .portrait-frame {
+      width: 38px;
+      height: 38px;
+      background: #090c12;
+      border: 1.5px solid var(--amber-border);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: inset 0 0 8px rgba(194, 141, 66, 0.2);
+    }
+    .portrait-frame canvas {
+      width: 30px;
+      height: 30px;
+      image-rendering: pixelated;
+    }
+    .hero-bars {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+      gap: 5px;
+      flex: 1;
+      min-width: 0;
     }
-    .hud-stat.damage-pulse {
-      background: rgba(244, 63, 94, 0.28);
-      border-color: var(--rose);
-      transform: scale(1.04);
-    }
-    .hud-label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
+    .hp-row {
       display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hp-bar-outer {
+      position: relative;
+      flex: 1;
+      max-width: 190px;
+      height: 15px;
+      background: #090c12;
+      border: 1px solid #3f202b;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .hp-bar-fill {
+      height: 100%;
+      background: linear-gradient(180deg, #f43f5e 0%, #be123c 100%);
+      transition: width 0.22s ease, background 0.22s ease;
+    }
+    /* Segmented pixel grid overlay on HP bar */
+    .hp-bar-segments {
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        to right,
+        transparent 0px,
+        transparent 14px,
+        rgba(9, 12, 18, 0.55) 14px,
+        rgba(9, 12, 18, 0.55) 16px
+      );
+      pointer-events: none;
+    }
+    .hp-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 1px 2px #000, 0 0 4px #000;
+      letter-spacing: 0.04em;
+    }
+    .meta-badges {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      flex-wrap: wrap;
+    }
+    .meta-tag {
+      display: inline-flex;
       align-items: center;
       gap: 4px;
     }
-    .hud-val {
-      font-size: 14px;
-      font-weight: 700;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    }
-    .hp-mini-track {
-      width: 100%;
-      height: 4px;
-      background: #1f2937;
-      border-radius: 999px;
-      overflow: hidden;
-    }
-    .hp-mini-fill {
-      height: 100%;
-      background: var(--emerald);
-      transition: width 0.25s ease, background 0.25s ease;
+    .meta-tag .lbl {
+      color: var(--muted);
+      font-size: 10px;
     }
 
-    /* Inventory & Substrate Action Strip */
-    .inv-strip {
+    /* Top-Right 4 Compact Square Icon Buttons */
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+    .icon-btn {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      background: var(--panel);
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+    }
+    .icon-btn:hover {
+      border-color: var(--amber-border);
+      background: #1c2331;
+    }
+    .icon-btn:active {
+      transform: scale(0.94);
+    }
+    .icon-btn.btn-save {
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #34d399;
+    }
+    .icon-btn.btn-revert {
+      border-color: var(--amber-border);
+      color: #fbbf24;
+    }
+    .icon-btn.btn-fork {
+      border-color: rgba(168, 85, 247, 0.5);
+      color: #c084fc;
+    }
+    .icon-btn.btn-help {
+      border-color: rgba(56, 189, 248, 0.45);
+      color: var(--accent);
+    }
+    .ver-pill-mini {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: #c28d42;
+      color: #090c12;
+      font-size: 9px;
+      font-weight: 900;
+      padding: 1px 4px;
+      border-radius: 4px;
+      border: 1px solid #090c12;
+      line-height: 1.1;
+    }
+
+    /* Anchored REVERT TO SNAPSHOT Popover */
+    .revert-popover {
+      position: absolute;
+      top: 46px;
+      right: 0;
+      width: 310px;
+      background: #121722;
+      border: 1.5px solid var(--amber-border);
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+      padding: 10px;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .revert-popover.hidden {
+      display: none;
+    }
+    .popover-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 800;
+      color: #fbbf24;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #263042;
+    }
+    .popover-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 0 4px;
+    }
+    .snap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 210px;
+      overflow-y: auto;
+    }
+    .snap-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      padding: 6px 12px;
-      background: #0c1220;
-      border-bottom: 1px solid var(--panel-border);
-      flex-wrap: wrap;
-    }
-    .inv-items {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .item-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
-      border-radius: 6px;
+      padding: 7px 9px;
+      border-radius: 5px;
+      background: #0b0e14;
+      border: 1px solid #263042;
+      color: var(--text);
       font-size: 11px;
-      font-weight: 600;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      color: #6b7280;
-    }
-    .item-badge.owned {
-      background: rgba(16, 185, 129, 0.14);
-      border-color: rgba(16, 185, 129, 0.45);
-      color: #34d399;
-    }
-    .item-badge.usable {
+      text-align: left;
       cursor: pointer;
-      background: rgba(244, 63, 94, 0.16);
-      border-color: rgba(244, 63, 94, 0.5);
-      color: #fb7185;
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+    .snap-item:hover {
+      border-color: var(--amber-border);
+      background: rgba(245, 158, 11, 0.12);
+    }
+    .snap-ver {
+      font-weight: 900;
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      padding: 1px 5px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .snap-desc {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #e2e8f0;
+    }
+    .snap-meta {
+      font-size: 10px;
+      color: #34d399;
+      flex-shrink: 0;
     }
 
-    /* Main Canvas Container */
+    /* Main Stage: Dungeon Canvas + Single 1-Line Telemetry Strip */
     .stage-wrap {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 8px 12px;
-      gap: 8px;
+      padding: 4px 12px;
+      gap: 6px;
       max-width: 760px;
       width: 100%;
       margin: 0 auto;
@@ -214,11 +330,11 @@
       position: relative;
       width: 100%;
       aspect-ratio: 15 / 11;
-      background: #050811;
-      border: 2px solid #263248;
-      border-radius: 12px;
+      background: #060911;
+      border: 2px solid #574126;
+      box-shadow: inset 0 0 0 1px #1e293b, 0 10px 28px rgba(0, 0, 0, 0.75);
+      border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.65);
     }
     canvas#gameCanvas {
       width: 100%;
@@ -226,154 +342,246 @@
       display: block;
       image-rendering: pixelated;
     }
-    .event-toast {
+
+    /* Single 1-Line Telemetry Bar (Replaces top alert bar + bottom toast) */
+    .telemetry-strip {
       width: 100%;
-      min-height: 42px;
-      background: rgba(17, 24, 39, 0.92);
-      border: 1px solid #263248;
-      border-radius: 8px;
-      padding: 8px 12px;
-      font-size: 12px;
-      line-height: 1.35;
-      color: #e5e7eb;
+      min-height: 30px;
+      background: #101520;
+      border: 1px solid #283246;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
       display: flex;
       align-items: center;
       gap: 8px;
+      overflow: hidden;
       transition: border-color 0.2s ease, background 0.2s ease;
     }
-    .event-toast.combat-alert {
+    .telemetry-strip.combat-alert {
       border-color: var(--rose);
-      background: rgba(69, 10, 26, 0.65);
+      background: rgba(88, 12, 31, 0.6);
       color: #fecdd3;
     }
-    .event-toast.revert-alert {
+    .telemetry-strip.revert-alert {
       border-color: var(--amber);
-      background: rgba(69, 39, 10, 0.65);
+      background: rgba(78, 46, 10, 0.65);
       color: #fde68a;
     }
+    .actor-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: var(--accent);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .actor-pill.waking {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--amber);
+      color: #fbbf24;
+    }
+    .actor-pill.reverted {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--emerald);
+      color: #34d399;
+    }
+    .actor-pill.dead {
+      background: rgba(225, 29, 72, 0.22);
+      border-color: var(--rose);
+      color: #fda4af;
+    }
+    .telemetry-msg {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #e2e8f0;
+    }
 
-    /* Controls Row: Substrate Lifecycle Buttons + Mobile D-Pad */
-    .controls-wrap {
+    /* Compact Bottom Control Dock: 5-Slot Pixel Inventory + Cross D-Pad */
+    .bottom-dock {
       width: 100%;
       max-width: 760px;
       margin: 0 auto;
-      padding: 4px 12px 14px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
+      padding: 2px 12px 10px;
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .substrate-btns {
+    .inv-dock {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 5px;
     }
-    .btn {
-      display: inline-flex;
+    .inv-dock-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .inv-dock-hdr a {
+      color: var(--amber-border);
+      text-decoration: none;
+    }
+    .inv-slots {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .item-slot {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      background: #0d1119;
+      border: 1.5px solid #252f42;
+      display: flex;
       align-items: center;
       justify-content: center;
-      gap: 7px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: #1e293b;
-      color: var(--text);
+      padding: 0;
+      transition: all 0.15s ease;
+    }
+    .item-slot canvas {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      opacity: 0.22;
+      filter: grayscale(85%);
+      transition: opacity 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+    }
+    .item-slot .slot-tag {
+      position: absolute;
+      bottom: 2px;
+      right: 3px;
+      font-size: 8px;
+      font-weight: 800;
+      color: #64748b;
+      line-height: 1;
+    }
+    .item-slot.owned {
+      border-color: var(--amber-border);
+      background: radial-gradient(circle at 50% 50%, rgba(194, 141, 66, 0.22), #111622 80%);
+      box-shadow: 0 0 10px rgba(194, 141, 66, 0.25);
+    }
+    .item-slot.owned canvas {
+      opacity: 1;
+      filter: none;
+    }
+    .item-slot.owned .slot-tag {
+      color: #fde68a;
+    }
+    .item-slot.usable {
       cursor: pointer;
-      transition: transform 0.08s ease, background 0.15s ease;
+      border-color: #f43f5e;
+      background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.24), #111622 80%);
+      box-shadow: 0 0 10px rgba(244, 63, 94, 0.28);
     }
-    .btn:active { transform: scale(0.97); }
-    .btn-save {
-      background: rgba(16, 185, 129, 0.16);
-      border-color: rgba(16, 185, 129, 0.45);
-      color: #34d399;
+    .item-slot.usable canvas {
+      opacity: 1;
+      filter: none;
     }
-    .btn-revert {
-      background: rgba(245, 158, 11, 0.18);
-      border-color: rgba(245, 158, 11, 0.5);
-      color: #fbbf24;
+    .item-slot.usable .slot-tag {
+      color: #fda4af;
     }
-    .btn-fork {
-      background: rgba(168, 85, 247, 0.18);
-      border-color: rgba(168, 85, 247, 0.5);
-      color: #c084fc;
+    .item-slot.usable:active {
+      transform: scale(0.93);
     }
 
+    /* Compact Cross D-Pad */
     .dpad {
       display: grid;
-      grid-template-columns: repeat(3, 52px);
-      grid-template-rows: repeat(3, 48px);
+      grid-template-columns: repeat(3, 42px);
+      grid-template-rows: repeat(2, 40px);
       gap: 4px;
     }
     .dpad-btn {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 10px;
+      background: var(--panel);
+      border: 1.5px solid #334155;
+      border-radius: 6px;
       color: #f8fafc;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       touch-action: manipulation;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.45);
+    }
+    .dpad-btn:hover {
+      border-color: var(--amber-border);
     }
     .dpad-btn:active {
-      background: #38bdf8;
-      color: #090d16;
+      background: var(--amber-border);
+      color: #090c12;
     }
 
     /* Modals (Join / Help / Death / Victory) */
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(5, 8, 17, 0.88);
+      background: rgba(6, 9, 15, 0.88);
       backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 14px;
-      z-index: 50;
+      z-index: 80;
       overflow-y: auto;
     }
     .modal-backdrop.hidden { display: none; }
     .modal-card {
       width: 100%;
-      max-width: 460px;
-      background: #111827;
-      border: 1px solid #374151;
-      border-radius: 14px;
-      padding: 18px;
+      max-width: 450px;
+      background: #141923;
+      border: 1.5px solid var(--amber-border);
+      border-radius: 10px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.85);
+      gap: 11px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
       max-height: 92dvh;
       overflow-y: auto;
     }
     .modal-card.death-card {
       border-color: var(--rose);
-      box-shadow: 0 0 40px rgba(244, 63, 94, 0.35);
+      box-shadow: 0 0 40px rgba(225, 29, 72, 0.35);
     }
     .modal-card.victory-card {
       border-color: var(--amber);
       box-shadow: 0 0 40px rgba(245, 158, 11, 0.35);
     }
     .modal-title {
-      font-size: 19px;
+      font-size: 17px;
       font-weight: 800;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 9px;
       margin: 0;
+      color: #fde68a;
     }
     .input-field {
       width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid #374151;
-      background: #090d16;
+      padding: 9px 11px;
+      border-radius: 6px;
+      border: 1.5px solid #2c3548;
+      background: #0b0e14;
       color: #fff;
-      font-size: 15px;
+      font-size: 14px;
+      font-family: inherit;
     }
     .class-row {
       display: grid;
@@ -381,10 +589,10 @@
       gap: 8px;
     }
     .class-opt {
-      padding: 10px 6px;
-      border-radius: 10px;
-      border: 1px solid #374151;
-      background: #090d16;
+      padding: 9px 6px;
+      border-radius: 8px;
+      border: 1.5px solid #2c3548;
+      background: #0b0e14;
       color: var(--muted);
       font-size: 12px;
       font-weight: 700;
@@ -393,167 +601,194 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       transition: all 0.15s ease;
     }
     .class-opt canvas {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       image-rendering: pixelated;
     }
     .class-opt .class-sub {
       font-size: 10px;
       font-weight: 500;
-      color: #6b7280;
+      color: #64748b;
     }
     .class-opt.selected {
-      border-color: var(--accent);
-      background: rgba(56, 189, 248, 0.14);
-      color: var(--text);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.2);
+      border-color: var(--amber-border);
+      background: rgba(194, 141, 66, 0.15);
+      color: #fde68a;
+      box-shadow: 0 0 12px rgba(194, 141, 66, 0.25);
     }
     .class-opt.selected .class-sub {
-      color: #bae6fd;
+      color: #fcd34d;
     }
-
-    /* How-To-Play Steps */
     .guide-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      background: #090d16;
-      border: 1px solid #1f2937;
-      border-radius: 10px;
-      padding: 10px 12px;
+      gap: 7px;
+      background: #0b0e14;
+      border: 1px solid #263042;
+      border-radius: 8px;
+      padding: 9px 11px;
     }
     .guide-step {
       display: flex;
       align-items: flex-start;
-      gap: 9px;
-      font-size: 12px;
+      gap: 8px;
+      font-size: 11px;
       line-height: 1.4;
-      color: #d1d5db;
+      color: #cbd5e1;
     }
     .guide-num {
-      width: 20px;
-      height: 20px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.18);
-      border: 1px solid rgba(56, 189, 248, 0.45);
-      color: var(--accent);
-      font-size: 11px;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: rgba(194, 141, 66, 0.2);
+      border: 1px solid var(--amber-border);
+      color: #fbbf24;
+      font-size: 10px;
       font-weight: 800;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      margin-top: 1px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      font-family: inherit;
+      border: 1.5px solid var(--amber-border);
+      background: rgba(194, 141, 66, 0.18);
+      color: #fde68a;
+      cursor: pointer;
+    }
+    .btn-save {
+      border-color: rgba(16, 185, 129, 0.55);
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+    }
+    .btn-revert {
+      border-color: var(--amber-border);
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+    .btn-fork {
+      border-color: rgba(168, 85, 247, 0.55);
+      background: rgba(168, 85, 247, 0.18);
+      color: #c084fc;
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Substrate Actor Lifecycle Pill -->
-  <header class="actor-bar">
-    <div id="actorPill" class="actor-pill">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M2 12h20"/><path d="M12 2v20"/><path d="m4.93 4.93 14.14 14.14"/><path d="m19.07 4.93-14.14 14.14"/></svg>
-      <span id="actorStateText">SUSPENDED IN GCS (0 CPU / 0 RAM)</span>
+  <!-- Compact Single-Strip Top RPG HUD -->
+  <header class="top-hud">
+    <!-- Left: Framed Class Portrait + Segmented Red HP Bar + Inline Floor/Score/Pod Badges -->
+    <div id="hudHpCard" class="hero-cluster">
+      <div class="portrait-frame" title="Hero Class Portrait">
+        <canvas id="hudHeroPortrait" width="16" height="16"></canvas>
+      </div>
+      <div class="hero-bars">
+        <div class="hp-row">
+          <div class="hp-bar-outer">
+            <div id="hudHpFill" class="hp-bar-fill" style="width:100%"></div>
+            <div class="hp-bar-segments"></div>
+            <div id="hudHP" class="hp-text">100 / 100 HP</div>
+          </div>
+        </div>
+        <div class="meta-badges">
+          <span class="meta-tag" title="Current Dungeon Floor">
+            <span class="lbl">FL</span>
+            <span id="hudFloor">1/3</span>
+          </span>
+          <span class="meta-tag" title="Score & Gold">
+            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#fbbf24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M9 10h6"/></svg>
+            <span id="hudScore">0</span>
+          </span>
+          <span class="meta-tag" title="Distinct Worker Pod IPs Visited">
+            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#38bdf8"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/></svg>
+            <span id="hudPods">1 POD</span>
+          </span>
+        </div>
+      </div>
     </div>
-    <div class="pod-meta">
-      <span id="podMetaText">Actor: d2d-hero | Pod: -- | Saves: 0</span>
-      <button class="help-btn" onclick="openHelpModal()">
-        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-        How to Play
+
+    <!-- Right: 4 Compact Square Icon Buttons + Versioned Revert Popover -->
+    <div class="hud-actions">
+      <button class="icon-btn btn-save" onclick="triggerQuicksave()" title="Quicksave & Tag Checkpoint to GCS">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       </button>
+      <button id="btnRevertToggle" class="icon-btn btn-revert" onclick="toggleRevertPopover(event)" title="Revert Actor to Snapshot Version (Save-Scum)">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        <span id="hudSnapVer" class="ver-pill-mini">v1</span>
+      </button>
+      <button class="icon-btn btn-fork" onclick="triggerFork()" title="Fork Parallel Timeline (--tag)">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      </button>
+      <button class="icon-btn btn-help" onclick="openHelpModal()" title="How to Play & Switch Hero">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      </button>
+
+      <!-- Anchored REVERT TO SNAPSHOT Version Picker Popover -->
+      <div id="revertPopover" class="revert-popover hidden" onclick="event.stopPropagation()">
+        <div class="popover-hdr">
+          <span>Revert to Snapshot</span>
+          <button class="popover-close" onclick="closeRevertPopover()">✕</button>
+        </div>
+        <div id="snapVersionList" class="snap-list"></div>
+      </div>
     </div>
   </header>
 
-  <!-- Hero Stats HUD -->
-  <section class="hud-bar">
-    <div class="hud-stat">
-      <span class="hud-label">
-        <svg class="icon" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
-        Floor
-      </span>
-      <span id="hudFloor" class="hud-val">1 / 3</span>
-    </div>
-    <div id="hudHpCard" class="hud-stat">
-      <span class="hud-label">
-        <svg class="icon" viewBox="0 0 24 24" style="color:#f43f5e"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-        Hero HP
-      </span>
-      <span id="hudHP" class="hud-val">100 / 100</span>
-      <div class="hp-mini-track"><div id="hudHpFill" class="hp-mini-fill" style="width:100%"></div></div>
-    </div>
-    <div class="hud-stat">
-      <span class="hud-label">
-        <svg class="icon" viewBox="0 0 24 24" style="color:#f59e0b"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Score
-      </span>
-      <span id="hudScore" class="hud-val">0</span>
-    </div>
-    <div class="hud-stat">
-      <span class="hud-label">
-        <svg class="icon" viewBox="0 0 24 24" style="color:#38bdf8"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-        Pod Hops
-      </span>
-      <span id="hudPods" class="hud-val">1</span>
-    </div>
-  </section>
-
-  <!-- Inventory & Gear Strip (Lucide SVG Icons Only) -->
-  <section class="inv-strip">
-    <div class="inv-items">
-      <div id="badgeKey" class="item-badge" title="Crypt Key (Unlocks Floor 1 Stairs)">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>
-        <span>Key</span>
-      </div>
-      <div id="badgeSword" class="item-badge" title="Dragon-Slayer Sword (55 DMG)">
-        <svg class="icon" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
-        <span>Sword (55 DMG)</span>
-      </div>
-      <div id="badgeShield" class="item-badge" title="Fire Shield (Blocks Lethal Dragon Breath)">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-        <span>Fire Shield</span>
-      </div>
-      <div id="badgeChalice" class="item-badge" title="Golden Chalice of State (Unlocks Victory Portal)">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-        <span>Chalice</span>
-      </div>
-      <button id="btnDrinkPotion" class="item-badge" onclick="drinkPotion()" title="Tap to drink Healing Potion (+50 HP)">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>
-        <span id="potionCountText">Potion (0)</span>
-      </button>
-    </div>
-    <a href="/dashboard" target="_blank" style="color:var(--accent);font-size:11px;text-decoration:none;font-weight:600;">Open Dashboard &rarr;</a>
-  </section>
-
-  <!-- 2D Dungeon Canvas + Toast -->
+  <!-- Main 2D Dungeon Canvas + Single 1-Line Telemetry Strip -->
   <main class="stage-wrap">
     <div class="canvas-box">
       <canvas id="gameCanvas" width="480" height="352"></canvas>
     </div>
-    <div id="eventToast" class="event-toast">
-      <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent)"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      <span id="eventToastText">Use the D-Pad, tap a tile, or press WASD/Arrows to explore Floor 1. Enemies deal counter-attack damage when struck!</span>
+    <div id="eventToast" class="telemetry-strip">
+      <div id="actorPill" class="actor-pill">
+        <span id="actorStateText">SUSPENDED IN GCS</span>
+      </div>
+      <span id="eventToastText" class="telemetry-msg">Use D-Pad, tap a tile, or press WASD/Arrows. Tap the Rewind icon to revert to any snapshot!</span>
     </div>
   </main>
 
-  <!-- Bottom Controls: Substrate Primitives + Touch D-Pad -->
-  <section class="controls-wrap">
-    <div class="substrate-btns">
-      <button class="btn btn-save" onclick="triggerQuicksave()">
-        <svg class="icon" viewBox="0 0 24 24"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>
-        Quicksave &amp; Tag to GCS
-      </button>
-      <button class="btn btn-revert" onclick="triggerRevert()">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-        Revert Actor (Save-Scum)
-      </button>
-      <button class="btn btn-fork" onclick="triggerFork()">
-        <svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-        Fork Timeline (--tag)
-      </button>
+  <!-- Compact Bottom Dock: 5-Slot Pixel Inventory + Cross D-Pad -->
+  <section class="bottom-dock">
+    <div class="inv-dock">
+      <div class="inv-dock-hdr">
+        <span>Gear &amp; Items</span>
+        <a href="/dashboard" target="_blank">Dashboard &rarr;</a>
+      </div>
+      <div class="inv-slots">
+        <div id="badgeKey" class="item-slot" title="Crypt Key (Unlocks Floor 1 Stairs)">
+          <canvas id="slot-key" width="16" height="16"></canvas>
+          <span class="slot-tag">KEY</span>
+        </div>
+        <div id="badgeSword" class="item-slot" title="Dragon-Slayer Sword (55 DMG — Required for Guard & Dragon)">
+          <canvas id="slot-sword" width="16" height="16"></canvas>
+          <span class="slot-tag">55D</span>
+        </div>
+        <div id="badgeShield" class="item-slot" title="Fire Shield (Blocks Dragon Breath)">
+          <canvas id="slot-shield" width="16" height="16"></canvas>
+          <span class="slot-tag">SHD</span>
+        </div>
+        <div id="badgeChalice" class="item-slot" title="Golden Chalice of State (Unlocks Exit Portal)">
+          <canvas id="slot-chalice" width="16" height="16"></canvas>
+          <span class="slot-tag">WIN</span>
+        </div>
+        <button id="btnDrinkPotion" class="item-slot" onclick="drinkPotion()" title="Tap to drink Healing Potion (+50 HP)">
+          <canvas id="slot-potion" width="16" height="16"></canvas>
+          <span id="potionCountText" class="slot-tag">x0</span>
+        </button>
+      </div>
     </div>
 
     <div class="dpad">
@@ -578,11 +813,11 @@
   <div id="joinModal" class="modal-backdrop">
     <div class="modal-card">
       <h2 class="modal-title">
-        <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--accent)"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
+        <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:#fbbf24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
         Enter the Substrate Dungeon
       </h2>
-      <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.45;">
-        Your game session is a dedicated gVisor Actor whose state lives 100% in Go heap RAM. Choose your hero class:
+      <p style="margin:0;font-size:11px;color:var(--muted);line-height:1.45;">
+        Your session is a dedicated gVisor Actor whose state lives 100% in Go heap RAM. Choose your hero class:
       </p>
       <input id="heroNameInput" class="input-field" type="text" placeholder="Hero Name (e.g. mofi)" maxlength="24" />
       <div class="class-row">
@@ -603,9 +838,8 @@
         </div>
       </div>
 
-      <!-- Built-in How to Play Quick Guide -->
       <div class="guide-list">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent);margin-bottom:2px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#fbbf24;">
           How to Play &amp; Save-Scum
         </div>
         <div class="guide-step">
@@ -614,90 +848,90 @@
         </div>
         <div class="guide-step">
           <span class="guide-num">2</span>
-          <span><strong>Enemies Fight Back:</strong> Bump into monsters to attack. Skeletons deal <strong>-20 HP</strong>, Guards deal <strong>-25 HP</strong>, and the Floor 3 Dragon deals <strong>-100 HP instant death</strong> unless you carry the <strong>Fire Shield</strong>!</span>
+          <span><strong>Gear Up or Die:</strong> Floor 2's Guard requires the <strong>Dragon-Slayer Sword</strong>; Floor 3's Dragon requires <strong>BOTH Sword &amp; Fire Shield</strong>!</span>
         </div>
         <div class="guide-step">
           <span class="guide-num">3</span>
-          <span><strong>Quicksave &amp; Revert (Save-Scum):</strong> Tap <strong>Quicksave</strong> to checkpoint your Go heap to GCS. Tap <strong>Revert Actor</strong> anytime (or after dying) to time-travel back to your checkpoint!</span>
-        </div>
-        <div class="guide-step">
-          <span class="guide-num">4</span>
-          <span><strong>Win on Floor 3:</strong> Slay the Dragon, pick up the <strong>Golden Chalice</strong>, and walk into the top <strong>Exit Portal Door</strong>!</span>
+          <span><strong>Versioned Snapshot Revert:</strong> Tap the top-right <strong>Rewind Icon</strong> anytime (or after dying) to time-travel to any snapshot version (<code>v1..vN</code>)!</span>
         </div>
       </div>
 
-      <button class="btn btn-save" style="padding:12px;font-size:14px;" onclick="startGameSession()">
+      <button class="btn btn-save" style="padding:11px;font-size:13px;" onclick="startGameSession()">
         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Spawn Actor &amp; Start Quest
       </button>
     </div>
   </div>
 
-  <!-- Standalone How to Play Popup Modal (accessible anytime via ? How to Play) -->
+  <!-- Standalone How to Play Popup Modal -->
   <div id="helpModal" class="modal-backdrop hidden">
     <div class="modal-card">
-      <h2 class="modal-title" style="color:var(--accent);">
+      <h2 class="modal-title">
         <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
         How to Play Dungeon 2D
       </h2>
       <div class="guide-list">
         <div class="guide-step">
           <span class="guide-num">1</span>
-          <span><strong>Floor 1 (Forgotten Crypt):</strong> Pick up the <strong>Healing Potion</strong> and <strong>Gold Chest</strong>. Fight the <strong>Restless Skeleton</strong> (30 HP, hits back for <strong>-20 HP</strong>) to reach the <strong>Crypt Key</strong>, then step onto the bottom-right <strong>Stairs</strong>.</span>
+          <span><strong>Floor 1 (Forgotten Crypt):</strong> Grab the <strong>Potion</strong> and <strong>Gold Chest</strong>, slay the <strong>Restless Skeleton</strong>, take the <strong>Crypt Key</strong>, and descend the bottom-right <strong>Stairs</strong>.</span>
         </div>
         <div class="guide-step">
           <span class="guide-num">2</span>
-          <span><strong>Floor 2 (Abandoned Armory):</strong> Pick up the <strong>Dragon-Slayer Sword</strong> (boosts attack from 30 to 55 DMG). Defeat the <strong>Shadow Guard</strong> (45 HP, hits back for <strong>-25 HP</strong>) to grab the <strong>Fire Shield</strong> in the north vault. Touch the golden <strong>Quicksave Shrine</strong>!</span>
+          <span><strong>Floor 2 (Abandoned Armory):</strong> Grab the <strong>Sword</strong> in the NW alcove (or skip it to test dying to the Guard!). Defeat the <strong>Shadow Guard</strong> to take the <strong>Fire Shield</strong>, touch the <strong>Heal &amp; Save Shrine</strong>, or take the SW stairs back up.</span>
         </div>
         <div class="guide-step">
           <span class="guide-num">3</span>
-          <span><strong>Floor 3 (Cavern of the Heap Dragon):</strong> Attack the <strong>Ancient Heap Dragon</strong> (100 HP). Without the Fire Shield, its breath kills you (`HP=0`) so you can test <strong>Revert Actor</strong>! With the Fire Shield, strike twice to slay it, pick up the <strong>Golden Chalice</strong>, and walk North into the <strong>Exit Portal Door</strong> at `(7, 1)`!</span>
+          <span><strong>Floor 3 (Cavern of the Heap Dragon):</strong> Fight the <strong>Ancient Heap Dragon</strong>. With Sword + Shield, strike twice, claim the <strong>Golden Chalice</strong>, and walk into the top <strong>EXIT DOOR</strong>!</span>
         </div>
         <div class="guide-step">
           <span class="guide-num">4</span>
-          <span><strong>Substrate Primitives:</strong> Every item, fight, and floor change wakes your actor via <code>atenet-router</code> on one of 3 warm worker pods and suspends its Go heap to GCS.</span>
+          <span><strong>Versioned Snapshots:</strong> Every milestone appends a versioned snapshot (<code>v1..vN</code>). Use the top-right <strong>Rewind</strong> icon to jump back to any version!</span>
         </div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-fork" style="flex:1;" onclick="closeHelpModal(); resetNewHero();">
-          Change Hero / Class
+          New Hero / Class
         </button>
         <button class="btn btn-save" style="flex:1;" onclick="closeHelpModal()">
-          Back to Game
+          Resume Game
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Death / Revert Save-Scum Modal -->
+  <!-- Death / Revert Save-Scum Modal with Version Picker -->
   <div id="deathModal" class="modal-backdrop hidden">
     <div class="modal-card death-card">
-      <h2 class="modal-title" style="color:var(--rose);">
+      <h2 class="modal-title" style="color:#fda4af;">
         <svg class="icon icon-xl" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="m12.5 17-.5-1-.5 1h1z"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg>
         YOUR HERO DIED IN RAM!
       </h2>
-      <p id="deathReasonText" style="margin:0;font-size:13px;color:#fecdd3;line-height:1.45;">
+      <p id="deathReasonText" style="margin:0;font-size:12px;color:#fecdd3;line-height:1.45;">
         Your in-memory Go struct now has <code>PlayerHP = 0</code> and <code>Alive = false</code>.
       </p>
-      <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.45;">
-        Because we left your crashed actor uncommitted on the worker pod, tapping <strong>Revert Actor</strong> runs <code>kubectl ate revert actor</code> to discard this dead RAM state and restore your last GCS snapshot!
+      <p style="margin:0;font-size:11px;color:var(--muted);line-height:1.4;">
+        Your crashed actor was left uncommitted in pod memory. Revert to your latest GCS snapshot or pick any earlier snapshot version below:
       </p>
-      <button class="btn btn-revert" style="padding:13px;font-size:14px;" onclick="triggerRevert()">
+      <button class="btn btn-revert" style="padding:11px;font-size:13px;" onclick="triggerRevert(0)">
         <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-        Revert Actor to Last GCS Snapshot
+        Revert to Latest Snapshot
       </button>
+      <div style="font-size:10px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">
+        Or Choose a Specific Snapshot Version:
+      </div>
+      <div id="deathVersionList" class="snap-list" style="max-height:140px;"></div>
     </div>
   </div>
 
   <!-- Victory Modal -->
   <div id="victoryModal" class="modal-backdrop hidden">
     <div class="modal-card victory-card">
-      <h2 class="modal-title" style="color:var(--amber);">
+      <h2 class="modal-title" style="color:#fbbf24;">
         <svg class="icon icon-xl" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
         DUNGEON CONQUERED!
       </h2>
-      <p id="victorySummaryText" style="margin:0;font-size:13px;color:#fde68a;line-height:1.5;"></p>
-      <div id="victoryPodsBox" style="font-size:11px;font-family:monospace;padding:10px;background:#090d16;border-radius:8px;color:var(--accent);"></div>
+      <p id="victorySummaryText" style="margin:0;font-size:12px;color:#fde68a;line-height:1.5;"></p>
+      <div id="victoryPodsBox" style="font-size:11px;padding:9px;background:#0b0e14;border:1px solid #2c3548;border-radius:6px;color:var(--accent);"></div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-fork" style="flex:1;" onclick="triggerFork()">
           <svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
@@ -718,27 +952,26 @@
     // 16x16 Multi-Color Pixel-Art Palettes & Sprites
     const PALETTE = {
       ".": null,
-      "W": "#f8fafc", // White highlight
-      "S": "#cbd5e1", // Silver / light steel
-      "G": "#64748b", // Dark steel / iron
-      "D": "#1e293b", // Deep slate shadow
-      "K": "#090d16", // Outline black
-      "B": "#38bdf8", // Cyan / Paladin plume
-      "N": "#2563eb", // Royal blue cape
-      "Y": "#fbbf24", // Gold / brass
-      "O": "#f97316", // Orange fire
-      "R": "#f43f5e", // Crimson / Ruby
-      "M": "#9f1239", // Dark crimson dragon scale
-      "E": "#10b981", // Emerald green
-      "F": "#047857", // Deep forest green
-      "L": "#a16207", // Leather brown
-      "T": "#fde68a", // Skin / bone tan
-      "V": "#a855f7", // Arcane violet
-      "P": "#581c87"  // Deep purple robe
+      "W": "#f8fafc",
+      "S": "#cbd5e1",
+      "G": "#64748b",
+      "D": "#1e293b",
+      "K": "#090d16",
+      "B": "#38bdf8",
+      "N": "#2563eb",
+      "Y": "#fbbf24",
+      "O": "#f97316",
+      "R": "#f43f5e",
+      "M": "#9f1239",
+      "E": "#10b981",
+      "F": "#047857",
+      "L": "#a16207",
+      "T": "#fde68a",
+      "V": "#a855f7",
+      "P": "#581c87"
     };
 
     const SPRITES = {
-      // Paladin: Cyan plume, silver knight visor helm, plate armor, royal blue cape
       paladin: [
         "......BBBB......",
         ".....BBBBBB.....",
@@ -757,7 +990,6 @@
         "....KDD..DDK....",
         "....KKK..KKK...."
       ],
-      // Ranger: Emerald hooded cloak, gold feather, leather tunic, quiver & bow
       ranger: [
         ".........YY.....",
         ".....FFFFFFYY...",
@@ -776,7 +1008,6 @@
         "....KDD..DDK....",
         "....KKK..KKK...."
       ],
-      // Pyromancer: Crimson/violet wizard hat with gold band, glowing amber eyes, flame staff
       mage: [
         ".......RR.......",
         "......RRRR......",
@@ -795,7 +1026,6 @@
         "....KVV..VVK....",
         "....KKK..KKK...."
       ],
-      // Restless Skeleton: Bone skull, dark eye sockets, ribcage, bone blade
       skeleton: [
         ".....KKKKKK.....",
         "....KWWWWWWK....",
@@ -814,7 +1044,6 @@
         "....KW....WK....",
         "...KKK....KKK..."
       ],
-      // Shadow Guard: Horned dark helm, glowing violet eyes, purple armor & halberd
       guard: [
         "..Y..........Y..",
         "..YY.KKKKKK.YY..",
@@ -833,7 +1062,6 @@
         "....KDD..DDK....",
         "....KKK..KKK...."
       ],
-      // Ancient Heap Dragon: Spread crimson wings, golden horns, fangs & magma belly
       dragon: [
         ".Y....RRRR....Y.",
         ".YY..RRRRRR..YY.",
@@ -940,7 +1168,6 @@
       }
     }
 
-    // 3 Multilevel Dungeon Maps (# = wall, . = walkable floor)
     const FLOOR_MAPS = {
       1: {
         name: "Floor 1: The Forgotten Crypt",
@@ -1029,6 +1256,7 @@
       victory: false,
       inventory: [],
       cleared: {},
+      checkpoints: [],
       bossHp: 100,
       bossMaxHp: 100,
       podIpHistory: [],
@@ -1045,7 +1273,7 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    function renderClassPreviews() {
+    function renderClassPreviewsAndSlots() {
       ["paladin", "ranger", "mage"].forEach(cls => {
         const c = document.getElementById("preview-" + cls);
         if (!c) return;
@@ -1053,6 +1281,68 @@
         pctx.clearRect(0, 0, 16, 16);
         drawPixelSprite(pctx, SPRITES[cls], 0, 0, 1);
       });
+      const slotMap = {
+        "slot-key": "key",
+        "slot-sword": "sword",
+        "slot-shield": "shield",
+        "slot-chalice": "chalice",
+        "slot-potion": "potion"
+      };
+      Object.entries(slotMap).forEach(([id, sp]) => {
+        const c = document.getElementById(id);
+        if (!c) return;
+        const sctx = c.getContext("2d");
+        sctx.clearRect(0, 0, 16, 16);
+        drawPixelSprite(sctx, SPRITES[sp], 0, 2, 1);
+      });
+      renderHeroHudPortrait();
+    }
+
+    function renderHeroHudPortrait() {
+      const c = document.getElementById("hudHeroPortrait");
+      if (!c) return;
+      const pctx = c.getContext("2d");
+      pctx.clearRect(0, 0, 16, 16);
+      drawPixelSprite(pctx, SPRITES[state.charClass] || SPRITES.paladin, 0, 0, 1);
+    }
+
+    function toggleRevertPopover(e) {
+      if (e) e.stopPropagation();
+      const pop = document.getElementById("revertPopover");
+      pop.classList.toggle("hidden");
+      renderSnapshotLists();
+    }
+
+    function closeRevertPopover() {
+      document.getElementById("revertPopover").classList.add("hidden");
+    }
+
+    window.addEventListener("click", () => {
+      closeRevertPopover();
+    });
+
+    function renderSnapshotLists() {
+      const cps = (state.checkpoints && state.checkpoints.length > 0)
+        ? [...state.checkpoints].reverse()
+        : [{ version: 1, floor: state.floor, label: "Latest Checkpoint", state: { hp: state.hp } }];
+
+      const buildListHTML = (items) => items.map((cp, idx) => {
+        const vNum = cp.version || (items.length - idx);
+        const hpVal = (cp.state && cp.state.hp !== undefined) ? cp.state.hp : 100;
+        const isLatest = idx === 0 ? " [LATEST]" : "";
+        return `
+          <button class="snap-item" onclick="triggerRevert(${vNum})">
+            <span class="snap-ver">v${vNum}</span>
+            <span class="snap-desc">FL${cp.floor || 1} &bull; ${cp.label || "Checkpoint"}${isLatest}</span>
+            <span class="snap-meta">${hpVal} HP</span>
+          </button>
+        `;
+      }).join("");
+
+      const popList = document.getElementById("snapVersionList");
+      if (popList) popList.innerHTML = buildListHTML(cps);
+      const deathList = document.getElementById("deathVersionList");
+      if (deathList) deathList.innerHTML = buildListHTML(cps);
     }
 
     function openHelpModal() {
@@ -1067,11 +1357,12 @@
       document.querySelectorAll(".class-opt").forEach(e => e.classList.remove("selected"));
       el.classList.add("selected");
       state.charClass = el.dataset.class;
+      renderHeroHudPortrait();
     }
 
     async function startGameSession() {
       const rawName = document.getElementById("heroNameInput").value.trim() || ("hero-" + Math.floor(100 + Math.random() * 900));
-      setActorWaking("CREATING & WAKING ACTOR ON WORKER POOL...");
+      setActorWaking("SPAWNING ACTOR...");
       try {
         const res = await fetch("/api/session/start", {
           method: "POST",
@@ -1113,7 +1404,7 @@
       const pill = document.getElementById("actorPill");
       pill.className = "actor-pill";
       document.getElementById("actorStateText").textContent =
-        `ACTOR ${state.actorName || "READY"} ON ${state.currentPodIp || "--"} (SUSPENDED IN GCS)`;
+        `POD ${state.currentPodIp || "--"} • v${state.saveCount || 1}`;
     }
 
     function applySessionRecord(rec, opts = {}) {
@@ -1139,32 +1430,35 @@
       state.victory = s.victory;
       state.inventory = s.inventory || [];
       state.cleared = s.cleared || {};
+      state.checkpoints = s.checkpoints || [];
       state.bossHp = s.boss_hp ?? 100;
       state.bossMaxHp = s.boss_max_hp || 100;
       state.podIpHistory = s.pod_ip_history || [];
       state.currentPodIp = s.current_pod_ip || rec.assigned_worker_ip || "--";
-      state.saveCount = rec.save_count || 0;
+      state.saveCount = (state.checkpoints.length > 0) ? state.checkpoints[state.checkpoints.length - 1].version : (rec.save_count || 1);
       state.revertCount = rec.revert_count || 0;
 
-      // Visual feedback for enemy counter-attack damage!
+      renderHeroHudPortrait();
+      renderSnapshotLists();
+
       const dmgTaken = s.last_damage_taken || Math.max(0, prevHp - state.hp);
       const dmgDealt = s.last_damage_dealt || 0;
       const toastEl = document.getElementById("eventToast");
-      toastEl.className = "event-toast";
+      toastEl.className = "telemetry-strip";
 
       if (opts.isRevert || rec.last_event_type === "REVERT") {
         state.revertFlash = 26;
-        toastEl.className = "event-toast revert-alert";
-        addFloatText(state.x, state.y - 0.4, "REVERTED TO CHECKPOINT!", "#fbbf24");
+        toastEl.className = "telemetry-strip revert-alert";
+        addFloatText(state.x, state.y - 0.4, `REVERTED TO v${state.saveCount}!`, "#fbbf24");
         addFloatText(state.x, state.y + 0.2, `HP ${state.hp}/${state.maxHp}`, "#34d399");
       } else if (dmgTaken > 0) {
         state.damageFlash = 22;
         state.shakeFrames = 14;
-        toastEl.className = "event-toast combat-alert";
+        toastEl.className = "telemetry-strip combat-alert";
         if (dmgDealt > 0) {
           addFloatText(state.x, state.y - 0.6, `DEALT ${dmgDealt} DMG!`, "#fbbf24");
         }
-        addFloatText(state.x, state.y, `-${dmgTaken} HP (ENEMY HIT!)`, "#fb7185");
+        addFloatText(state.x, state.y, `-${dmgTaken} HP!`, "#fb7185");
         const hpCard = document.getElementById("hudHpCard");
         if (hpCard) {
           hpCard.classList.add("damage-pulse");
@@ -1175,39 +1469,39 @@
       const pill = document.getElementById("actorPill");
       if (!state.alive) {
         pill.className = "actor-pill dead";
-        document.getElementById("actorStateText").textContent = `DEAD ON POD ${state.currentPodIp} (UNCOMMITTED RAM — TAP REVERT!)`;
+        document.getElementById("actorStateText").textContent = `DEAD ON ${state.currentPodIp}`;
       } else if (opts.isRevert || rec.last_event_type === "REVERT") {
         pill.className = "actor-pill reverted";
-        document.getElementById("actorStateText").textContent = `REVERTED ON ${state.currentPodIp} (${rec.last_wake_ms || 90}ms) -> RESTORED CHECKPOINT`;
+        document.getElementById("actorStateText").textContent = `REVERTED v${state.saveCount} (${rec.last_wake_ms || 90}ms)`;
       } else {
         pill.className = "actor-pill";
-        document.getElementById("actorStateText").textContent = `WOKE ON ${state.currentPodIp} (${rec.last_wake_ms || 90}ms) -> SAVED & SUSPENDED TO GCS`;
+        document.getElementById("actorStateText").textContent = `POD ${state.currentPodIp} (${rec.last_wake_ms || 85}ms) • SAVED v${state.saveCount}`;
       }
 
-      document.getElementById("podMetaText").textContent =
-        `Actor: ${state.actorName} | Pod: ${state.currentPodIp} | Saves: ${state.saveCount} | Reverts: ${state.revertCount}`;
-
-      document.getElementById("hudFloor").textContent = `${state.floor} / 3`;
-      document.getElementById("hudHP").textContent = `${state.hp} / ${state.maxHp}`;
+      document.getElementById("hudSnapVer").textContent = `v${state.saveCount}`;
+      document.getElementById("hudFloor").textContent = `${state.floor}/3`;
+      document.getElementById("hudHP").textContent = `${state.hp} / ${state.maxHp} HP`;
       const hpPct = Math.max(0, Math.min(100, Math.round((state.hp / state.maxHp) * 100)));
       const hpFill = document.getElementById("hudHpFill");
       if (hpFill) {
         hpFill.style.width = hpPct + "%";
-        hpFill.style.background = hpPct > 50 ? "#10b981" : (hpPct > 25 ? "#f59e0b" : "#f43f5e");
+        hpFill.style.background = hpPct > 50
+          ? "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)"
+          : (hpPct > 25 ? "linear-gradient(180deg, #f59e0b 0%, #b45309 100%)" : "linear-gradient(180deg, #f43f5e 0%, #881337 100%)");
       }
       document.getElementById("hudScore").textContent = `${state.score}`;
-      document.getElementById("hudPods").textContent = `${state.podIpHistory.length}`;
+      document.getElementById("hudPods").textContent = `${state.podIpHistory.length} POD${state.podIpHistory.length === 1 ? "" : "S"}`;
 
-      // Update inventory SVG badges
-      setBadgeOwned("badgeKey", state.inventory.includes("crypt-key"));
-      setBadgeOwned("badgeSword", state.inventory.includes("dragon-slayer-sword"));
-      setBadgeOwned("badgeShield", state.inventory.includes("fire-shield"));
-      setBadgeOwned("badgeChalice", state.inventory.includes("golden-chalice"));
+      // Update 5-Slot Pixel Inventory Bar
+      setSlotOwned("badgeKey", state.inventory.includes("crypt-key"));
+      setSlotOwned("badgeSword", state.inventory.includes("dragon-slayer-sword"));
+      setSlotOwned("badgeShield", state.inventory.includes("fire-shield"));
+      setSlotOwned("badgeChalice", state.inventory.includes("golden-chalice"));
 
       const potions = state.inventory.filter(i => i === "healing-potion").length;
       const potionBtn = document.getElementById("btnDrinkPotion");
-      document.getElementById("potionCountText").textContent = `Potion (${potions})`;
-      potionBtn.className = potions > 0 ? "item-badge usable" : "item-badge";
+      document.getElementById("potionCountText").textContent = `x${potions}`;
+      potionBtn.className = potions > 0 ? "item-slot usable" : "item-slot";
 
       if (rec.last_message) {
         setToast(rec.last_message);
@@ -1222,7 +1516,7 @@
 
       if (state.victory) {
         document.getElementById("victorySummaryText").textContent =
-          `${state.heroName} defeated the Ancient Heap Dragon and escaped through the Ascension Portal with the Golden Chalice! Score: ${state.score} | GCS Checkpoints: ${state.saveCount} | Time-Travel Reverts: ${state.revertCount}.`;
+          `${state.heroName} defeated the Ancient Heap Dragon and escaped through the Ascension Portal with the Golden Chalice! Score: ${state.score} | Snapshots: v${state.saveCount} | Reverts: ${state.revertCount}.`;
         document.getElementById("victoryPodsBox").textContent =
           `Worker Pod IP Trail: ${state.podIpHistory.join(" -> ")}`;
         document.getElementById("victoryModal").classList.remove("hidden");
@@ -1231,9 +1525,9 @@
       }
     }
 
-    function setBadgeOwned(id, owned) {
+    function setSlotOwned(id, owned) {
       const el = document.getElementById(id);
-      if (el) el.className = owned ? "item-badge owned" : "item-badge";
+      if (el) el.className = owned ? "item-slot owned" : "item-slot";
     }
 
     function setToast(msg) {
@@ -1246,7 +1540,7 @@
 
     async function sendMilestone(action, target, entityId, x, y, prevX, prevY) {
       if (state.busy) return;
-      setActorWaking(`WAKING ${state.actorName} VIA ATENET-ROUTER (${action.toUpperCase()})...`);
+      setActorWaking(`WAKING (${action.toUpperCase()})...`);
       try {
         const res = await fetch("/api/session/action", {
           method: "POST",
@@ -1284,18 +1578,23 @@
     }
 
     async function triggerQuicksave() {
-      addFloatText(state.x, state.y, "CHECKPOINT SAVED!", "#38bdf8");
-      await sendMilestone("quicksave", `f${state.floor}:shrine`, `f${state.floor}:shrine`, state.x, state.y, state.x, state.y);
+      addFloatText(state.x, state.y, "SNAPSHOT SAVED!", "#38bdf8");
+      await sendMilestone("quicksave", `f${state.floor}:manual`, "", state.x, state.y, state.x, state.y);
     }
 
-    async function triggerRevert() {
+    async function triggerRevert(targetVersion = 0) {
       if (!state.actorName) return;
-      setActorWaking(`RUNNING kubectl ate revert actor ${state.actorName}...`);
+      closeRevertPopover();
+      const vLabel = targetVersion > 0 ? `v${targetVersion}` : "LATEST";
+      setActorWaking(`REVERTING TO ${vLabel}...`);
       try {
         const res = await fetch("/api/session/revert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actor_name: state.actorName })
+          body: JSON.stringify({
+            actor_name: state.actorName,
+            target_version: targetVersion || 0
+          })
         });
         const rec = await res.json();
         if (!res.ok || rec.error) {
@@ -1311,7 +1610,7 @@
 
     async function triggerFork() {
       if (!state.actorName) return;
-      setActorWaking(`FORKING TIMELINE FROM ${state.actorName} (--tag)...`);
+      setActorWaking(`FORKING TIMELINE (--tag)...`);
       try {
         const res = await fetch("/api/session/fork", {
           method: "POST",
@@ -1344,7 +1643,6 @@
       if (ny < 0 || ny >= GRID_H || nx < 0 || nx >= GRID_W) return;
       if (map.grid[ny][nx] === "#") return;
 
-      // Check if an active entity occupies (nx, ny)
       const ent = map.entities.find(e => e.x === nx && e.y === ny && !state.cleared[e.id]);
       if (ent) {
         if (ent.type === "item") {
@@ -1397,12 +1695,10 @@
         }
       }
 
-      // Pure local 60fps movement (no network call needed!)
       state.x = nx;
       state.y = ny;
     }
 
-    // Tap on canvas tile to step toward tapped location
     canvas.addEventListener("pointerdown", (e) => {
       const rect = canvas.getBoundingClientRect();
       const tx = Math.floor(((e.clientX - rect.left) / rect.width) * GRID_W);
@@ -1425,7 +1721,6 @@
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { e.preventDefault(); stepHero(1, 0); }
     });
 
-    // Pixel-Art Canvas Renderer
     let frame = 0;
     function renderLoop() {
       frame++;
@@ -1439,39 +1734,36 @@
         ctx.translate(sx, sy);
       }
 
-      ctx.fillStyle = "#060913";
+      ctx.fillStyle = "#080b12";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw tiles
       for (let y = 0; y < GRID_H; y++) {
         for (let x = 0; x < GRID_W; x++) {
           const ch = map.grid[y][x];
           const px = x * TILE;
           const py = y * TILE;
           if (ch === "#") {
-            ctx.fillStyle = state.floor === 3 ? "#2b1620" : (state.floor === 2 ? "#1e293b" : "#172033");
+            ctx.fillStyle = state.floor === 3 ? "#29151d" : (state.floor === 2 ? "#1e2636" : "#182030");
             ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "rgba(255,255,255,0.07)";
-            ctx.fillRect(px + 2, py + 2, TILE - 4, 6);
-            ctx.fillStyle = "rgba(0,0,0,0.28)";
+            ctx.fillStyle = "rgba(255, 228, 181, 0.07)";
+            ctx.fillRect(px + 2, py + 2, TILE - 4, 5);
+            ctx.fillStyle = "rgba(0,0,0,0.34)";
             ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
-            ctx.strokeStyle = "rgba(0,0,0,0.5)";
+            ctx.strokeStyle = "rgba(0,0,0,0.55)";
             ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
           } else {
-            ctx.fillStyle = (x + y) % 2 === 0 ? "#0c1322" : "#0e1627";
+            ctx.fillStyle = (x + y) % 2 === 0 ? "#0d121d" : "#101624";
             ctx.fillRect(px, py, TILE, TILE);
           }
         }
       }
 
-      // Draw entities with 16x16 pixel art + enemy ATK/HP badges
       for (const ent of map.entities) {
         if (state.cleared[ent.id]) continue;
         const px = ent.x * TILE;
         const py = ent.y * TILE;
         const bob = Math.round(Math.sin((frame + ent.x * 9) * 0.09) * 2);
 
-        // Glow aura
         const grad = ctx.createRadialGradient(px + 16, py + 16, 2, px + 16, py + 16, 22);
         grad.addColorStop(0, ent.color + "55");
         grad.addColorStop(1, "transparent");
@@ -1480,8 +1772,7 @@
 
         if (ent.type === "boss") {
           drawPixelSprite(ctx, SPRITES.dragon, px, py + bob, 2);
-          // Boss HP Bar + Lethal Sword/Shield warning
-          ctx.fillStyle = "rgba(9,13,22,0.88)";
+          ctx.fillStyle = "rgba(9,13,22,0.9)";
           ctx.fillRect(px - 28, py - 16, 88, 14);
           ctx.fillStyle = "#1f2937";
           ctx.fillRect(px - 26, py - 6, 84, 4);
@@ -1494,8 +1785,7 @@
           ctx.fillText(atkLabel, px - 26, py - 8);
         } else if (ent.type === "monster") {
           drawPixelSprite(ctx, SPRITES[ent.sprite] || SPRITES.skeleton, px, py + bob, 2);
-          // Monster HP & Counter-Attack DMG Tag
-          ctx.fillStyle = "rgba(9,13,22,0.88)";
+          ctx.fillStyle = "rgba(9,13,22,0.9)";
           ctx.fillRect(px - 18, py - 14, 68, 12);
           ctx.strokeStyle = "#f43f5e88";
           ctx.lineWidth = 1;
@@ -1507,7 +1797,6 @@
             : `${ent.maxHp}HP|-${ent.atk}HP`;
           ctx.fillText(mLabel, px - 15, py - 5);
         } else if (ent.type === "portal") {
-          // Glowing Ascension Portal Door Archway
           ctx.fillStyle = "#0ea5e9";
           ctx.fillRect(px + 4, py + 2, 24, 28);
           ctx.fillStyle = "#38bdf8";
@@ -1520,7 +1809,6 @@
           ctx.font = "bold 8px ui-monospace, monospace";
           ctx.fillText("EXIT DOOR", px - 8, py - 3);
         } else if (ent.type === "stairs") {
-          // Pixel-art stone staircase down
           ctx.fillStyle = "#0f172a";
           ctx.fillRect(px + 4, py + 4, 24, 24);
           ctx.strokeStyle = "#38bdf8";
@@ -1536,7 +1824,6 @@
           ctx.font = "bold 8px ui-monospace, monospace";
           ctx.fillText(`DOWN FL${state.floor + 1}`, px - 5, py - 3);
         } else if (ent.type === "stairs_up") {
-          // Pixel-art stone staircase up (return to previous floor)
           ctx.fillStyle = "#0f172a";
           ctx.fillRect(px + 4, py + 4, 24, 24);
           ctx.strokeStyle = "#94a3b8";
@@ -1552,7 +1839,6 @@
           ctx.font = "bold 8px ui-monospace, monospace";
           ctx.fillText(`UP FL${state.floor - 1}`, px - 2, py - 3);
         } else if (ent.type === "shrine") {
-          // Golden Quicksave Crystal Shrine
           ctx.fillStyle = "#78350f";
           ctx.fillRect(px + 6, py + 22, 20, 6);
           ctx.fillStyle = "#f59e0b";
@@ -1567,11 +1853,11 @@
         }
       }
 
-      // Draw Player Hero with Class Pixel Art + Equipped Gear
+      // Draw Player Hero
       const hx = state.x * TILE;
       const hy = state.y * TILE;
       const light = ctx.createRadialGradient(hx + 16, hy + 16, 4, hx + 16, hy + 16, 76);
-      light.addColorStop(0, "rgba(56, 189, 248, 0.28)");
+      light.addColorStop(0, "rgba(245, 158, 11, 0.22)");
       light.addColorStop(1, "transparent");
       ctx.fillStyle = light;
       ctx.fillRect(hx - 60, hy - 60, 152, 152);
@@ -1579,7 +1865,6 @@
       const heroSprite = SPRITES[state.charClass] || SPRITES.paladin;
       drawPixelSprite(ctx, heroSprite, hx, hy, 2);
 
-      // Draw equipped Dragon-Slayer Sword & Fire Shield on Hero
       if (state.inventory.includes("dragon-slayer-sword")) {
         ctx.fillStyle = "#38bdf8";
         ctx.fillRect(hx + 27, hy + 4, 3, 14);
@@ -1594,12 +1879,12 @@
         ctx.strokeRect(hx - 1, hy + 12, 7, 11);
       }
 
-      // Floor banner overlay
-      ctx.fillStyle = "rgba(9, 13, 22, 0.78)";
-      ctx.fillRect(8, 8, 226, 22);
-      ctx.fillStyle = "#9ca3af";
-      ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
-      ctx.fillText(map.name, 14, 23);
+      // Subtle Floor Banner
+      ctx.fillStyle = "rgba(11, 14, 20, 0.78)";
+      ctx.fillRect(8, 8, 224, 20);
+      ctx.fillStyle = "#d97706";
+      ctx.font = "bold 10px ui-monospace, monospace";
+      ctx.fillText(map.name, 14, 21);
 
       // Floating combat/loot text
       for (let i = state.floatTexts.length - 1; i >= 0; i--) {
@@ -1615,7 +1900,6 @@
         if (ft.life <= 0) state.floatTexts.splice(i, 1);
       }
 
-      // Red damage flash overlay when enemy hits player
       if (state.damageFlash > 0) {
         ctx.fillStyle = `rgba(244, 63, 94, ${(state.damageFlash / 22) * 0.38})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1625,7 +1909,6 @@
         state.damageFlash--;
       }
 
-      // Golden time-travel flash overlay when Revert Actor completes
       if (state.revertFlash > 0) {
         ctx.fillStyle = `rgba(251, 191, 36, ${(state.revertFlash / 26) * 0.32})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1639,9 +1922,8 @@
       requestAnimationFrame(renderLoop);
     }
 
-    // Auto-resume existing session if actorName is in URL or localStorage
     (async function init() {
-      renderClassPreviews();
+      renderClassPreviewsAndSlots();
       const params = new URLSearchParams(window.location.search);
       const urlActor = params.get("actor");
       if (urlActor) {

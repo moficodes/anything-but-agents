@@ -161,7 +161,8 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 
 	mux.HandleFunc("/api/session/revert", func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
-			ActorName string `json:"actor_name"`
+			ActorName     string `json:"actor_name"`
+			TargetVersion int    `json:"target_version"`
 		}
 		if r.Body != nil {
 			body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
@@ -170,7 +171,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if payload.ActorName == "" {
 			payload.ActorName = r.URL.Query().Get("actor")
 		}
-		rec, err := g.backend.RevertSession(r.Context(), payload.ActorName)
+		rec, err := g.backend.RevertSession(r.Context(), payload.ActorName, payload.TargetVersion)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return

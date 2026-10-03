@@ -26,10 +26,11 @@ import (
 	"time"
 )
 
-// ActorCheckpoint stores the last committed milestone state (captured AFTER
-// each non-fatal milestone is applied) so `Revert Actor (Save-Scum)` restores
-// the exact state right after the last saved milestone.
+// ActorCheckpoint stores a committed milestone state (captured AFTER each
+// non-fatal milestone is applied) so `Revert Actor (Save-Scum)` can restore
+// either the latest saved milestone or any specific earlier version (v1..vN).
 type ActorCheckpoint struct {
+	Version   int             `json:"version"`
 	Label     string          `json:"label"`
 	Floor     int             `json:"floor"`
 	X         int             `json:"x"`
@@ -48,34 +49,35 @@ type ActorCheckpoint struct {
 // SNAPSHOT_CONTENT_SCOPE_FULL, suspending the actor checkpoints this entire
 // heap struct to GCS, and reverting the actor rewinds it in place.
 type ActorSession struct {
-	mu              sync.Mutex       `json:"-"`
-	BootedAt        time.Time        `json:"booted_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
-	HeroName        string           `json:"hero_name"`
-	CharacterClass  string           `json:"character_class"`
-	Floor           int              `json:"floor"`
-	X               int              `json:"x"`
-	Y               int              `json:"y"`
-	HP              int              `json:"hp"`
-	MaxHP           int              `json:"max_hp"`
-	Gold            int              `json:"gold"`
-	Score           int              `json:"score"`
-	Alive           bool             `json:"alive"`
-	Victory         bool             `json:"victory"`
-	DeathReason     string           `json:"death_reason,omitempty"`
-	Inventory       []string         `json:"inventory"`
-	Cleared         map[string]bool  `json:"cleared"`
-	MonsterHP       map[string]int   `json:"monster_hp"`
-	BossHP          int              `json:"boss_hp"`
-	BossMaxHP       int              `json:"boss_max_hp"`
-	Turn            int              `json:"turn"`
-	MilestoneCount  int              `json:"milestone_count"`
-	LastDamageDealt int              `json:"last_damage_dealt,omitempty"`
-	LastDamageTaken int              `json:"last_damage_taken,omitempty"`
-	LastEvent       string           `json:"last_event"`
-	CurrentPodIP    string           `json:"current_pod_ip"`
-	PodIPHistory    []string         `json:"pod_ip_history"`
-	Checkpoint      *ActorCheckpoint `json:"checkpoint,omitempty"`
+	mu              sync.Mutex        `json:"-"`
+	BootedAt        time.Time         `json:"booted_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	HeroName        string            `json:"hero_name"`
+	CharacterClass  string            `json:"character_class"`
+	Floor           int               `json:"floor"`
+	X               int               `json:"x"`
+	Y               int               `json:"y"`
+	HP              int               `json:"hp"`
+	MaxHP           int               `json:"max_hp"`
+	Gold            int               `json:"gold"`
+	Score           int               `json:"score"`
+	Alive           bool              `json:"alive"`
+	Victory         bool              `json:"victory"`
+	DeathReason     string            `json:"death_reason,omitempty"`
+	Inventory       []string          `json:"inventory"`
+	Cleared         map[string]bool   `json:"cleared"`
+	MonsterHP       map[string]int    `json:"monster_hp"`
+	BossHP          int               `json:"boss_hp"`
+	BossMaxHP       int               `json:"boss_max_hp"`
+	Turn            int               `json:"turn"`
+	MilestoneCount  int               `json:"milestone_count"`
+	LastDamageDealt int               `json:"last_damage_dealt,omitempty"`
+	LastDamageTaken int               `json:"last_damage_taken,omitempty"`
+	LastEvent       string            `json:"last_event"`
+	CurrentPodIP    string            `json:"current_pod_ip"`
+	PodIPHistory    []string          `json:"pod_ip_history"`
+	Checkpoint      *ActorCheckpoint  `json:"checkpoint,omitempty"`
+	Checkpoints     []ActorCheckpoint `json:"checkpoints,omitempty"`
 }
 
 // MutateRequest describes a state milestone sent from the browser via the
@@ -90,6 +92,7 @@ type MutateRequest struct {
 	Y              int    `json:"y,omitempty"`
 	PrevX          int    `json:"prev_x,omitempty"`
 	PrevY          int    `json:"prev_y,omitempty"`
+	TargetVersion  int    `json:"target_version,omitempty"`
 }
 
 // ActorResponse is the JSON payload returned by the actor after reading or
@@ -130,7 +133,7 @@ func NewActorSession() *ActorSession {
 		BossMaxHP: 100,
 		LastEvent: "Entered Floor 1: The Forgotten Crypt (100% Go heap state).",
 	}
-	s.saveCheckpointLocked("entered Floor 1")
+	s.saveCheckpointLocked("Entered Floor 1")
 	return s
 }
 
@@ -145,7 +148,12 @@ func (s *ActorSession) saveCheckpointLocked(label string) {
 	for k, v := range s.MonsterHP {
 		mhp[k] = v
 	}
-	s.Checkpoint = &ActorCheckpoint{
+	nextVer := 1
+	if len(s.Checkpoints) > 0 {
+		nextVer = s.Checkpoints[len(s.Checkpoints)-1].Version + 1
+	}
+	cp := ActorCheckpoint{
+		Version:   nextVer,
 		Label:     label,
 		Floor:     s.Floor,
 		X:         s.X,
@@ -158,10 +166,34 @@ func (s *ActorSession) saveCheckpointLocked(label string) {
 		MonsterHP: mhp,
 		BossHP:    s.BossHP,
 	}
+	s.Checkpoints = append(s.Checkpoints, cp)
+	if len(s.Checkpoints) > 20 {
+		s.Checkpoints = s.Checkpoints[len(s.Checkpoints)-20:]
+	}
+	cpCopy := cp
+	s.Checkpoint = &cpCopy
 }
 
-func (s *ActorSession) restoreCheckpointLocked() string {
-	if s.Checkpoint == nil {
+func (s *ActorSession) restoreCheckpointLocked(targetVersion int) string {
+	var chosen *ActorCheckpoint
+	if targetVersion > 0 && len(s.Checkpoints) > 0 {
+		for i := len(s.Checkpoints) - 1; i >= 0; i-- {
+			if s.Checkpoints[i].Version == targetVersion {
+				cp := s.Checkpoints[i]
+				chosen = &cp
+				s.Checkpoints = s.Checkpoints[:i+1]
+				break
+			}
+		}
+	}
+	if chosen == nil && len(s.Checkpoints) > 0 {
+		cp := s.Checkpoints[len(s.Checkpoints)-1]
+		chosen = &cp
+	}
+	if chosen == nil {
+		chosen = s.Checkpoint
+	}
+	if chosen == nil {
 		s.Floor = 1
 		s.X, s.Y = 1, 1
 		s.HP = s.MaxHP
@@ -170,7 +202,10 @@ func (s *ActorSession) restoreCheckpointLocked() string {
 		s.DeathReason = ""
 		return "SAVE-SCUM REVERT: Restored Floor 1 starting checkpoint (Pos 1,1 | HP 100/100)!"
 	}
-	cp := s.Checkpoint
+	cp := chosen
+	cpCopy := *cp
+	s.Checkpoint = &cpCopy
+
 	s.Floor = cp.Floor
 	s.X = cp.X
 	s.Y = cp.Y
@@ -192,8 +227,8 @@ func (s *ActorSession) restoreCheckpointLocked() string {
 	for k, v := range cp.MonsterHP {
 		s.MonsterHP[k] = v
 	}
-	return fmt.Sprintf("SAVE-SCUM REVERT (`kubectl ate revert`): Restored saved state after %q on Floor %d (Pos %d,%d | HP %d/%d)!",
-		cp.Label, s.Floor, s.X, s.Y, s.HP, s.MaxHP)
+	return fmt.Sprintf("SAVE-SCUM REVERT (`kubectl ate revert` -> v%d): Restored Snapshot v%d (%s) on Floor %d (Pos %d,%d | HP %d/%d)!",
+		cp.Version, cp.Version, cp.Label, s.Floor, s.X, s.Y, s.HP, s.MaxHP)
 }
 
 func (s *ActorSession) recordPodIP(ip string) {
@@ -246,7 +281,7 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 	}
 
 	if action == "restore_checkpoint" {
-		msg := s.restoreCheckpointLocked()
+		msg := s.restoreCheckpointLocked(req.TargetVersion)
 		s.LastEvent = msg
 		return s.responseLocked(msg, "REVERT")
 	}
@@ -263,7 +298,8 @@ func (s *ActorSession) Mutate(req MutateRequest, podIP string) ActorResponse {
 		if req.X > 0 || req.Y > 0 {
 			s.X, s.Y = req.X, req.Y
 		}
-		s.saveCheckpointLocked("entered Floor 1")
+		s.Checkpoints = nil
+		s.saveCheckpointLocked("Entered Floor 1")
 		msg := fmt.Sprintf("Hero %s (%s) entered Floor 1: The Forgotten Crypt.", s.HeroName, s.CharacterClass)
 		s.LastEvent = msg
 		return s.responseLocked(msg, "INIT")
@@ -600,6 +636,11 @@ func (s *ActorSession) responseLocked(msg, eventType string) ActorResponse {
 			cpCopy = &tmp
 		}
 	}
+	var cpsCopy []ActorCheckpoint
+	if len(s.Checkpoints) > 0 {
+		rawCPs, _ := json.Marshal(s.Checkpoints)
+		_ = json.Unmarshal(rawCPs, &cpsCopy)
+	}
 
 	snap := ActorSession{
 		BootedAt:        s.BootedAt,
@@ -629,6 +670,7 @@ func (s *ActorSession) responseLocked(msg, eventType string) ActorResponse {
 		CurrentPodIP:    s.CurrentPodIP,
 		PodIPHistory:    ips,
 		Checkpoint:      cpCopy,
+		Checkpoints:     cpsCopy,
 	}
 	return ActorResponse{
 		Message:     msg,

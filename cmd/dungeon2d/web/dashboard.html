@@ -6,32 +6,34 @@
   <title>Substrate Mission Control — Dungeon 2D Multiplexer Dashboard</title>
   <style>
     :root {
-      --bg: #070b14;
-      --panel: #0f172a;
-      --panel-alt: #131d33;
-      --border: #1e293b;
-      --text: #f8fafc;
+      --bg: #0b0e14;
+      --panel: #141923;
+      --panel-inner: #0e121a;
+      --border: #2c3548;
+      --amber-border: #c28d42;
+      --amber-dim: #6e5025;
+      --text: #f3f4f6;
       --muted: #94a3b8;
       --cyan: #38bdf8;
       --emerald: #10b981;
       --amber: #f59e0b;
-      --rose: #f43f5e;
+      --rose: #e11d48;
       --violet: #a855f7;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 0;
-      background: var(--bg);
+      background: radial-gradient(circle at 50% 10%, #161d2b 0%, #0b0e14 80%);
       color: var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
     .icon {
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
       stroke: currentColor;
       stroke-width: 2;
       stroke-linecap: round;
@@ -41,15 +43,16 @@
     }
     .icon-lg { width: 20px; height: 20px; }
 
-    /* Top Bar */
+    /* Top RPG Header Bar */
     .topbar {
-      padding: 14px 24px;
-      background: #0b1120;
-      border-bottom: 1px solid var(--border);
+      padding: 12px 22px;
+      background: #10141d;
+      border-bottom: 1.5px solid var(--amber-dim);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
     }
     .brand {
@@ -57,40 +60,52 @@
       align-items: center;
       gap: 12px;
     }
+    .brand-crest {
+      width: 38px;
+      height: 38px;
+      border-radius: 6px;
+      background: #0b0e14;
+      border: 1.5px solid var(--amber-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fbbf24;
+      box-shadow: inset 0 0 10px rgba(194, 141, 66, 0.25);
+    }
     .brand-title {
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: 0.02em;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      color: #fde68a;
     }
     .brand-sub {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--muted);
     }
     .kpi-strip {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
     }
     .kpi-box {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 6px 12px;
+      border-radius: 6px;
+      padding: 5px 11px;
       display: flex;
       flex-direction: column;
-      min-width: 104px;
+      min-width: 96px;
     }
     .kpi-label {
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--muted);
     }
     .kpi-val {
-      font-size: 18px;
-      font-weight: 800;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 16px;
+      font-weight: 900;
     }
     .top-actions {
       display: flex;
@@ -100,27 +115,29 @@
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      border: 1px solid #334155;
-      background: #1e293b;
+      padding: 7px 11px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      font-family: inherit;
+      border: 1.5px solid var(--border);
+      background: var(--panel);
       color: var(--text);
       cursor: pointer;
       text-decoration: none;
-      transition: all 0.15s ease;
+      transition: all 0.14s ease;
     }
-    .btn:hover { border-color: var(--cyan); }
+    .btn:hover { border-color: var(--amber-border); }
     .btn-primary {
-      background: rgba(56, 189, 248, 0.16);
-      border-color: rgba(56, 189, 248, 0.5);
-      color: var(--cyan);
+      background: rgba(194, 141, 66, 0.18);
+      border-color: var(--amber-border);
+      color: #fde68a;
     }
     .btn-warn {
       background: rgba(245, 158, 11, 0.16);
-      border-color: rgba(245, 158, 11, 0.5);
+      border-color: rgba(245, 158, 11, 0.55);
       color: #fbbf24;
     }
     .btn-fork {
@@ -129,18 +146,24 @@
       color: #c084fc;
     }
     .btn-danger {
-      background: rgba(244, 63, 94, 0.14);
-      border-color: rgba(244, 63, 94, 0.4);
-      color: #fb7185;
+      background: rgba(225, 29, 72, 0.15);
+      border-color: rgba(225, 29, 72, 0.45);
+      color: #fda4af;
+    }
+    .icon-sq-btn {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 5px;
     }
 
-    /* Main Layout */
+    /* Main Grid */
     .dashboard-grid {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 360px;
-      gap: 18px;
-      padding: 18px 24px;
+      grid-template-columns: 1fr 350px;
+      gap: 16px;
+      padding: 16px 22px;
     }
     @media (max-width: 1100px) {
       .dashboard-grid { grid-template-columns: 1fr; }
@@ -148,20 +171,20 @@
     .main-col {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 16px;
     }
     .section-hdr {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     .section-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.07em;
-      color: var(--muted);
+      color: #fcd34d;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -171,42 +194,40 @@
     .workers-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      gap: 10px;
     }
     .worker-card {
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       transition: all 0.2s ease;
     }
     .worker-card.busy {
-      background: rgba(16, 185, 129, 0.12);
+      background: rgba(16, 185, 129, 0.14);
       border-color: var(--emerald);
-      box-shadow: 0 0 24px rgba(16, 185, 129, 0.25);
-      transform: translateY(-2px);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
     }
     .worker-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 12px;
-      font-weight: 700;
+      font-size: 11px;
+      font-weight: 800;
     }
     .worker-ip {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       color: var(--cyan);
-      font-size: 13px;
+      font-size: 12px;
     }
     .worker-slot-pill {
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: #090d16;
+      padding: 6px 9px;
+      border-radius: 5px;
+      background: #0b0e14;
       border: 1px dashed #334155;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--muted);
       display: flex;
       align-items: center;
@@ -216,32 +237,32 @@
       border-style: solid;
       border-color: var(--emerald);
       color: #6ee7b7;
-      font-weight: 700;
+      font-weight: 800;
     }
 
     /* Actor Session Cards Grid */
     .actors-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(335px, 1fr));
+      gap: 12px;
     }
     .actor-card {
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border: 1.5px solid var(--amber-dim);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 8px 20px rgba(0,0,0,0.45);
+      border-radius: 8px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      transition: border-color 0.2s ease;
+      gap: 9px;
     }
     .actor-card.state-dead {
-      border-color: rgba(244, 63, 94, 0.65);
-      background: linear-gradient(180deg, rgba(244, 63, 94, 0.08), var(--panel));
+      border-color: var(--rose);
+      background: linear-gradient(180deg, rgba(225, 29, 72, 0.11), var(--panel));
     }
     .actor-card.state-victory {
-      border-color: rgba(245, 158, 11, 0.7);
-      background: linear-gradient(180deg, rgba(245, 158, 11, 0.09), var(--panel));
+      border-color: var(--amber);
+      background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), var(--panel));
     }
     .actor-hdr {
       display: flex;
@@ -249,143 +270,215 @@
       justify-content: space-between;
       gap: 8px;
     }
-    .actor-name {
-      font-size: 15px;
-      font-weight: 800;
+    .hero-ident {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 9px;
+      min-width: 0;
+    }
+    .avatar-box {
+      width: 34px;
+      height: 34px;
+      background: #090c12;
+      border: 1.5px solid var(--amber-border);
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .avatar-box canvas {
+      width: 26px;
+      height: 26px;
+      image-rendering: pixelated;
+    }
+    .actor-name {
+      font-size: 14px;
+      font-weight: 900;
+      color: #fde68a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .actor-sub {
+      font-size: 10px;
+      color: var(--muted);
     }
     .badge {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 4px;
+      font-size: 9px;
       font-weight: 800;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+      white-space: nowrap;
     }
     .badge-suspended {
-      background: rgba(56, 189, 248, 0.14);
-      color: var(--cyan);
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(245, 158, 11, 0.16);
+      color: #fbbf24;
+      border: 1px solid var(--amber-border);
     }
     .badge-running {
-      background: rgba(16, 185, 129, 0.16);
+      background: rgba(16, 185, 129, 0.18);
       color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.45);
+      border: 1px solid rgba(16, 185, 129, 0.5);
     }
     .badge-dead {
-      background: rgba(244, 63, 94, 0.18);
-      color: #fb7185;
-      border: 1px solid rgba(244, 63, 94, 0.5);
+      background: rgba(225, 29, 72, 0.22);
+      color: #fda4af;
+      border: 1px solid var(--rose);
     }
     .badge-victory {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.55);
+      background: rgba(16, 185, 129, 0.22);
+      color: #6ee7b7;
+      border: 1px solid var(--emerald);
     }
 
+    /* Segmented RPG HP Bar */
     .hp-bar-outer {
+      position: relative;
       width: 100%;
-      height: 8px;
-      background: #090d16;
-      border-radius: 999px;
+      height: 14px;
+      background: #090c12;
+      border-radius: 3px;
       overflow: hidden;
-      border: 1px solid #1e293b;
+      border: 1px solid #3f202b;
     }
     .hp-bar-inner {
       height: 100%;
-      background: linear-gradient(90deg, #10b981, #34d399);
+      background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
       transition: width 0.25s ease;
     }
-    .hp-bar-inner.low {
-      background: linear-gradient(90deg, #e11d48, #fb7185);
+    .hp-bar-segments {
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        to right,
+        transparent 0px,
+        transparent 16px,
+        rgba(9, 12, 18, 0.55) 16px,
+        rgba(9, 12, 18, 0.55) 18px
+      );
+      pointer-events: none;
+    }
+    .hp-bar-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 7px;
+      font-size: 9px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 1px 2px #000;
     }
 
+    /* Compact 5-Slot Inventory Chips */
     .inv-row {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       flex-wrap: wrap;
     }
     .inv-chip {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 7px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      background: #090d16;
-      border: 1px solid #1e293b;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      background: #0b0e14;
+      border: 1px solid #242d3f;
       color: #475569;
     }
     .inv-chip.active {
-      border-color: rgba(16, 185, 129, 0.45);
-      color: #34d399;
-      background: rgba(16, 185, 129, 0.1);
+      border-color: var(--amber-border);
+      color: #fde68a;
+      background: rgba(194, 141, 66, 0.15);
     }
     .pod-trail {
-      font-size: 11px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: var(--muted);
-      background: #090d16;
-      padding: 6px 8px;
-      border-radius: 6px;
+      font-size: 10px;
+      color: var(--cyan);
+      background: #0b0e14;
+      border: 1px solid #1e293b;
+      padding: 5px 8px;
+      border-radius: 4px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 2px;
+    }
+    .ver-select {
+      flex: 1;
+      min-width: 0;
+      background: #0b0e14;
+      color: #fde68a;
+      border: 1px solid var(--amber-dim);
+      border-radius: 5px;
+      padding: 5px 6px;
+      font-size: 10px;
+      font-family: inherit;
+      font-weight: 700;
     }
 
     /* Right Sidebar: QR + Live Telemetry Stream */
     .side-col {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
     }
     .qr-card {
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
+      border: 1.5px solid var(--amber-dim);
+      border-radius: 8px;
+      padding: 13px;
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
     .qr-img {
-      width: 112px;
-      height: 112px;
-      border-radius: 8px;
+      width: 104px;
+      height: 104px;
+      border-radius: 6px;
       background: #fff;
       padding: 4px;
       flex-shrink: 0;
+      border: 2px solid var(--amber-border);
     }
     .feed-card {
       flex: 1;
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
-      max-height: 620px;
+      max-height: 600px;
     }
     .feed-list {
       flex: 1;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 7px;
     }
     .feed-item {
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: #090d16;
+      padding: 7px 9px;
+      border-radius: 5px;
+      background: #0b0e14;
+      border: 1px solid #1e293b;
       border-left: 3px solid var(--cyan);
-      font-size: 12px;
+      font-size: 11px;
       display: flex;
       flex-direction: column;
       gap: 3px;
@@ -397,8 +490,7 @@
     .feed-meta {
       display: flex;
       justify-content: space-between;
-      font-size: 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
       color: var(--muted);
     }
   </style>
@@ -407,10 +499,12 @@
 
   <header class="topbar">
     <div class="brand">
-      <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:var(--cyan)"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+      <div class="brand-crest">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
+      </div>
       <div>
-        <div class="brand-title">ANYTHING BUT AGENTS // DUNGEON-2D MULTIPLEXER</div>
-        <div class="brand-sub">Wake-on-HTTP via <code>atenet-router</code> &bull; 100% Go Heap State &bull; Immediate Suspend to GCS</div>
+        <div class="brand-title">SUBSTRATE DUNGEON // MULTIPLEXER COMMAND</div>
+        <div class="brand-sub">Wake-on-HTTP via <code>atenet-router</code> &bull; Versioned Go Heap Snapshots (<code>v1..vN</code>) in GCS</div>
       </div>
     </div>
 
@@ -424,11 +518,11 @@
         <span id="kpiSuspended" class="kpi-val" style="color:var(--cyan)">0</span>
       </div>
       <div class="kpi-box">
-        <span class="kpi-label">GCS Saves</span>
+        <span class="kpi-label">GCS Snapshots</span>
         <span id="kpiSaves" class="kpi-val" style="color:var(--emerald)">0</span>
       </div>
       <div class="kpi-box">
-        <span class="kpi-label">Save-Scums (Revert)</span>
+        <span class="kpi-label">Time-Travel Reverts</span>
         <span id="kpiReverts" class="kpi-val" style="color:var(--amber)">0</span>
       </div>
       <div class="kpi-box">
@@ -440,11 +534,11 @@
     <div class="top-actions">
       <button class="btn btn-primary" onclick="spawnDemoBot('full-demo')">
         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Run Automated Demo Hero
+        Spawn Demo Bot
       </button>
       <a class="btn" href="/play" target="_blank">
         <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-        Open Phone View (/play)
+        Player View (/play)
       </a>
     </div>
   </header>
@@ -467,8 +561,8 @@
       <section>
         <div class="section-hdr">
           <div class="section-title">
-            <svg class="icon" viewBox="0 0 24 24" style="color:var(--cyan)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Player Actor Sessions (Go Heap Snapshots in GCS)
+            <svg class="icon" viewBox="0 0 24 24" style="color:#fbbf24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Active Dungeon Sessions (Select Any Snapshot Version v1..vN to Revert)
           </div>
         </div>
         <div id="actorsGrid" class="actors-grid"></div>
@@ -479,12 +573,12 @@
     <aside class="side-col">
       <div class="qr-card">
         <img id="qrImage" class="qr-img" src="/api/qr.svg" alt="Join QR Code" />
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          <div style="font-size:14px;font-weight:800;color:var(--cyan);">Scan to Play on Phone</div>
-          <div style="font-size:12px;color:var(--muted);line-height:1.4;">
-            Every phone spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods.
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="font-size:13px;font-weight:900;color:#fde68a;">SCAN TO ENTER DUNGEON</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4;">
+            Each player spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods.
           </div>
-          <a id="joinLinkText" href="/play" target="_blank" style="font-size:12px;font-family:monospace;color:#fff;word-break:break-all;">/play</a>
+          <a id="joinLinkText" href="/play" target="_blank" style="font-size:11px;color:var(--cyan);word-break:break-all;">/play</a>
         </div>
       </div>
 
@@ -492,7 +586,7 @@
         <div class="section-hdr">
           <div class="section-title">
             <svg class="icon" viewBox="0 0 24 24" style="color:var(--amber)"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-            Live Wake / Commit / Revert Stream
+            Live Substrate Event Stream
           </div>
         </div>
         <div id="feedList" class="feed-list"></div>
@@ -501,6 +595,98 @@
   </main>
 
   <script>
+    const PALETTE = {
+      ".": null,
+      "W": "#f8fafc",
+      "S": "#cbd5e1",
+      "G": "#64748b",
+      "D": "#1e293b",
+      "K": "#090d16",
+      "B": "#38bdf8",
+      "N": "#2563eb",
+      "Y": "#fbbf24",
+      "O": "#f97316",
+      "R": "#f43f5e",
+      "E": "#10b981",
+      "F": "#047857",
+      "L": "#a16207",
+      "T": "#fde68a",
+      "V": "#a855f7",
+      "P": "#581c87"
+    };
+
+    const CLASS_SPRITES = {
+      paladin: [
+        "......BBBB......",
+        ".....BBBBBB.....",
+        "......SSSS......",
+        "....KKKKKKKK....",
+        "....KSSSSSSK....",
+        "....KSKKKKSK....",
+        "....KSSSSSSK....",
+        "...NKKKKKKKKN...",
+        "..NNKYYYYYYKNN..",
+        "..NNKSSSSSSKNN..",
+        "..NNKSSYYSSKNN..",
+        "...NKSSSSSSKN...",
+        "....KGGGGGGK....",
+        "....KGG..GGK....",
+        "....KDD..DDK....",
+        "....KKK..KKK...."
+      ],
+      ranger: [
+        ".........YY.....",
+        ".....FFFFFFYY...",
+        "....FFFFFFFF....",
+        "...FFKKKKKKFF...",
+        "...FFKTTTTKFF...",
+        "...FFKTKKTKFF...",
+        "....FKTTTTKF....",
+        "...FFKKKKKKFF...",
+        "..FFKLLLLLLKFF..",
+        "..FFKLLYYLLKFF..",
+        "..FFKLLLLLLKFF..",
+        "...FKGGGGGGKF...",
+        "....KLLLLLLK....",
+        "....KLL..LLK....",
+        "....KDD..DDK....",
+        "....KKK..KKK...."
+      ],
+      mage: [
+        ".......RR.......",
+        "......RRRR......",
+        ".....RRRRRR.....",
+        "....YYYYYYYY....",
+        "...KKKKKKKKKK...",
+        "....KPPPPPPK....",
+        "....KPYKKYPK..O.",
+        "....KPPPPPPK.OYO",
+        "...PKKKKKKKKP.O.",
+        "..PPKVVVVVVKPPY.",
+        "..PPKVVYYVVKPPY.",
+        "..PPKVVVVVVKPPY.",
+        "...PKPPPPPPKP.Y.",
+        "....KPPPPPPK..Y.",
+        "....KVV..VVK....",
+        "....KKK..KKK...."
+      ]
+    };
+
+    function drawAvatar(canvasEl, cls) {
+      if (!canvasEl) return;
+      const c = canvasEl.getContext("2d");
+      const sp = CLASS_SPRITES[cls] || CLASS_SPRITES.paladin;
+      c.clearRect(0, 0, 16, 16);
+      for (let r = 0; r < sp.length; r++) {
+        for (let col = 0; col < sp[r].length; col++) {
+          const hex = PALETTE[sp[r][col]];
+          if (!hex) continue;
+          c.fillStyle = hex;
+          c.fillRect(col, r, 1, 1);
+        }
+      }
+    }
+
     const SVG_ICONS = {
       key: `<svg class="icon" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
       sword: `<svg class="icon" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>`,
@@ -509,8 +695,12 @@
       potion: `<svg class="icon" viewBox="0 0 24 24"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>`,
       revert: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
       fork: `<svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
+      play: `<svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
       trash: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`
     };
+
+    // Preserve selected snapshot version dropdown value per actor across refreshes
+    const selectedVersionByActor = {};
 
     function renderDashboard(snap) {
       document.getElementById("modeBadge").textContent = (snap.mode || "cluster-ate").toUpperCase();
@@ -525,14 +715,13 @@
       document.getElementById("joinLinkText").href = playURL;
       document.getElementById("qrImage").src = "/api/qr.svg?url=" + encodeURIComponent(playURL);
 
-      // Render 3 WorkerPool Slots
       const workersEl = document.getElementById("workersRow");
       workersEl.innerHTML = (snap.workers || []).map(w => {
         const busy = !!w.active_actor;
         return `
           <div class="worker-card ${busy ? 'busy' : ''}">
             <div class="worker-top">
-              <span>Worker Pod #${w.index} (${w.worker_pod.slice(-5)})</span>
+              <span>WORKER POD #${w.index} (${w.worker_pod.slice(-5)})</span>
               <span class="worker-ip">${w.ip}</span>
             </div>
             <div class="worker-slot-pill">
@@ -543,51 +732,68 @@
         `;
       }).join("");
 
-      // Render Player Session Cards
       const gridEl = document.getElementById("actorsGrid");
       const sessions = snap.sessions || [];
       if (sessions.length === 0) {
-        gridEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px;border:1px dashed var(--border);border-radius:12px;">
-          No player actors yet. Scan the QR code, open <code>/play</code>, or click <strong>Run Automated Demo Hero</strong> above!
+        gridEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:18px;border:1.5px dashed var(--border);border-radius:8px;">
+          No player actors yet. Scan the QR code, open <code>/play</code>, or click <strong>Spawn Demo Bot</strong> above!
         </div>`;
       } else {
         gridEl.innerHTML = sessions.map(rec => {
           const s = rec.session;
           const inv = s.inventory || [];
-          let statusBadge = `<span class="badge badge-suspended">SUSPENDED IN GCS</span>`;
+          const cps = (s.checkpoints && s.checkpoints.length > 0)
+            ? [...s.checkpoints].reverse()
+            : [{ version: rec.save_count || 1, floor: s.floor || 1, label: "Latest Snapshot" }];
+          const latestVer = cps[0].version || rec.save_count || 1;
+
+          let statusBadge = `<span class="badge badge-suspended">SNAPSHOT v${latestVer} &bull; GCS</span>`;
           let cardClass = "actor-card";
           if (!s.alive) {
-            statusBadge = `<span class="badge badge-dead">DEAD (UNCOMMITTED RAM)</span>`;
+            statusBadge = `<span class="badge badge-dead">DEAD IN RAM</span>`;
             cardClass += " state-dead";
           } else if (s.victory) {
-            statusBadge = `<span class="badge badge-victory">VICTORY ESCAPED</span>`;
+            statusBadge = `<span class="badge badge-victory">VICTORY v${latestVer}</span>`;
             cardClass += " state-victory";
           } else if (rec.state === "ACTOR_STATE_RUNNING") {
-            statusBadge = `<span class="badge badge-running">RUNNING ON POD</span>`;
+            statusBadge = `<span class="badge badge-running">ACTIVE ON POD</span>`;
           }
 
           const hpPct = Math.max(0, Math.min(100, Math.round((s.hp / (s.max_hp || 100)) * 100)));
           const podTrail = (s.pod_ip_history && s.pod_ip_history.length > 0)
             ? s.pod_ip_history.join(" -> ")
             : (rec.assigned_worker_ip || "gs://snapshot");
+          const potions = inv.filter(i => i === "healing-potion").length;
+          const chosenVer = selectedVersionByActor[rec.actor_name] || 0;
+
+          const optionsHTML = cps.map((cp, idx) => {
+            const v = cp.version || (cps.length - idx);
+            const sel = (chosenVer === v || (chosenVer === 0 && idx === 0)) ? "selected" : "";
+            return `<option value="${v}" ${sel}>[v${v}] FL${cp.floor || 1} • ${cp.label || 'Snapshot'}</option>`;
+          }).join("");
 
           return `
             <div class="${cardClass}">
               <div class="actor-hdr">
-                <div class="actor-name">
-                  <span>${s.hero_name || rec.actor_name}</span>
-                  <span style="font-size:11px;color:var(--muted);font-weight:500;">(${rec.actor_name})</span>
+                <div class="hero-ident">
+                  <div class="avatar-box">
+                    <canvas id="av-${rec.actor_name}" data-class="${s.character_class || 'paladin'}" width="16" height="16"></canvas>
+                  </div>
+                  <div style="min-width:0;">
+                    <div class="actor-name">${s.hero_name || rec.actor_name}</div>
+                    <div class="actor-sub">${rec.actor_name} &bull; Reverts: ${rec.revert_count}</div>
+                  </div>
                 </div>
                 ${statusBadge}
               </div>
 
-              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
-                <span>Floor <strong style="color:var(--text)">${s.floor} / 3</strong> &bull; Score <strong style="color:var(--cyan)">${s.score}</strong></span>
-                <span>HP <strong style="color:var(--text)">${s.hp}/${s.max_hp || 100}</strong> &bull; Saves: <strong>${rec.save_count}</strong> &bull; Reverts: <strong style="color:var(--amber)">${rec.revert_count}</strong></span>
-              </div>
-
               <div class="hp-bar-outer">
-                <div class="hp-bar-inner ${hpPct <= 35 ? 'low' : ''}" style="width:${hpPct}%"></div>
+                <div class="hp-bar-inner" style="width:${hpPct}%"></div>
+                <div class="hp-bar-segments"></div>
+                <div class="hp-bar-label">
+                  <span>HP ${s.hp}/${s.max_hp || 100}</span>
+                  <span>FL ${s.floor}/3 &bull; ${s.score} PTS</span>
+                </div>
               </div>
 
               <div class="inv-row">
@@ -595,29 +801,38 @@
                 <span class="inv-chip ${inv.includes('dragon-slayer-sword') ? 'active' : ''}">${SVG_ICONS.sword} Sword</span>
                 <span class="inv-chip ${inv.includes('fire-shield') ? 'active' : ''}">${SVG_ICONS.shield} Shield</span>
                 <span class="inv-chip ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
+                <span class="inv-chip ${potions > 0 ? 'active' : ''}">${SVG_ICONS.potion} x${potions}</span>
               </div>
 
-              <div class="pod-trail" title="Worker Pod IP Hop History">Pod Hops: ${podTrail}</div>
-              <div style="font-size:11px;color:#cbd5e1;line-height:1.35;">${rec.last_message || s.last_event || ''}</div>
+              <div class="pod-trail" title="Worker Pod IP Hop Trail">POD HOPS: ${podTrail}</div>
 
-              <div style="display:flex;gap:6px;margin-top:2px;">
-                <button class="btn btn-warn" style="flex:1;padding:6px 8px;" onclick="revertActor('${rec.actor_name}')">
-                  ${SVG_ICONS.revert} Revert
+              <div class="card-actions">
+                <select class="ver-select" onchange="selectedVersionByActor['${rec.actor_name}'] = parseInt(this.value, 10)" title="Select Snapshot Version to Revert To">
+                  ${optionsHTML}
+                </select>
+                <button class="btn btn-warn icon-sq-btn" onclick="revertActor('${rec.actor_name}')" title="Revert Actor to Selected Snapshot Version">
+                  ${SVG_ICONS.revert}
                 </button>
-                <button class="btn btn-fork" style="flex:1;padding:6px 8px;" onclick="forkActor('${rec.actor_name}')">
-                  ${SVG_ICONS.fork} Fork
+                <button class="btn btn-fork icon-sq-btn" onclick="forkActor('${rec.actor_name}')" title="Fork Parallel Timeline (--tag)">
+                  ${SVG_ICONS.fork}
                 </button>
-                <a class="btn" style="padding:6px 8px;" href="/play?actor=${encodeURIComponent(rec.actor_name)}" target="_blank">Play</a>
-                <button class="btn btn-danger" style="padding:6px 8px;" onclick="deleteActor('${rec.actor_name}')">
+                <a class="btn icon-sq-btn" href="/play?actor=${encodeURIComponent(rec.actor_name)}" target="_blank" title="Open in Player View">
+                  ${SVG_ICONS.play}
+                </a>
+                <button class="btn btn-danger icon-sq-btn" onclick="deleteActor('${rec.actor_name}')" title="Delete Actor & Snapshots">
                   ${SVG_ICONS.trash}
                 </button>
               </div>
             </div>
           `;
         }).join("");
+
+        sessions.forEach(rec => {
+          const c = document.getElementById("av-" + rec.actor_name);
+          if (c) drawAvatar(c, c.dataset.class);
+        });
       }
 
-      // Render Event Feed
       const feedEl = document.getElementById("feedList");
       feedEl.innerHTML = (snap.events || []).slice(0, 30).map(ev => `
         <div class="feed-item ev-${ev.type}">
@@ -641,11 +856,13 @@
     }
 
     async function revertActor(actorName) {
+      const targetVersion = selectedVersionByActor[actorName] || 0;
       await fetch("/api/session/revert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor_name: actorName })
+        body: JSON.stringify({ actor_name: actorName, target_version: targetVersion })
       });
+      delete selectedVersionByActor[actorName];
       refreshState();
     }
 
@@ -676,7 +893,6 @@
       });
     }
 
-    // Subscribe to real-time SSE + periodic reconciliation
     try {
       const es = new EventSource("/api/dashboard/events");
       es.onmessage = () => refreshState();

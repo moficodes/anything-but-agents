@@ -105,7 +105,7 @@ type SubstrateBackend interface {
 	StartSession(ctx context.Context, heroName, charClass string) (SessionRecord, error)
 	GetSession(ctx context.Context, actorName string) (SessionRecord, error)
 	ExecuteMilestone(ctx context.Context, actorName string, req MutateRequest) (SessionRecord, error)
-	RevertSession(ctx context.Context, actorName string) (SessionRecord, error)
+	RevertSession(ctx context.Context, actorName string, targetVersion ...int) (SessionRecord, error)
 	ForkSession(ctx context.Context, sourceActor, newActor string) (SessionRecord, error)
 	DeleteSession(ctx context.Context, actorName string) error
 	DashboardState(ctx context.Context) (DashboardSnapshot, error)
@@ -389,8 +389,13 @@ func (b *LocalSimulatorBackend) ExecuteMilestone(_ context.Context, actorName st
 	return out, nil
 }
 
-func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName string) (SessionRecord, error) {
+func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName string, targetVersion ...int) (SessionRecord, error) {
 	actorName = sanitizeActorName(actorName)
+	targetVer := 0
+	if len(targetVersion) > 0 {
+		targetVer = targetVersion[0]
+	}
+
 	b.mu.Lock()
 	rec, ok := b.records[actorName]
 	if !ok {
@@ -402,16 +407,19 @@ func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName strin
 	var restored *ActorSession
 	var snapResp ActorResponse
 
-	if !rec.Session.Alive && b.gcsSnapshots[actorName] != nil && b.gcsSnapshots[actorName].Alive {
+	if !rec.Session.Alive && b.gcsSnapshots[actorName] != nil && b.gcsSnapshots[actorName].Alive && targetVer == 0 {
 		// Player was dead (uncommitted RAM): restore last committed GCS snapshot directly
 		restored = b.gcsSnapshots[actorName].Clone()
 		snapResp = restored.Snapshot(slot.IP)
 		rec.LastMessage = fmt.Sprintf("SAVE-SCUM SUCCESS (`kubectl ate revert actor %s`): discarded dead RAM and restored GCS snapshot v%d on Floor %d (HP: %d/%d)!",
 			actorName, rec.SnapshotVersion, snapResp.Session.Floor, snapResp.Session.HP, snapResp.Session.MaxHP)
+	} else if b.gcsSnapshots[actorName] != nil {
+		restored = b.gcsSnapshots[actorName].Clone()
+		snapResp = restored.Mutate(MutateRequest{Action: "restore_checkpoint", TargetVersion: targetVer}, slot.IP)
+		rec.LastMessage = snapResp.Message
 	} else if b.liveActors[actorName] != nil {
-		// Player was alive: rewind actor heap to its last Quicksave / Floor-Entry Checkpoint
 		restored = b.liveActors[actorName].Clone()
-		snapResp = restored.Mutate(MutateRequest{Action: "restore_checkpoint"}, slot.IP)
+		snapResp = restored.Mutate(MutateRequest{Action: "restore_checkpoint", TargetVersion: targetVer}, slot.IP)
 		rec.LastMessage = snapResp.Message
 	} else {
 		restored = NewActorSession()
@@ -422,6 +430,9 @@ func (b *LocalSimulatorBackend) RevertSession(_ context.Context, actorName strin
 	b.liveActors[actorName] = restored
 	b.gcsSnapshots[actorName] = restored.Clone()
 
+	if snapResp.Session.Checkpoint != nil && snapResp.Session.Checkpoint.Version > 0 {
+		rec.SnapshotVersion = snapResp.Session.Checkpoint.Version
+	}
 	rec.State = "ACTOR_STATE_SUSPENDED"
 	rec.RevertCount++
 	rec.AssignedWorkerIP = slot.IP
@@ -929,8 +940,12 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 	return out, nil
 }
 
-func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string) (SessionRecord, error) {
+func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string, targetVersion ...int) (SessionRecord, error) {
 	actorName = sanitizeActorName(actorName)
+	targetVer := 0
+	if len(targetVersion) > 0 {
+		targetVer = targetVersion[0]
+	}
 
 	c.mu.Lock()
 	existingRec := c.records[actorName]
@@ -941,7 +956,7 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 	var latencyMs int64
 	var err error
 
-	if wasDead {
+	if wasDead && targetVer == 0 {
 		// Player died in RAM (actor was left ACTOR_STATE_RUNNING uncommitted):
 		// Call `kubectl ate revert actor <name> -a <atespace>` to discard the fatal RAM
 		// mutation and restore the last committed GCS snapshot!
@@ -959,26 +974,32 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 		// If the restored snapshot somehow still had !Alive, restore checkpoint
 		if !actorResp.Session.Alive {
 			actorResp, latencyMs, err = c.callActorHTTP(ctx, actorName, http.MethodPost, "/mutate", MutateRequest{
-				Action: "restore_checkpoint",
+				Action:        "restore_checkpoint",
+				TargetVersion: targetVer,
 			})
 			if err != nil {
 				return SessionRecord{}, err
 			}
 		} else {
-			actorResp.Message = fmt.Sprintf("SAVE-SCUMMED (`kubectl ate revert actor %s`): discarded dead RAM and restored GCS snapshot on Floor %d (HP: %d/%d)!",
-				actorName, actorResp.Session.Floor, actorResp.Session.HP, actorResp.Session.MaxHP)
+			ver := 1
+			if actorResp.Session.Checkpoint != nil && actorResp.Session.Checkpoint.Version > 0 {
+				ver = actorResp.Session.Checkpoint.Version
+			}
+			actorResp.Message = fmt.Sprintf("SAVE-SCUMMED (`kubectl ate revert actor %s` -> v%d): discarded dead RAM and restored GCS snapshot v%d on Floor %d (HP: %d/%d)!",
+				actorName, ver, ver, actorResp.Session.Floor, actorResp.Session.HP, actorResp.Session.MaxHP)
 		}
 	} else {
-		// Player clicked "Revert Actor (Save-Scum)" while alive (actor is SUSPENDED in GCS):
+		// Player clicked "Revert Actor (Save-Scum)" or selected a specific version vK:
 		// 1. Wake the actor via atenet-router so it is ACTOR_STATE_RUNNING (required by `kubectl-ate revert`).
 		_, _, _ = c.callActorHTTP(ctx, actorName, http.MethodGet, "/state", nil)
 		// 2. Execute `kubectl-ate revert actor <name> -a <atespace>` to revert the running execution.
 		if _, revErr := c.runAte(ctx, "revert", "actor", actorName, "-a", c.atespace); revErr != nil {
 			slog.Warn("kubectl-ate revert on live session returned warning", slog.String("actor", actorName), slog.Any("err", revErr))
 		}
-		// 3. Rewind the actor's Go heap to its last Quicksave / Floor-Entry Checkpoint!
+		// 3. Rewind the actor's Go heap to the requested Checkpoint Version (or latest if targetVer == 0)!
 		actorResp, latencyMs, err = c.callActorHTTP(ctx, actorName, http.MethodPost, "/mutate", MutateRequest{
-			Action: "restore_checkpoint",
+			Action:        "restore_checkpoint",
+			TargetVersion: targetVer,
 		})
 		if err != nil {
 			return SessionRecord{}, err
@@ -1002,6 +1023,9 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string)
 	}
 	if snapURI != "" {
 		rec.SnapshotURI = snapURI
+	}
+	if actorResp.Session.Checkpoint != nil && actorResp.Session.Checkpoint.Version > 0 {
+		rec.SnapshotVersion = actorResp.Session.Checkpoint.Version
 	}
 	workerPod := c.markWorkerBusyLocked(actorResp.Session.CurrentPodIP, workerPodName, actorName, actorResp.Session.HeroName, "revert")
 	rec.State = "ACTOR_STATE_SUSPENDED"

@@ -262,6 +262,16 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 		t.Fatalf("expected revert after potion to keep both chest and potion at (3,7), got Cleared=%v Pos=(%d,%d)",
 			revPotion.Session.Cleared, revPotion.Session.X, revPotion.Session.Y)
 	}
+
+	// 7. Test reverting to a specific earlier snapshot version (v2 = right after gold-chest, before potion):
+	revV2, err := b.RevertSession(t.Context(), "d2d-stepper", 2)
+	if err != nil {
+		t.Fatalf("RevertSession to v2 failed: %v", err)
+	}
+	if !revV2.Session.Cleared["f1:chest"] || revV2.Session.Cleared["f1:potion"] || revV2.Session.X != 5 || revV2.Session.Y != 2 {
+		t.Fatalf("expected revert to v2 to keep chest looted at (5,2) and un-clear potion, got Cleared=%v Pos=(%d,%d)",
+			revV2.Session.Cleared, revV2.Session.X, revV2.Session.Y)
+	}
 }
 
 func TestGatewayAndDashboardIntegration(t *testing.T) {
