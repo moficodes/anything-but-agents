@@ -129,6 +129,8 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			CharacterClass string `json:"character_class"`
 			X              int    `json:"x"`
 			Y              int    `json:"y"`
+			PrevX          int    `json:"prev_x"`
+			PrevY          int    `json:"prev_y"`
 		}
 		if r.Body != nil {
 			body, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
@@ -147,6 +149,8 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			CharacterClass: payload.CharacterClass,
 			X:              payload.X,
 			Y:              payload.Y,
+			PrevX:          payload.PrevX,
+			PrevY:          payload.PrevY,
 		})
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

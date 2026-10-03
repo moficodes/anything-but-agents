@@ -1241,7 +1241,7 @@
       state.floatTexts.push({ x: x * TILE + 16, y: y * TILE + 10, text, color, life: 52 });
     }
 
-    async function sendMilestone(action, target, entityId, x, y) {
+    async function sendMilestone(action, target, entityId, x, y, prevX, prevY) {
       if (state.busy) return;
       setActorWaking(`WAKING ${state.actorName} VIA ATENET-ROUTER (${action.toUpperCase()})...`);
       try {
@@ -1254,7 +1254,9 @@
             target,
             entity_id: entityId,
             x,
-            y
+            y,
+            prev_x: prevX !== undefined ? prevX : x,
+            prev_y: prevY !== undefined ? prevY : y
           })
         });
         const rec = await res.json();
@@ -1275,12 +1277,12 @@
         return;
       }
       addFloatText(state.x, state.y, "+50 HP", "#34d399");
-      await sendMilestone("drink", "healing-potion", "", state.x, state.y);
+      await sendMilestone("drink", "healing-potion", "", state.x, state.y, state.x, state.y);
     }
 
     async function triggerQuicksave() {
       addFloatText(state.x, state.y, "CHECKPOINT SAVED!", "#38bdf8");
-      await sendMilestone("quicksave", `f${state.floor}:shrine`, `f${state.floor}:shrine`, state.x, state.y);
+      await sendMilestone("quicksave", `f${state.floor}:shrine`, `f${state.floor}:shrine`, state.x, state.y, state.x, state.y);
     }
 
     async function triggerRevert() {
@@ -1332,6 +1334,8 @@
       const map = FLOOR_MAPS[state.floor];
       if (!map) return;
 
+      const prevX = state.x;
+      const prevY = state.y;
       const nx = state.x + dx;
       const ny = state.y + dy;
       if (ny < 0 || ny >= GRID_H || nx < 0 || nx >= GRID_W) return;
@@ -1348,30 +1352,30 @@
           state.x = nx;
           state.y = ny;
           addFloatText(nx, ny, "+" + ent.label, ent.color);
-          sendMilestone("pickup", ent.target, ent.id, nx, ny);
+          sendMilestone("pickup", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
         if (ent.type === "monster" || ent.type === "boss") {
-          sendMilestone("combat", ent.target, ent.id, state.x, state.y);
+          sendMilestone("combat", ent.target, ent.id, state.x, state.y, prevX, prevY);
           return;
         }
         if (ent.type === "shrine") {
           state.x = nx;
           state.y = ny;
           addFloatText(nx, ny, "QUICKSAVE TAG!", "#f59e0b");
-          sendMilestone("quicksave", ent.target, ent.id, nx, ny);
+          sendMilestone("quicksave", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
         if (ent.type === "stairs") {
           state.x = nx;
           state.y = ny;
-          sendMilestone("stairs", ent.target, ent.id, nx, ny);
+          sendMilestone("stairs", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
         if (ent.type === "portal") {
           state.x = nx;
           state.y = ny;
-          sendMilestone("escape", ent.target, ent.id, nx, ny);
+          sendMilestone("escape", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
       }

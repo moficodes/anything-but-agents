@@ -190,8 +190,8 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 			revertedRec.Session.Alive, revertedRec.Session.HP, revertedRec.RevertCount)
 	}
 
-	// 6. Also test live-session Revert (when player is ALIVE after taking enemy counter-damage):
-	// Fight Shadow Guard (takes -25 HP counter damage), then click Revert Actor -> rewinds HP back to checkpoint!
+	// 6. Test live-session 1-action-at-a-time Revert:
+	// First fight Shadow Guard (takes -25 HP counter damage), then click Revert Actor -> rewinds HP back to 100!
 	damagedRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "combat", Target: "Shadow Guard", EntityID: "f2:guard"})
 	if err != nil {
 		t.Fatalf("guard combat failed: %v", err)
@@ -205,6 +205,51 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 	if liveRevertedRec.Session.HP != 100 || liveRevertedRec.RevertCount != 2 {
 		t.Fatalf("expected live RevertSession to restore checkpoint HP=100, got HP=%d Reverts=%d", liveRevertedRec.Session.HP, liveRevertedRec.RevertCount)
+	}
+
+	// 7. Test sequential item pickup revert (pick up chest -> pick up potion -> revert once keeps chest and undoes only potion):
+	_, err = b.StartSession(t.Context(), "stepper", "ranger")
+	if err != nil {
+		t.Fatalf("StartSession stepper failed: %v", err)
+	}
+	_, err = b.ExecuteMilestone(t.Context(), "d2d-stepper", MutateRequest{
+		Action: "pickup", Target: "gold-chest", EntityID: "f1:chest", X: 5, Y: 2, PrevX: 4, PrevY: 2,
+	})
+	if err != nil {
+		t.Fatalf("pickup chest failed: %v", err)
+	}
+	afterPotion, err := b.ExecuteMilestone(t.Context(), "d2d-stepper", MutateRequest{
+		Action: "pickup", Target: "healing-potion", EntityID: "f1:potion", X: 3, Y: 7, PrevX: 3, PrevY: 6,
+	})
+	if err != nil {
+		t.Fatalf("pickup potion failed: %v", err)
+	}
+	if !afterPotion.Session.Cleared["f1:chest"] || !afterPotion.Session.Cleared["f1:potion"] {
+		t.Fatalf("expected both chest and potion cleared, got %v", afterPotion.Session.Cleared)
+	}
+
+	// Revert #1: undoes ONLY the potion pickup; chest stays looted and player steps back to (3, 6)
+	rev1, err := b.RevertSession(t.Context(), "d2d-stepper")
+	if err != nil {
+		t.Fatalf("RevertSession #1 failed: %v", err)
+	}
+	if !rev1.Session.Cleared["f1:chest"] || rev1.Session.Cleared["f1:potion"] {
+		t.Fatalf("expected chest to stay cleared and potion to be restored after 1st revert, got Cleared=%v", rev1.Session.Cleared)
+	}
+	if rev1.Session.X != 3 || rev1.Session.Y != 6 {
+		t.Fatalf("expected player to step back to (3,6) before potion pickup, got (%d,%d)", rev1.Session.X, rev1.Session.Y)
+	}
+
+	// Revert #2: undoes the chest pickup; player steps back to (4, 2)
+	rev2, err := b.RevertSession(t.Context(), "d2d-stepper")
+	if err != nil {
+		t.Fatalf("RevertSession #2 failed: %v", err)
+	}
+	if rev2.Session.Cleared["f1:chest"] {
+		t.Fatalf("expected chest to be restored after 2nd revert, got Cleared=%v", rev2.Session.Cleared)
+	}
+	if rev2.Session.X != 4 || rev2.Session.Y != 2 {
+		t.Fatalf("expected player to step back to (4,2) before chest pickup, got (%d,%d)", rev2.Session.X, rev2.Session.Y)
 	}
 }
 
