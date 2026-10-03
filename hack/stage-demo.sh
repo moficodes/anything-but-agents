@@ -212,6 +212,12 @@ deploy_all() {
   envsubst < "${REPO_ROOT}/manifests/workerpool.yaml.tmpl" | kubectl apply -f -
   kubectl rollout status deployment/anything-but-agents -n anything-but-agents --timeout=300s
 
+  if ! kubectl get secret dungeon2d-gateway -n anything-but-agents >/dev/null 2>&1; then
+    kubectl create secret generic dungeon2d-gateway \
+      -n anything-but-agents \
+      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
+  fi
+
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
@@ -339,11 +345,16 @@ act1b_dungeon2d() {
 
   local gateway_port="${DUNGEON2D_PORT:-8090}"
   local gateway_url="http://localhost:${gateway_port}"
+  local presenter_token
+  presenter_token="$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(openssl rand -hex 24)"
+  fi
 
   echo "Starting dungeon2d Gateway & Live Mission-Control Dashboard on ${gateway_url}..."
   (
     cd "${REPO_ROOT}"
-    go run ./cmd/dungeon2d \
+    PRESENTER_TOKEN="${presenter_token}" go run ./cmd/dungeon2d \
       --mode=gateway \
       --addr=":${gateway_port}" \
       --atespace="${ATESPACE}" \
@@ -361,7 +372,7 @@ act1b_dungeon2d() {
   done
 
   echo ""
-  echo "  Projector Mission-Control Dashboard : ${gateway_url}/dashboard"
+  echo "  Projector Mission-Control Dashboard : ${gateway_url}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo "  Player 2D Mobile Game Frontend      : ${gateway_url}/play"
   echo ""
 

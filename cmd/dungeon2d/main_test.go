@@ -276,13 +276,58 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 
 func TestGatewayAndDashboardIntegration(t *testing.T) {
 	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
-	gw := NewGatewayServer(b, "http://localhost:8090")
+	gw := NewGatewayServer(b, "http://localhost:8090", "test-presenter-secret")
 	srv := httptest.NewServer(gw.Mux())
 	defer srv.Close()
 
-	// 1. Verify /play and /dashboard serve embedded HTML with inline Lucide SVGs and zero emojis
+	// 0. Verify /dashboard and /api/dashboard/state require presenter auth (401 Unauthorized without key)
+	unauthResp, err := http.Get(srv.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("GET /dashboard failed: %v", err)
+	}
+	unauthResp.Body.Close()
+	if unauthResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from unauthenticated GET /dashboard, got %d", unauthResp.StatusCode)
+	}
+
+	unauthAPIResp, err := http.Get(srv.URL + "/api/dashboard/state")
+	if err != nil {
+		t.Fatalf("GET /api/dashboard/state failed: %v", err)
+	}
+	unauthAPIResp.Body.Close()
+	if unauthAPIResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from unauthenticated GET /api/dashboard/state, got %d", unauthAPIResp.StatusCode)
+	}
+
+	// Verify ?key= sets HttpOnly d2d_presenter cookie and redirects (303 SeeOther) to /dashboard
+	noRedirClient := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	keyResp, err := noRedirClient.Get(srv.URL + "/dashboard?key=test-presenter-secret")
+	if err != nil {
+		t.Fatalf("GET /dashboard?key= failed: %v", err)
+	}
+	keyResp.Body.Close()
+	if keyResp.StatusCode != http.StatusSeeOther || keyResp.Header.Get("Location") != "/dashboard" {
+		t.Fatalf("expected 303 redirect to /dashboard, got status=%d loc=%q", keyResp.StatusCode, keyResp.Header.Get("Location"))
+	}
+	var presenterCookie *http.Cookie
+	for _, c := range keyResp.Cookies() {
+		if c.Name == PresenterCookieName {
+			presenterCookie = c
+		}
+	}
+	if presenterCookie == nil || !presenterCookie.HttpOnly {
+		t.Fatalf("expected HttpOnly %s cookie, got %+v", PresenterCookieName, keyResp.Cookies())
+	}
+
+	// 1. Verify /play and authenticated /dashboard serve embedded HTML with inline Lucide SVGs and zero emojis
 	for _, path := range []string{"/play", "/dashboard"} {
-		resp, err := http.Get(srv.URL + path)
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+		if path == "/dashboard" {
+			req.AddCookie(presenterCookie)
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("GET %s failed: %v", path, err)
 		}
@@ -305,6 +350,9 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 			if !bytes.Contains(raw.Bytes(), []byte("helpModal")) || !bytes.Contains(raw.Bytes(), []byte("preview-paladin")) {
 				t.Fatalf("expected How-to-Play modal and pixel-art class previews in /play")
 			}
+			if bytes.Contains(raw.Bytes(), []byte("/dashboard")) {
+				t.Fatalf("expected /play to have no link back to /dashboard")
+			}
 		}
 	}
 
@@ -321,17 +369,22 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 	}
 
 	// 3. Start session via POST /api/session/start
-	postJSON := func(path string, payload any) *http.Response {
+	postJSON := func(path string, payload any, withPresenter bool) *http.Response {
 		t.Helper()
 		b, _ := json.Marshal(payload)
-		r, err := http.Post(srv.URL+path, "application/json", bytes.NewReader(b))
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		if withPresenter {
+			req.Header.Set(PresenterHeaderName, gw.PresenterKey())
+		}
+		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("POST %s failed: %v", path, err)
 		}
 		return r
 	}
 
-	r := postJSON("/api/session/start", map[string]string{"hero_name": "aria", "character_class": "ranger"})
+	r := postJSON("/api/session/start", map[string]string{"hero_name": "aria", "character_class": "ranger"}, false)
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from /api/session/start, got %d", r.StatusCode)
 	}
@@ -345,24 +398,26 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 		"entity_id":  "f1:key",
 		"x":          11,
 		"y":          3,
-	})
+	}, false)
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from /api/session/action, got %d", r.StatusCode)
 	}
 	r.Body.Close()
 
-	// 5. Run demo bot step via POST /api/session/bot
+	// 5. Run demo bot step via POST /api/session/bot (presenter-protected)
 	r = postJSON("/api/session/bot", map[string]any{
 		"hero_name": "bot-knight",
 		"mode":      "full-demo",
-	})
+	}, true)
 	if r.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 from /api/session/bot, got %d", r.StatusCode)
 	}
 	r.Body.Close()
 
-	// 6. Verify /api/dashboard/state includes both sessions and stats
-	stateResp, err := http.Get(srv.URL + "/api/dashboard/state")
+	// 6. Verify /api/dashboard/state includes both sessions and stats (presenter-protected)
+	stateReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/state", nil)
+	stateReq.Header.Set(PresenterHeaderName, gw.PresenterKey())
+	stateResp, err := http.DefaultClient.Do(stateReq)
 	if err != nil {
 		t.Fatalf("GET /api/dashboard/state failed: %v", err)
 	}
@@ -375,5 +430,6 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 		t.Fatalf("expected bot-knight victory & revert in dashboard stats, got %+v", dash.Stats)
 	}
 }
+
 
 

@@ -16,11 +16,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -28,15 +32,159 @@ import (
 //go:embed web/*.html
 var webFS embed.FS
 
+const (
+	// PresenterCookieName is the HttpOnly cookie set when the presenter unlocks /dashboard?key=<PRESENTER_TOKEN>.
+	PresenterCookieName = "d2d_presenter"
+	// PresenterHeaderName carries the presenter token for CLI scripts and tests.
+	PresenterHeaderName = "X-Presenter-Key"
+)
+
+const presenterKeyRequiredPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presenter Key Required — Substrate Dungeon</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 20%, #161d2b 0%, #0b0e14 80%);
+      color: #f3f4f6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      max-width: 560px;
+      width: 100%;
+      background: #141923;
+      border: 1.5px solid #c28d42;
+      border-radius: 10px;
+      padding: 22px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      color: #fde68a;
+    }
+    p {
+      margin: 0;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    pre {
+      margin: 0;
+      padding: 10px 12px;
+      background: #0b0e14;
+      border: 1px solid #2c3548;
+      border-radius: 6px;
+      color: #38bdf8;
+      font-size: 11px;
+      overflow-x: auto;
+    }
+    form {
+      display: flex;
+      gap: 8px;
+    }
+    input {
+      flex: 1;
+      padding: 9px 11px;
+      border-radius: 6px;
+      border: 1.5px solid #2c3548;
+      background: #0b0e14;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    button {
+      padding: 9px 14px;
+      border-radius: 6px;
+      border: 1.5px solid #c28d42;
+      background: rgba(194, 141, 66, 0.2);
+      color: #fde68a;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Presenter Key Required</h1>
+    <p>The Mission Control Dashboard is restricted to the presenter and GKE cluster owner. Open this page with <code>?key=&lt;PRESENTER_TOKEN&gt;</code> or paste the token below:</p>
+    <form method="GET" action="/dashboard">
+      <input type="password" name="key" placeholder="Paste PRESENTER_TOKEN..." required />
+      <button type="submit">Unlock</button>
+    </form>
+    <p>Retrieve <code>PRESENTER_TOKEN</code> from the <code>dungeon2d-gateway</code> Kubernetes Secret:</p>
+    <pre>kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d</pre>
+  </div>
+</body>
+</html>
+`
+
 type GatewayServer struct {
-	backend   SubstrateBackend
-	publicURL string
+	backend      SubstrateBackend
+	publicURL    string
+	presenterKey string
 }
 
-func NewGatewayServer(backend SubstrateBackend, publicURL string) *GatewayServer {
+func randomPresenterKey() string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func NewGatewayServer(backend SubstrateBackend, publicURL string, presenterKeys ...string) *GatewayServer {
+	var key string
+	if len(presenterKeys) > 0 {
+		key = strings.TrimSpace(presenterKeys[0])
+	}
+	if key == "" {
+		key = strings.TrimSpace(os.Getenv("PRESENTER_TOKEN"))
+	}
+	if key == "" {
+		key = randomPresenterKey()
+	}
 	return &GatewayServer{
-		backend:   backend,
-		publicURL: strings.TrimRight(publicURL, "/"),
+		backend:      backend,
+		publicURL:    strings.TrimRight(publicURL, "/"),
+		presenterKey: key,
+	}
+}
+
+func (g *GatewayServer) PresenterKey() string {
+	return g.presenterKey
+}
+
+// IsPresenter reports whether the request carries the presenter key in either
+// the X-Presenter-Key header or the d2d_presenter cookie.
+func (g *GatewayServer) IsPresenter(r *http.Request) bool {
+	key := r.Header.Get(PresenterHeaderName)
+	if key == "" {
+		if c, err := r.Cookie(PresenterCookieName); err == nil {
+			key = c.Value
+		}
+	}
+	return key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterKey)) == 1
+}
+
+func (g *GatewayServer) requirePresenter(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !g.IsPresenter(r) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "presenter key required"})
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -54,7 +202,24 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		_, _ = w.Write(raw)
 	})
 
-	mux.HandleFunc("/dashboard", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		if key := r.URL.Query().Get("key"); key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterKey)) == 1 {
+			http.SetCookie(w, &http.Cookie{
+				Name:     PresenterCookieName,
+				Value:    g.presenterKey,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+			})
+			http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+			return
+		}
+		if !g.IsPresenter(r) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(presenterKeyRequiredPage))
+			return
+		}
 		raw, _ := webFS.ReadFile("web/dashboard.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(raw)
@@ -199,7 +364,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, rec)
 	})
 
-	mux.HandleFunc("/api/session/delete", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/session/delete", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			ActorName string `json:"actor_name"`
 		}
@@ -215,9 +380,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"deleted": payload.ActorName})
-	})
+	}))
 
-	mux.HandleFunc("/api/session/bot", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/session/bot", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			HeroName string `json:"hero_name"`
 			Mode     string `json:"mode"`
@@ -236,9 +401,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
-	})
+	}))
 
-	mux.HandleFunc("/api/dashboard/state", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/dashboard/state", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		snap, err := g.backend.DashboardState(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -248,9 +413,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			snap.PublicURL = g.publicURL
 		}
 		writeJSON(w, http.StatusOK, snap)
-	})
+	}))
 
-	mux.HandleFunc("/api/dashboard/events", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/dashboard/events", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -276,7 +441,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 				flusher.Flush()
 			}
 		}
-	})
+	}))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
