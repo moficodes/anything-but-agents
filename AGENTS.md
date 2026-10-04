@@ -12,7 +12,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a 2D canvas roguelike (`/play`, public) and a Kubernetes Secret token-gated presenter leaderboard (`/dashboard?token=...`). Demonstrates milestone-driven `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
 2. **`cmd/coldstart` ("The Instant Cloner")**: Simulates a 12-second heavy initialization (`--init-delay=12s` and Sieve of Eratosthenes up to `1,000,000`) before `/readyz` flips from `503` to `200 OK`. Demonstrates how `ActorTemplate` `wakeupProbe` captures a post-init **Golden Snapshot** (`golden_heap_fingerprint`) so new actors clone in ~100ms.
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Single-tenant embedded key-value store backed by a `DurableDir` volume (`/data/wal.jsonl`) plus an in-memory buffer pool and query counter. Demonstrates split snapshot scopes (`onPause: SNAPSHOT_CONTENT_SCOPE_FULL` for hot local resume vs. `onCommit: SNAPSHOT_CONTENT_SCOPE_DATA` for compact GCS storage + WAL replay on boot) and 1-command GDPR deletion (`kubectl ate delete actor ... --any-state`).
-4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Per-attacker-IP deception sandbox running in `gVisor` (`SANDBOX_CLASS_GVISOR`). Uses `SNAPSHOT_CONTENT_SCOPE_FULL` to persist both container rootfs overlay modifications (`/tmp/honeypot/*`) and in-memory forensic audit logs across suspends at $0 idle compute cost.
+4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`SANDBOX_CLASS_GVISOR`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Intentional anti-pattern demonstrating **Wall-Clock Time-Jump Shock** and **Raft Split-Brain**. Runs a 100ms heartbeat ticker, a 3s in-memory leader lease, and a naive `time.Since` rate-limiter token bucket; suspending the actor for 5s and resuming causes an immediate split-brain panic and token burst overflow.
 
 ## Repository Structure
@@ -23,7 +23,7 @@ cmd/
   dungeon2d/                    # Demo 1b: 2D Canvas Roguelike & Presenter Gateway (actor + gateway)
   coldstart/                    # Demo 2: 12s cold-start prime sieve -> Golden Snapshot clone
   tenantdb/                     # Demo 3: Per-tenant embedded DB with DurableDir (/data/wal.jsonl)
-  honeypot/                     # Demo 4: Per-attacker gVisor sandbox with rootfs delta persistence
+  honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
   timewarp/                     # Demo 5: Wall-clock time-jump & Raft split-brain anti-pattern
 manifests/
   workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1alpha1 WorkerPool
@@ -38,7 +38,7 @@ hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
 docs/
   talk-outline.md               # 4-act talk outline, sequence diagram, speaker notes & litmus test
-.ko.yaml                        # ko build config (distroless static-debian13, debian13 for dungeon2d)
+.ko.yaml                        # ko build config (distroless static-debian13, debian:13-slim for kubectl-ate & honeypot)
 .env.example                    # Template for local .env (GCP PROJECT_ID, region/cluster defaults)
 ```
 

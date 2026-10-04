@@ -14,7 +14,7 @@ cmd/
   dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — Mobile 2D 3-floor game + Live Mission-Control Dashboard
   coldstart/   # Demo 2: "The Instant Cloner" — 12s cold-start prime sieve skipped via Golden Snapshot
   tenantdb/    # Demo 3: "One DB Per User" — Per-tenant embedded DB with DurableDir + FULL Pause / DATA Commit
-  honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor deception sandbox
+  honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor sandbox + Split-Screen SOC Director's Booth UI
   timewarp/    # Demo 5: "Don't Try This at Home" — Wall-clock time-jump shock & Raft split-brain anti-pattern
 manifests/
   workerpool.yaml.tmpl          # Shared 3-worker gVisor WorkerPool (`anything-but-agents`)
@@ -117,19 +117,25 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 * **Why this demo:**
   High-interaction security honeypots (or per-student CTF boxes, or per-PR preview environments) need strong sandbox isolation because untrusted users are actively trying to break them or modify their filesystems. Running thousands of idle VMs waiting for a scanner to hit them is prohibitively expensive, while stateless low-interaction honeypots are immediately fingerprinted as fake because dropped files vanish on reconnect.
 * **Why this demo specifically:**
-  `cmd/honeypot` poses as a "Legacy Corp Payroll Admin Console" running inside a **`gVisor` (`SANDBOX_CLASS_GVISOR`)** sandbox with a pre-seeded decoy credential file (`payroll_db_credentials.env.bak`). When an attacker (`honeypot-203-0-113-5`) drops `/tmp/honeypot/rootkit.sh` into the container rootfs and runs recon commands, both the modified rootfs overlay and the in-memory forensic audit log are captured.
+  `cmd/honeypot` is a dual-mode binary (`--mode=actor|gateway|local`) with a **Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`)** that puts the audience inside *The Truman Show*:
+  * **Left Pane ("The Movie Set" — Attacker View `/shell`):** Poses as an exposed "AcmeCorp Internal Payroll v1.4" debug console running **real `/bin/sh -c` commands** inside a **`gVisor` (`SANDBOX_CLASS_GVISOR`)** sandbox (`debian:13-slim` base image override in `.ko.yaml`) pre-seeded with decoy lures (`payroll_db_credentials.env.bak` and `wire_transfer_batch_409.csv`). Crucially, `/shell` returns *only* realistic command output (`stdout`, `stderr`, `exit_code`, `files_in_dir`)—never leaking that the environment is a honeypot.
+  * **Right Pane ("The Director's Booth" — Hidden SOC View `/forensics`):** Exposes the silent in-memory surveillance state (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED` / `ADDED` / `MODIFIED` / `DELETED` files, `gvisor_sandbox_proof`, `forensic_audit_trail`, and `pod_ip_history`).
 * **What do we learn:**
-  `SNAPSHOT_CONTENT_SCOPE_FULL` doesn't just capture process RAM—it also captures the **container rootfs delta** on top of the base OCI image, while `gVisor` isolates the kernel syscall surface.
+  1. `SNAPSHOT_CONTENT_SCOPE_FULL` doesn't just capture process RAM—it also captures the **container rootfs delta** (`/tmp/honeypot/*`) on top of the base OCI image, while `gVisor` isolates the kernel syscall surface.
+  2. Because the SOC Gateway **auto-checkpoints (`kubectl ate save actor`)** whenever a Canary alert or rootfs file drop occurs (while skipping auto-checkpoints on destructive `rm` commands), an attacker's anti-forensic `rm -rf` wipe is completely reversible via `kubectl ate revert actor`!
 * **Why is Substrate here:**
-  It combines **hard sandbox isolation (`gVisor`/`microVM`)**, **zero idle compute cost**, and **per-attacker rootfs + memory continuity** routed dynamically via an HTTP header.
+  It combines **hard sandbox isolation (`gVisor`/`microVM`)**, **zero idle compute cost**, **per-attacker rootfs + memory continuity** routed dynamically via an HTTP header, and **anti-forensic time-travel (`save`, `revert`, `tag`)**.
 * **What would be other ways to solve this:**
-  * *Dedicated Honeypot VMs:* Expensive to run at high cardinality; requires manual cleanup/reset scripts once compromised.
-  * *Stateless Honeypot Emulators (Cowrie, etc.):* Easily detected by attackers who test whether processes/files persist across sessions.
+  * *Dedicated Honeypot VMs:* Expensive to run at high cardinality; requires manual cleanup/reset scripts once compromised, and if an attacker runs `rm -rf` on their payload before disconnecting, the malware sample is gone unless you had external block-storage snapshots.
+  * *Stateless Honeypot Emulators (Cowrie, etc.):* Easily detected by attackers who test whether real shell pipelines and dropped files persist across sessions.
 * **Why is this cool:**
-  Attacker A (`203.0.113.5`) drops `rootkit.sh` in `/tmp` and disconnects; their actor suspends to GCS ($0 compute). Attacker B (`198.51.100.9`) connects 10 seconds later and sees a pristine filesystem cloned from the Golden Snapshot. Weeks later, Attacker A returns—and in `~100ms`, their personal "Truman Show" movie set wakes back up on a completely different worker node with `rootkit.sh` still sitting in `/tmp`!
+  1. **Per-IP Isolation & $0 Idle Persistence:** Attacker A (`203.0.113.5`) steals decoy DB credentials and plants `rootkit.sh` in `/tmp/honeypot` (triggering an automatic snapshot `v2`), then disconnects; their actor suspends to GCS ($0 compute). Attacker B (`198.51.100.9`) connects 10 seconds later and sees a pristine filesystem cloned from the Golden Snapshot.
+  2. **Defeating `rm -rf` with `kubectl ate revert`:** Weeks later, Attacker A returns—their personal "Truman Show" movie set wakes in `~100ms` with `rootkit.sh` still on disk! The attacker panics and runs `rm -f rootkit.sh` to wipe their tracks. On the SOC side, `/forensics` flags `ANTI_FORENSIC_WIPE_ATTEMPT` (`DELETED`), and with one click (**Revert `rm -rf`** -> `kubectl ate revert actor`), the SOC Director rewinds the container rootfs overlay back to `v2`, bringing `rootkit.sh` and its SHA-256 hash right back to life!
+  3. **Live Forensic Cloning (`--tag`):** The SOC Director can also clone the live attacker sandbox into `honeypot-forensic-lab` (`kubectl ate create tag` + `kubectl ate create actor --tag`) to detonate and analyze the rootkit in a parallel sandbox without tipping off the attacker.
 * **How does Substrate fit into this:**
-  * **`sandboxConfig: {sandboxClass: SANDBOX_CLASS_GVISOR}`** sandboxes untrusted execution.
-  * **Rootfs delta checkpointing (`SNAPSHOT_CONTENT_SCOPE_FULL`)** preserves `/tmp/honeypot/*` edits per actor without affecting the Golden Snapshot or other actors.
+  * **`sandboxConfig: {sandboxClass: SANDBOX_CLASS_GVISOR}`** sandboxes untrusted `/bin/sh -c` execution.
+  * **Rootfs delta checkpointing (`SNAPSHOT_CONTENT_SCOPE_FULL`)** preserves `/tmp/honeypot/*` edits and RAM audit logs per actor without affecting the Golden Snapshot or other actors.
+  * **`kubectl ate save actor` + `kubectl ate revert actor` + `kubectl ate create tag`** turn container checkpointing into an anti-forensic recovery and live malware-cloning engine.
 
 ---
 
@@ -205,7 +211,7 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh cleanup-dungeon2d # Clean up in-cluster Dungeon 2D Gateway & d2d-* actors
 ./hack/stage-demo.sh act2-coldstart    # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
 ./hack/stage-demo.sh act3-tenantdb     # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
-./hack/stage-demo.sh act4-honeypot     # Act IV: Per-Attacker-IP gVisor Honeypot
+./hack/stage-demo.sh act4-honeypot     # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
 ./hack/stage-demo.sh act5-timewarp     # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
 ```
 

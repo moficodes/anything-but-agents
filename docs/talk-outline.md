@@ -104,7 +104,10 @@ sequenceDiagram
 
 * **Slide 14: Pattern 3 — The "Truman Show" Deception Grid (`cmd/honeypot`)**
   * *Real-world examples:* High-interaction security honeypots, per-PR full-stack preview environments, CTF (Capture The Flag) challenge boxes per contestant.
-  * *How it works:* Route each scanner IP (`honeypot-203-0-113-5`) to its own `gVisor` actor. They drop a rootkit in `/tmp/honeypot/rootkit.sh` and leave. You pay $0 while they're gone. When they return 3 weeks later, their sandbox wakes in 100ms with their rootkit still in `/tmp`, while every other IP sees a pristine Golden Snapshot!
+  * *Split-Screen Live Demo (`./hack/stage-demo.sh act4-honeypot` + Web UI on `:8084`):*
+    * **Left Pane ("The Movie Set" — Attacker View `/shell`):** Route each scanner IP (`honeypot-203-0-113-5`) to its own `SANDBOX_CLASS_GVISOR` actor (`debian:13-slim` base image in `.ko.yaml`) running real `/bin/sh -c` commands. The attacker sees only realistic `stdout`/`stderr` and decoy lures (`payroll_db_credentials.env.bak`, `wire_transfer_batch_409.csv`).
+    * **Right Pane ("The Director's Booth" — Hidden SOC View `/forensics`):** Silently tracks `canary_alerts`, SHA-256 `rootfs_delta` (`UNCHANGED` / `ADDED` / `MODIFIED` / `DELETED`), `gvisor_sandbox_proof`, and `pod_ip_history`.
+    * **Auto-Checkpoint, $0 Idle Suspend & Defeating `rm -rf`:** When Attacker A steals decoy credentials and plants `/tmp/honeypot/rootkit.sh`, the SOC Gateway auto-checkpoints (`kubectl ate save actor`) and suspends the sandbox to GCS ($0 idle compute) while Attacker B (`198.51.100.9`) sees a clean Golden Snapshot. Weeks later, Attacker A returns, wakes in ~100ms with `rootkit.sh` still in `/tmp`, and runs `rm -f rootkit.sh` to wipe their tracks—and the SOC Director uses **`kubectl ate revert actor`** to rewind the rootfs overlay and recover the deleted malware, or **`kubectl ate create tag` + `--tag`** to clone the live sandbox into `honeypot-forensic-lab`!
 
 ---
 
