@@ -48,7 +48,6 @@ type SearchDoc struct {
 	Symbol    string
 	Synopsis  string
 	Tokens    []string
-	TokenFreq map[string]uint8
 	Authority float32
 }
 
@@ -269,12 +268,6 @@ func (e *WarmHeapEngine) RunExpensiveInitialization(delay time.Duration) {
 
 			rawText := strings.ToLower(pkg + " " + sym + " " + syn)
 			toks := tokenizeText(rawText)
-			freq := make(map[string]uint8, len(toks))
-			for _, tk := range toks {
-				if freq[tk] < 255 {
-					freq[tk]++
-				}
-			}
 			totalTokens += len(toks)
 			e.docs[i] = SearchDoc{
 				ID:        uint32(i),
@@ -282,7 +275,6 @@ func (e *WarmHeapEngine) RunExpensiveInitialization(delay time.Duration) {
 				Symbol:    sym,
 				Synopsis:  syn,
 				Tokens:    toks,
-				TokenFreq: freq,
 				Authority: 1.0 + float32((i*31)%100)/100.0,
 			}
 		}
@@ -294,10 +286,15 @@ func (e *WarmHeapEngine) RunExpensiveInitialization(delay time.Duration) {
 	// Stage 2: Build inverted token posting lists
 	runStep(2, "Stage 2/6: Building inverted token posting lists", func() {
 		e.tokenIndex = make(map[string][]uint32, 4096)
+		seenTok := make(map[string]struct{}, 32)
 		for i := range e.docs {
 			docID := e.docs[i].ID
-			for tk := range e.docs[i].TokenFreq {
-				e.tokenIndex[tk] = append(e.tokenIndex[tk], docID)
+			clear(seenTok)
+			for _, tk := range e.docs[i].Tokens {
+				if _, ok := seenTok[tk]; !ok {
+					seenTok[tk] = struct{}{}
+					e.tokenIndex[tk] = append(e.tokenIndex[tk], docID)
+				}
 			}
 		}
 	})
@@ -341,6 +338,7 @@ func (e *WarmHeapEngine) RunExpensiveInitialization(delay time.Duration) {
 
 	// Stage 6: Seal Golden Snapshot heap & compute SHA-256 index digest
 	runStep(6, "Stage 6/6: Sealing Golden Snapshot heap & index digest", func() {
+		runtime.GC()
 		h := sha256.New()
 		fmt.Fprintf(h, "docs=%d;tokens=%d;trigrams=%d;primes=%d;largest=%d",
 			len(e.docs), len(e.tokenIndex), len(e.trigramIndex), e.PrimeCount, e.LargestPrime)
@@ -468,7 +466,16 @@ func (e *WarmHeapEngine) RunSearch(query string, customOverlay []string) SearchE
 		for _, docID := range postings {
 			intersections++
 			doc := &e.docs[docID]
-			tf := float64(doc.TokenFreq[tk])
+			var tfCount int
+			for _, dt := range doc.Tokens {
+				if dt == tk {
+					tfCount++
+				}
+			}
+			tf := float64(tfCount)
+			if tf == 0 {
+				tf = 1.0
+			}
 			docLen := float64(len(doc.Tokens))
 			avgLen := float64(e.avgDocLen)
 			if avgLen <= 0 {

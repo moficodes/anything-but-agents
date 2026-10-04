@@ -505,15 +505,17 @@ func (g *GatewayServer) StartBackgroundLoops(ctx context.Context) {
 }
 
 func (g *GatewayServer) ensureSubstrateActorsLoop(ctx context.Context) {
-	for i := 1; i <= defaultMaxReplicas; i++ {
-		actorName := fmt.Sprintf("coldstart-%d", i)
-		_ = g.runKubectlAte(ctx, "create", "actor", actorName, "-a", g.cfg.Atespace, "--template", g.cfg.Template)
-		if i > 1 {
-			_ = g.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", g.cfg.Atespace)
+	if g.k8sToken != "" {
+		for i := 1; i <= defaultMaxReplicas; i++ {
+			actorName := fmt.Sprintf("coldstart-%d", i)
+			_ = g.runKubectlAte(ctx, "create", "actor", actorName, "-a", g.cfg.Atespace, "--template", g.cfg.Template)
+			if i > 1 {
+				_ = g.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", g.cfg.Atespace)
+			}
 		}
 	}
-	// Wake coldstart-1 so baseline starts with 1 warm actor matching K8s minReplicas: 1.
-	g.wakeSubstrateActorAsync(1)
+	// Wake coldstart-1 and capture its real GoldenHeapFingerprint and WorkerPool Pod IP.
+	go g.simulateSubstrateActorWake(g.localSubSlots[0], g.cfg.SubstrateWakeDelay)
 
 	ticker := time.NewTicker(1500 * time.Millisecond)
 	defer ticker.Stop()
@@ -532,7 +534,7 @@ func (g *GatewayServer) runKubectlAte(ctx context.Context, args ...string) error
 	if g.cfg.AteEndpoint != "" {
 		cmdArgs = append(cmdArgs, "--endpoint", g.cfg.AteEndpoint)
 	}
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, g.cfg.KubectlAteBin, cmdArgs...)
 	out, err := cmd.CombinedOutput()
@@ -682,17 +684,33 @@ func (g *GatewayServer) simulateK8sPodColdBoot(slot *localReplicaSlot, bootDelay
 }
 
 func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeDelay time.Duration) {
-	if g.cfg.Mode == "gateway" {
-		g.wakeSubstrateActorAsync(slot.index)
-	}
-	if wakeDelay > 0 {
+	actualWakeMs := wakeDelay.Milliseconds()
+	var ws *WorkerStatusResponse
+	if g.cfg.Mode == "gateway" && g.cfg.RouterURL != "" {
+		if status, elapsedMs, ok := g.wakeSubstrateActorSync(slot.index); ok {
+			actualWakeMs = elapsedMs
+			ws = status
+		}
+	} else if wakeDelay > 0 {
 		time.Sleep(wakeDelay)
 	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if slot.state == "WAKING" {
+	if ws != nil {
+		if ws.GoldenHeapFingerprint != "" {
+			slot.engine.GoldenHeapFingerprint = ws.GoldenHeapFingerprint
+		}
+		if ws.HeapAllocMB > 0 {
+			slot.engine.GoldenHeapAllocMB = ws.HeapAllocMB
+		}
+		if ws.CurrentPodIP != "" {
+			slot.podIP = ws.CurrentPodIP
+		}
+	}
+	if slot.state == "WAKING" || slot.state == "READY" {
 		slot.state = "READY"
-		slot.wakeLatencyMs = wakeDelay.Milliseconds()
+		slot.wakeLatencyMs = actualWakeMs
 		slot.engine.ready.Store(true)
 		slot.engine.initStage.Store(fmt.Sprintf("restored from Golden Snapshot in %dms", slot.wakeLatencyMs))
 		if g.subScaleReadyMs == 0 && !g.spikeTriggeredAt.IsZero() && g.countReadyLocalSubLocked() == defaultMaxReplicas {
@@ -701,19 +719,24 @@ func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeD
 	}
 }
 
-func (g *GatewayServer) wakeSubstrateActorAsync(index int) {
-	go func() {
-		actorName := fmt.Sprintf("coldstart-%d", index)
-		req, err := http.NewRequest(http.MethodGet, strings.TrimRight(g.cfg.RouterURL, "/")+"/statusz", nil)
-		if err != nil {
-			return
-		}
-		req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", g.cfg.Atespace, actorName))
-		resp, err := g.httpClient.Do(req)
-		if err == nil {
-			_ = resp.Body.Close()
-		}
-	}()
+func (g *GatewayServer) wakeSubstrateActorSync(index int) (*WorkerStatusResponse, int64, bool) {
+	start := time.Now()
+	actorName := fmt.Sprintf("coldstart-%d", index)
+	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(g.cfg.RouterURL, "/")+"/statusz", nil)
+	if err != nil {
+		return nil, 0, false
+	}
+	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", g.cfg.Atespace, actorName))
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return nil, 0, false
+	}
+	defer resp.Body.Close()
+	var ws WorkerStatusResponse
+	if json.NewDecoder(resp.Body).Decode(&ws) != nil {
+		return nil, time.Since(start).Milliseconds(), true
+	}
+	return &ws, time.Since(start).Milliseconds(), true
 }
 
 func (g *GatewayServer) syncClusterScales(desired int) {
@@ -802,22 +825,16 @@ func (g *GatewayServer) refreshClusterReplicaStatuses(ctx context.Context) {
 		return a.Metadata.CreationTimestamp.Compare(b.Metadata.CreationTimestamp)
 	})
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	activeIdx := 0
+	type k8sPodItem struct {
+		Name       string
+		PodIP      string
+		CreatedAt  time.Time
+		IsReady    bool
+	}
+	var activePods []k8sPodItem
 	for _, item := range podList.Items {
 		if item.Metadata.DeletionTimestamp != "" {
 			continue
-		}
-		if activeIdx >= len(g.localK8sSlots) {
-			break
-		}
-		slot := g.localK8sSlots[activeIdx]
-		activeIdx++
-		slot.name = item.Metadata.Name
-		if item.Status.PodIP != "" {
-			slot.podIP = item.Status.PodIP
 		}
 		isReady := false
 		for _, cond := range item.Status.Conditions {
@@ -826,7 +843,70 @@ func (g *GatewayServer) refreshClusterReplicaStatuses(ctx context.Context) {
 				break
 			}
 		}
-		if isReady {
+		activePods = append(activePods, k8sPodItem{
+			Name:      item.Metadata.Name,
+			PodIP:     item.Status.PodIP,
+			CreatedAt: item.Metadata.CreationTimestamp,
+			IsReady:   isReady,
+		})
+	}
+
+	// Poll /statusz on each active pod (outside the gateway mutex) to capture real live init_stage & fingerprint.
+	podStatuses := make([]*WorkerStatusResponse, len(activePods))
+	statusClient := &http.Client{Timeout: 600 * time.Millisecond}
+	for i, p := range activePods {
+		if p.PodIP == "" {
+			continue
+		}
+		sreq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s:8080/statusz", p.PodIP), nil)
+		if err != nil {
+			continue
+		}
+		sresp, err := statusClient.Do(sreq)
+		if err != nil {
+			continue
+		}
+		var ws WorkerStatusResponse
+		if json.NewDecoder(sresp.Body).Decode(&ws) == nil {
+			podStatuses[i] = &ws
+		}
+		_ = sresp.Body.Close()
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for idx := 0; idx < len(g.localK8sSlots); idx++ {
+		slot := g.localK8sSlots[idx]
+		if idx >= len(activePods) {
+			if idx > 0 {
+				slot.state = "OFFLINE"
+				slot.engine.ready.Store(false)
+				slot.engine.initStep.Store(0)
+				slot.engine.initStage.Store("offline: scaled down by HPA")
+			}
+			continue
+		}
+		p := activePods[idx]
+		slot.name = p.Name
+		if p.PodIP != "" {
+			slot.podIP = p.PodIP
+		}
+		if ws := podStatuses[idx]; ws != nil {
+			if ws.GoldenHeapFingerprint != "" {
+				slot.engine.GoldenHeapFingerprint = ws.GoldenHeapFingerprint
+			}
+			if ws.HeapAllocMB > 0 {
+				slot.engine.GoldenHeapAllocMB = ws.HeapAllocMB
+			}
+			if ws.InitStep > 0 {
+				slot.engine.initStep.Store(int32(ws.InitStep))
+			}
+			if ws.InitStage != "" {
+				slot.engine.initStage.Store(ws.InitStage)
+			}
+		}
+		if p.IsReady {
 			slot.state = "READY"
 			slot.engine.ready.Store(true)
 			slot.engine.initStep.Store(6)
@@ -837,7 +917,7 @@ func (g *GatewayServer) refreshClusterReplicaStatuses(ctx context.Context) {
 		} else {
 			if slot.state != "COLD_BOOTING" {
 				slot.state = "COLD_BOOTING"
-				slot.bootStartedAt = item.Metadata.CreationTimestamp
+				slot.bootStartedAt = p.CreatedAt
 			}
 			slot.engine.ready.Store(false)
 		}
@@ -885,7 +965,13 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 	slot := readySlots[int(g.rrK8s.Add(1))%len(readySlots)]
 
 	if g.cfg.Mode == "gateway" && g.k8sToken != "" {
-		reqURL := fmt.Sprintf("%s/search?q=%s", strings.TrimRight(g.cfg.K8sServiceURL, "/"), url.QueryEscape(query))
+		baseURL := strings.TrimRight(g.cfg.K8sServiceURL, "/")
+		// Route directly to the selected Ready Pod's IP on port 8080 when discovered,
+		// avoiding kube-proxy HTTP/1.1 keep-alive connection pinning to Pod 1.
+		if slot.podIP != "" && !strings.HasPrefix(slot.podIP, "10.244.") {
+			baseURL = fmt.Sprintf("http://%s:8080", slot.podIP)
+		}
+		reqURL := fmt.Sprintf("%s/search?q=%s", baseURL, url.QueryEscape(query))
 		resp, err := g.httpClient.Get(reqURL)
 		latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
 		if err != nil {
@@ -896,6 +982,12 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 		defer resp.Body.Close()
 		var body map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&body)
+		if fp, ok := body["golden_heap_fingerprint"].(string); ok && fp != "" {
+			slot.engine.GoldenHeapFingerprint = fp
+		}
+		if ip, ok := body["current_pod_ip"].(string); ok && ip != "" {
+			slot.podIP = ip
+		}
 		if resp.StatusCode == http.StatusOK {
 			slot.servedTotal.Add(1)
 			slot.servedWindow.Add(1)
@@ -946,7 +1038,7 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 	}
 	slot := activeSlots[int(g.rrSub.Add(1))%len(activeSlots)]
 
-	if g.cfg.Mode == "gateway" && g.k8sToken != "" {
+	if g.cfg.Mode == "gateway" && g.cfg.RouterURL != "" {
 		reqURL := fmt.Sprintf("%s/search?q=%s", strings.TrimRight(g.cfg.RouterURL, "/"), url.QueryEscape(query))
 		req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 		if err != nil {

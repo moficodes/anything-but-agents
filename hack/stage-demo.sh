@@ -599,8 +599,12 @@ act2_coldstart() {
   (
     cd "${REPO_ROOT}"
     go run ./cmd/coldstart \
-      --mode=local \
+      --mode=gateway \
       --addr=":${cs_port}" \
+      --metrics-addr="" \
+      --atespace="${ATESPACE}" \
+      --template=coldstart \
+      --router-url="${ROUTER_URL}" \
       --init-delay=12s \
       --min-query-duration=200ms \
       --max-concurrent=4 >/dev/null 2>&1
@@ -608,7 +612,7 @@ act2_coldstart() {
   GATEWAY_PID=$!
   trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
 
-  for _ in {1..30}; do
+  for _ in {1..40}; do
     if curl -s -o /dev/null --connect-timeout 1 "${cs_url}/readyz" 2>/dev/null; then
       break
     fi
@@ -620,13 +624,13 @@ act2_coldstart() {
   echo ""
 
   step "4. PRODUCTION HPA QPS RACE: Trigger a 60 QPS Traffic Spike (minReplicas: 1 -> maxReplicas: 3, 20 QPS/replica cap)"
-  curl -fsS -X POST "${cs_url}/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=2&spike_sec=15&cooldown_sec=2" >/dev/null
+  curl -fsS -X POST "${cs_url}/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=2&spike_sec=18&cooldown_sec=2" >/dev/null
 
   printf "\n  %-4s | %-22s | %-18s | %-20s | %-18s | %-20s\n" \
     "SEC" "PHASE (DEMAND)" "K8S HPA (READY)" "K8S GOODPUT / SHED" "SUB HPA (ACTIVE)" "SUB GOODPUT / SHED"
   printf "  %s\n" "------------------------------------------------------------------------------------------------------------------------"
 
-  for ((sec = 1; sec <= 18; sec++)); do
+  for ((sec = 1; sec <= 21; sec++)); do
     sleep 1
     local snap
     snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
