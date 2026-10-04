@@ -177,6 +177,8 @@ func TestHPAColdStartQPSAdvantage(t *testing.T) {
 		"heapProofBadge",
 		"k8sChart",
 		"subChart",
+		"btnThemeToggle",
+		`[data-theme="light"]`,
 	} {
 		if !strings.Contains(bodyStr, marker) {
 			t.Fatalf("expected redesigned dashboard HTML to contain %q", marker)

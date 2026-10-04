@@ -14,6 +14,13 @@
       --panel: #090d13;
       --panel-alt: #0d121a;
       --bay: #101722;
+      --bay-hover: #162030;
+      --scope-bg: #040609;
+      --scope-canvas-bg: #030508;
+      --scope-border: #162032;
+      --led-off: #1e293b;
+      --row-hover: rgba(255, 255, 255, 0.025);
+      --rack-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
       --hairline: #1e293b;
       --hairline-strong: #334155;
       --text-primary: #f8fafc;
@@ -38,6 +45,40 @@
       --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
+    /* High-Contrast Projector Light Mode (Dieter Rams / Lab Instrument Daylight Palette) */
+    [data-theme="light"] {
+      --chassis: #e2e8f0;
+      --panel: #ffffff;
+      --panel-alt: #f8fafc;
+      --bay: #f1f5f9;
+      --bay-hover: #e2e8f0;
+      --scope-bg: #f1f5f9;
+      --scope-canvas-bg: #ffffff;
+      --scope-border: #94a3b8;
+      --led-off: #cbd5e1;
+      --row-hover: rgba(15, 23, 42, 0.04);
+      --rack-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+      --hairline: #cbd5e1;
+      --hairline-strong: #94a3b8;
+      --text-primary: #0f172a;
+      --text-secondary: #1e293b;
+      --text-muted: #475569;
+
+      /* Deep saturated signal pigments for high lumen projector legibility on white */
+      --sig-emerald: #059669;
+      --sig-emerald-bright: #047857;
+      --sig-emerald-dim: rgba(5, 150, 105, 0.12);
+      --sig-amber: #d97706;
+      --sig-amber-bright: #b45309;
+      --sig-amber-dim: rgba(217, 119, 6, 0.13);
+      --sig-crimson: #dc2626;
+      --sig-crimson-bright: #b91c1c;
+      --sig-crimson-dim: rgba(220, 38, 38, 0.12);
+      --sig-ice: #0284c7;
+      --sig-ice-bright: #0369a1;
+      --sig-ice-dim: rgba(2, 132, 199, 0.11);
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -51,6 +92,7 @@
       font-size: 16px;
       line-height: 1.4;
       -webkit-font-smoothing: antialiased;
+      transition: background-color 0.18s ease, color 0.18s ease;
     }
 
     body {
@@ -71,7 +113,7 @@
       margin: 0 auto;
       border: 1px solid var(--hairline-strong);
       background: var(--panel);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      box-shadow: var(--rack-shadow);
       position: relative;
     }
 
@@ -185,7 +227,7 @@
 
     button.hw-btn:hover {
       border-color: var(--sig-ice);
-      background: #162030;
+      background: var(--bay-hover);
     }
 
     button.hw-btn:active {
@@ -204,26 +246,46 @@
     }
 
     button.hw-btn.primary-run {
-      background: rgba(16, 185, 129, 0.18);
+      background: var(--sig-emerald-dim);
       border-color: var(--sig-emerald);
+      color: var(--sig-emerald-bright);
+      font-weight: 700;
+    }
+
+    [data-theme="dark"] button.hw-btn.primary-run,
+    :root:not([data-theme="light"]) button.hw-btn.primary-run {
       color: #ecfdf5;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    [data-theme="light"] button.hw-btn.primary-run {
+      background: #059669;
+      border-color: #047857;
+      color: #ffffff;
     }
 
     button.hw-btn.primary-run:hover {
-      background: rgba(16, 185, 129, 0.28);
       border-color: var(--sig-emerald-bright);
+      filter: brightness(1.08);
     }
 
     button.hw-btn.spike-trigger {
       background: var(--sig-amber-dim);
       border-color: var(--sig-amber);
-      color: #fef3c7;
+      color: var(--sig-amber-bright);
+      font-weight: 700;
     }
 
     button.hw-btn.spike-trigger:hover {
-      background: rgba(245, 158, 11, 0.24);
       border-color: var(--sig-amber-bright);
+      filter: brightness(1.06);
+    }
+
+    button.hw-btn.theme-toggle {
+      border-color: var(--sig-ice);
+      color: var(--sig-ice-bright);
+      background: var(--sig-ice-dim);
+      font-weight: 700;
     }
 
     /* 4-Bay Top Readout Strip (Open Hairline Grid) */
@@ -350,7 +412,7 @@
       font-family: var(--font-mono);
       font-size: 0.72rem;
       padding: 3px 7px;
-      background: var(--chassis);
+      background: var(--panel-alt);
       border: 1px solid var(--hairline);
     }
 
@@ -402,11 +464,11 @@
     }
 
     .k8s-channel .channel-header {
-      border-top: 2px solid var(--sig-amber);
+      border-top: 3px solid var(--sig-amber);
     }
 
     .sub-channel .channel-header {
-      border-top: 2px solid var(--sig-emerald);
+      border-top: 3px solid var(--sig-emerald);
     }
 
     .ch-title-group {
@@ -458,7 +520,7 @@
 
     .hpa-module {
       padding: 5px 10px;
-      background: var(--chassis);
+      background: var(--panel);
       border: 1px solid var(--hairline-strong);
       font-family: var(--font-mono);
       font-size: 0.72rem;
@@ -473,7 +535,7 @@
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       border-bottom: 1px solid var(--hairline);
-      background: var(--chassis);
+      background: var(--panel-alt);
     }
 
     .t-cell {
@@ -514,7 +576,7 @@
     .scope-panel {
       padding: 12px 16px 10px;
       border-bottom: 1px solid var(--hairline);
-      background: #040609;
+      background: var(--scope-bg);
       position: relative;
     }
 
@@ -576,8 +638,8 @@
       position: relative;
       width: 100%;
       height: 176px;
-      border: 1px solid #162032;
-      background: #030508;
+      border: 1px solid var(--scope-border);
+      background: var(--scope-canvas-bg);
     }
 
     canvas.qps-chart {
@@ -628,17 +690,17 @@
 
     .replica-bay.booting {
       border-left: 3px solid var(--sig-amber);
-      background: rgba(245, 158, 11, 0.04);
+      background: rgba(245, 158, 11, 0.05);
     }
 
     .replica-bay.suspended {
       border-left: 3px solid var(--sig-ice);
-      background: rgba(56, 189, 248, 0.025);
+      background: rgba(56, 189, 248, 0.04);
     }
 
     .replica-bay.offline {
       border-left: 3px solid var(--hairline-strong);
-      opacity: 0.62;
+      opacity: 0.65;
     }
 
     .bay-top-row {
@@ -661,7 +723,7 @@
       font-size: 0.7rem;
       font-weight: 800;
       padding: 1px 5px;
-      background: var(--chassis);
+      background: var(--panel-alt);
       border: 1px solid var(--hairline-strong);
       color: var(--text-secondary);
     }
@@ -679,18 +741,18 @@
       font-size: 0.6875rem;
       font-weight: 700;
       border: 1px solid var(--hairline-strong);
-      background: var(--chassis);
+      background: var(--panel-alt);
       color: var(--sig-ice-bright);
     }
 
     .fp-pill.golden-match {
-      border-color: rgba(16, 185, 129, 0.55);
+      border-color: var(--sig-emerald);
       background: var(--sig-emerald-dim);
       color: var(--sig-emerald-bright);
     }
 
     .fp-pill.k8s-rebuild {
-      border-color: rgba(245, 158, 11, 0.5);
+      border-color: var(--sig-amber);
       background: var(--sig-amber-dim);
       color: var(--sig-amber-bright);
     }
@@ -738,7 +800,7 @@
 
     .led-seg {
       padding: 4px 6px;
-      background: var(--chassis);
+      background: var(--panel-alt);
       border: 1px solid var(--hairline);
       display: flex;
       align-items: center;
@@ -757,47 +819,47 @@
       width: 6px;
       height: 6px;
       border-radius: 1px;
-      background: #1e293b;
+      background: var(--led-off);
       flex-shrink: 0;
     }
 
     /* Active/completed LED segment states */
     .led-seg.seg-ready {
-      border-color: rgba(16, 185, 129, 0.45);
-      background: rgba(16, 185, 129, 0.08);
-      color: var(--text-secondary);
+      border-color: var(--sig-emerald);
+      background: var(--sig-emerald-dim);
+      color: var(--text-primary);
     }
 
     .led-seg.seg-ready .led-bulb {
-      background: var(--sig-emerald-bright);
+      background: var(--sig-emerald);
       box-shadow: 0 0 6px var(--sig-emerald);
     }
 
     .led-seg.seg-boot-done {
-      border-color: rgba(245, 158, 11, 0.45);
-      background: rgba(245, 158, 11, 0.1);
+      border-color: var(--sig-amber);
+      background: var(--sig-amber-dim);
       color: var(--sig-amber-bright);
     }
 
     .led-seg.seg-boot-done .led-bulb {
-      background: var(--sig-amber-bright);
+      background: var(--sig-amber);
     }
 
     .led-seg.seg-boot-active {
       border-color: var(--sig-amber-bright);
-      background: rgba(245, 158, 11, 0.22);
-      color: #fffbeb;
+      background: rgba(245, 158, 11, 0.24);
+      color: var(--text-primary);
       animation: pulseLed 0.8s infinite ease-in-out;
     }
 
     .led-seg.seg-boot-active .led-bulb {
-      background: #fffbeb;
-      box-shadow: 0 0 8px var(--sig-amber-bright);
+      background: var(--sig-amber-bright);
+      box-shadow: 0 0 8px var(--sig-amber);
     }
 
     .led-seg.seg-standby {
-      border-color: rgba(56, 189, 248, 0.35);
-      background: rgba(56, 189, 248, 0.07);
+      border-color: var(--sig-ice);
+      background: var(--sig-ice-dim);
       color: var(--sig-ice-bright);
     }
 
@@ -881,11 +943,12 @@
       padding: 4px 9px;
       font-family: var(--font-mono);
       font-size: 0.6875rem;
-      background: var(--chassis);
+      background: var(--panel);
       border: 1px solid var(--hairline-strong);
       color: var(--sig-ice-bright);
       cursor: pointer;
       border-radius: 2px;
+      font-weight: 600;
     }
 
     button.probe-chip:hover {
@@ -914,7 +977,7 @@
     }
 
     table.query-table th {
-      background: var(--chassis);
+      background: var(--panel-alt);
       color: var(--text-muted);
       font-size: 0.65rem;
       font-weight: 700;
@@ -923,7 +986,7 @@
     }
 
     table.query-table tbody tr:hover {
-      background: rgba(255, 255, 255, 0.025);
+      background: var(--row-hover);
     }
 
     .status-pill {
@@ -1019,6 +1082,16 @@
         <button id="btnReset" class="hw-btn" onclick="resetAll()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
           Reset
+        </button>
+        <button id="btnThemeToggle" class="hw-btn theme-toggle" onclick="toggleTheme()" title="Toggle Projector Light Mode vs Dark Rack Mode (Shortcut: T)">
+          <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+          <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+          </svg>
+          <span id="themeToggleLabel">Projector Light</span>
         </button>
       </div>
     </header>
@@ -1267,6 +1340,48 @@
 
     let latestState = null;
     let hoverIndex = -1;
+    let currentTheme = (function() {
+      const urlTheme = new URLSearchParams(window.location.search).get('theme');
+      if (urlTheme === 'light' || urlTheme === 'dark') return urlTheme;
+      try {
+        const saved = localStorage.getItem('coldstart_theme');
+        if (saved === 'light' || saved === 'dark') return saved;
+      } catch (_) {}
+      return 'dark';
+    })();
+
+    function applyTheme(theme) {
+      currentTheme = theme === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', currentTheme);
+      try {
+        localStorage.setItem('coldstart_theme', currentTheme);
+      } catch (_) {}
+      const label = document.getElementById('themeToggleLabel');
+      const sun = document.getElementById('themeIconSun');
+      const moon = document.getElementById('themeIconMoon');
+      if (label) {
+        label.textContent = currentTheme === 'light' ? 'DARK SCOPE' : 'PROJECTOR LIGHT';
+      }
+      if (sun && moon) {
+        sun.style.display = currentTheme === 'light' ? 'none' : 'inline-block';
+        moon.style.display = currentTheme === 'light' ? 'inline-block' : 'none';
+      }
+      if (latestState) {
+        drawChart('k8sChart', latestState.history || [], false);
+        drawChart('subChart', latestState.history || [], true);
+      }
+    }
+
+    function toggleTheme() {
+      applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+    }
+
+    document.addEventListener('keydown', ev => {
+      if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA')) return;
+      if (ev.key === 't' || ev.key === 'T') {
+        toggleTheme();
+      }
+    });
 
     async function triggerSpikeScenario() {
       await fetch('/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=3&spike_sec=18&cooldown_sec=3', { method: 'POST' });
@@ -1395,14 +1510,14 @@
       container.replaceChildren(...nodes);
     }
 
-    function createDiagonalHatchPattern(ctx) {
+    function createDiagonalHatchPattern(ctx, isLight) {
       const pCanvas = document.createElement('canvas');
       pCanvas.width = 10;
       pCanvas.height = 10;
       const pCtx = pCanvas.getContext('2d');
-      pCtx.fillStyle = 'rgba(239, 68, 68, 0.14)';
+      pCtx.fillStyle = isLight ? 'rgba(220, 38, 38, 0.12)' : 'rgba(239, 68, 68, 0.14)';
       pCtx.fillRect(0, 0, 10, 10);
-      pCtx.strokeStyle = 'rgba(248, 113, 113, 0.55)';
+      pCtx.strokeStyle = isLight ? 'rgba(185, 28, 28, 0.45)' : 'rgba(248, 113, 113, 0.55)';
       pCtx.lineWidth = 1.5;
       pCtx.beginPath();
       pCtx.moveTo(0, 10);
@@ -1424,6 +1539,7 @@
         canvas.height = Math.floor(cssH * dpr);
       }
 
+      const isLight = currentTheme === 'light';
       const ctx = canvas.getContext('2d');
       ctx.save();
       ctx.scale(dpr, dpr);
@@ -1435,9 +1551,9 @@
       const plotH = cssH - padT - padB;
 
       // Oscilloscope graticule horizontal lines
-      ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+      ctx.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.45)' : 'rgba(51, 65, 85, 0.45)';
       ctx.lineWidth = 1;
-      ctx.fillStyle = '#64748b';
+      ctx.fillStyle = isLight ? '#475569' : '#64748b';
       ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
       [0, 20, 40, 60].forEach(val => {
         const y = Math.round(padT + plotH - (val / maxQPS) * plotH) + 0.5;
@@ -1456,13 +1572,13 @@
         ctx.beginPath();
         ctx.moveTo(x, padT);
         ctx.lineTo(x, padT + plotH);
-        ctx.strokeStyle = 'rgba(30, 41, 59, 0.55)';
+        ctx.strokeStyle = isLight ? 'rgba(203, 213, 225, 0.7)' : 'rgba(30, 41, 59, 0.55)';
         ctx.stroke();
       }
 
       if (!history || history.length === 0) {
-        ctx.fillStyle = '#64748b';
-        ctx.font = '500 11px "JetBrains Mono", monospace';
+        ctx.fillStyle = isLight ? '#475569' : '#64748b';
+        ctx.font = '600 11px "JetBrains Mono", monospace';
         ctx.fillText('AWAITING TELEMETRY STREAM // CLICK "RUN 24s PRODUCTION SPIKE"', padL + 16, padT + plotH / 2);
         ctx.restore();
         return;
@@ -1473,7 +1589,7 @@
       const yAt = v => padT + plotH - (Math.min(maxQPS, Math.max(0, v)) / maxQPS) * plotH;
 
       // 1. Cold-Boot Shed Zone Crosshatch (area between Target Demand and Goodput whenever shed > 0)
-      const hatchPattern = createDiagonalHatchPattern(ctx);
+      const hatchPattern = createDiagonalHatchPattern(ctx, isLight);
       let shedPointsCount = 0;
       let shedPeakX = 0;
       for (let i = 0; i < pts.length - 1; i++) {
@@ -1508,8 +1624,8 @@
       ctx.lineTo(xAt(pts.length - 1), yAt(0));
       ctx.closePath();
       const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-      grad.addColorStop(0, 'rgba(16, 185, 129, 0.30)');
-      grad.addColorStop(1, 'rgba(16, 185, 129, 0.03)');
+      grad.addColorStop(0, isLight ? 'rgba(5, 150, 105, 0.24)' : 'rgba(16, 185, 129, 0.30)');
+      grad.addColorStop(1, isLight ? 'rgba(5, 150, 105, 0.03)' : 'rgba(16, 185, 129, 0.03)');
       ctx.fillStyle = grad;
       ctx.fill();
 
@@ -1521,8 +1637,10 @@
         if (i === 0) ctx.moveTo(xAt(i), yAt(readyCap));
         else ctx.lineTo(xAt(i), yAt(readyCap));
       });
-      ctx.strokeStyle = isSubstrate ? 'rgba(56, 189, 248, 0.7)' : 'rgba(245, 158, 11, 0.7)';
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = isSubstrate
+        ? (isLight ? 'rgba(2, 132, 199, 0.85)' : 'rgba(56, 189, 248, 0.7)')
+        : (isLight ? 'rgba(217, 119, 6, 0.85)' : 'rgba(245, 158, 11, 0.7)');
+      ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -1533,8 +1651,8 @@
         if (i === 0) ctx.moveTo(xAt(i), yAt(p.target_qps));
         else ctx.lineTo(xAt(i), yAt(p.target_qps));
       });
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isLight ? '#0f172a' : '#cbd5e1';
+      ctx.lineWidth = 1.6;
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -1545,8 +1663,8 @@
         if (i === 0) ctx.moveTo(xAt(i), yAt(val));
         else ctx.lineTo(xAt(i), yAt(val));
       });
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = isLight ? '#dc2626' : '#ef4444';
+      ctx.lineWidth = 2.2;
       ctx.stroke();
 
       // 6. Goodput Phosphor Emerald trace
@@ -1556,20 +1674,20 @@
         if (i === 0) ctx.moveTo(xAt(i), yAt(val));
         else ctx.lineTo(xAt(i), yAt(val));
       });
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = isLight ? '#059669' : '#10b981';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
       // Callout badge if Cold-Boot Shed Zone is present
       if (!isSubstrate && shedPointsCount >= 2) {
         const badgeX = Math.min(cssW - 210, Math.max(padL + 8, shedPeakX - 90));
         const badgeY = padT + 8;
-        ctx.fillStyle = 'rgba(15, 10, 14, 0.92)';
+        ctx.fillStyle = isLight ? 'rgba(254, 242, 242, 0.96)' : 'rgba(15, 10, 14, 0.92)';
         ctx.fillRect(badgeX, badgeY, 194, 20);
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = isLight ? '#dc2626' : '#ef4444';
         ctx.lineWidth = 1;
         ctx.strokeRect(badgeX, badgeY, 194, 20);
-        ctx.fillStyle = '#f87171';
+        ctx.fillStyle = isLight ? '#b91c1c' : '#f87171';
         ctx.font = '700 10px "JetBrains Mono", monospace';
         ctx.fillText('! 12s COLD-BOOT 429 SHED ZONE', badgeX + 7, badgeY + 13);
       }
@@ -1581,7 +1699,7 @@
         ctx.beginPath();
         ctx.moveTo(hx, padT);
         ctx.lineTo(hx, padT + plotH);
-        ctx.strokeStyle = 'rgba(248, 250, 252, 0.5)';
+        ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.45)' : 'rgba(248, 250, 252, 0.5)';
         ctx.lineWidth = 1;
         ctx.stroke();
 
@@ -1758,6 +1876,7 @@
       }
     }
 
+    applyTheme(currentTheme);
     attachScopeHover('k8sChart');
     attachScopeHover('subChart');
     window.addEventListener('resize', () => {
