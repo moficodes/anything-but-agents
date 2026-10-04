@@ -87,12 +87,13 @@ sequenceDiagram
 
 ### Act III — Taming Real-World Non-Agent Monsters (Slides 10–16 + Live Demos 2, 3, 4)
 
-* **Slide 10: Pattern 1 — The "Cold-Start Monster" Cloner (`cmd/coldstart`)**
-  * *Real-world examples:* Legacy Enterprise Spring Boot/JVM apps that take 45s to boot; `rust-analyzer` / `gopls` language servers indexing a monorepo; Python scientific/quant models loading 2GB into RAM.
-  * *The Trick:* Substrate's `ActorTemplate` waits for `wakeupProbe` (`/readyz`) before taking the **Golden Snapshot**. Put your 45-second warmup *before* `/readyz` flips to `200 OK`!
-  * **Live Demo (`./hack/stage-demo.sh act2-coldstart`):**
-    * Show that `coldstart` took `12,000ms` during template creation to sieve primes up to `1,000,000` and generate a random `golden_heap_fingerprint`.
-    * Instantiate `clone-1` and `clone-2` and query them—both respond in ~100ms, share the **exact same `golden_heap_fingerprint`**, and have all `78,498` primes precomputed in RAM, while isolating their own post-fork mutations!
+* **Slide 10: Pattern 1 — The "Cold-Start Monster" & Production HPA QPS Race (`cmd/coldstart`)**
+  * *Real-world examples:* In-memory search/autocomplete services (`Zoekt`, `pkg.go.dev`), language servers (`rust-analyzer`, `gopls`), or JVM monoliths that build a 65MB+ in-memory index for 12+ seconds before `/readyz` turns `200 OK`.
+  * *Why Cold Starts Kill Production QPS:* When a traffic spike (`15 -> 60 QPS`) triggers Kubernetes HPA (`1 -> 3` replicas, `20 QPS`/pod capacity), newly scheduled Pods sit at `/readyz == 503` for 12+ seconds while Pod 1 drowns and sheds `40 QPS` (`429 Too Many Requests`).
+  * *The Substrate Trick:* `ActorTemplate` waits for `wakeupProbe` (`/readyz`) before taking the **Golden Snapshot**—capturing the 50,000-doc trigram search index once.
+  * **Live Demo (`./hack/stage-demo.sh act2-coldstart` + `/dashboard`):**
+    * Query `coldstart-1` and `coldstart-2`—both wake in ~100ms, share the **exact same `golden_heap_fingerprint`**, and serve real BM25 + trigram search queries over 50,000 indexed packages in RAM.
+    * Trigger the **60 QPS Production HPA Spike** (`minReplicas: 1 -> maxReplicas: 3` on `coldstart_lb_qps`): watch Substrate wake Actors 2 & 3 in ~100ms and serve `60 QPS` immediately while Standard K8s HPA remains stuck at `20 QPS` for 12 seconds (**2.4x more total successful queries served**).
 
 * **Slide 12: Pattern 2 — One Database Process Per Customer (`cmd/tenantdb`)**
   * *Real-world examples:* Per-tenant SQLite, DuckDB, or embedded analytical engines.

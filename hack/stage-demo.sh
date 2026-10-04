@@ -488,20 +488,191 @@ cleanup_dungeon2d_gateway() {
   free_workers
 }
 
+deploy_coldstart_hpa() {
+  detect_cluster_defaults
+  banner "Deploying Cold-Start HPA vs. Substrate Golden Snapshot HPA Comparison Stack"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+
+  # Ensure ActorTemplate coldstart is up to date
+  kubectl ate delete actor-template coldstart -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/coldstart-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+
+  echo "Waiting for 'coldstart' Golden Snapshot (50,000-doc search index, ~12s build) to become READY..."
+  for ((i = 1; i <= 60; i++)); do
+    yaml_out="$(kubectl ate get actor-template coldstart -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
+    if [[ -n "${golden_tag}" ]]; then
+      echo "  [READY] coldstart (Golden Snapshot taken at: ${golden_tag})"
+      break
+    fi
+    sleep 3
+  done
+
+  for i in 1 2 3; do
+    kubectl ate delete actor "coldstart-${i}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate create actor "coldstart-${i}" -a "${ATESPACE}" --template coldstart
+    if [[ "${i}" -gt 1 ]]; then
+      kubectl ate suspend actor "coldstart-${i}" -a "${ATESPACE}" 2>/dev/null || true
+    fi
+  done
+
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
+      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
+      KUBECTL_ATE_IMAGE="$(
+        cd "${SUBSTRATE_ROOT}"
+        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+      )"
+    else
+      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy coldstart-gateway." >&2
+      exit 1
+    fi
+  fi
+  export KUBECTL_ATE_IMAGE
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/coldstart-hpa.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/coldstart-k8s -n anything-but-agents --timeout=120s
+  kubectl rollout status deployment/coldstart-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc coldstart-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Cold-Start HPA & QPS Race Dashboard : http://${lb_ip:-<pending>}/dashboard"
+  echo ""
+  kubectl get hpa -n anything-but-agents
+}
+
+cleanup_coldstart_hpa() {
+  banner "Cleaning up Cold-Start HPA Comparison Stack & Actors"
+  for act in coldstart-1 coldstart-2 coldstart-3 clone-1 clone-2 clone-3; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+  done
+  kubectl delete hpa coldstart-k8s coldstart-substrate -n anything-but-agents --ignore-not-found
+  kubectl delete deployment,service coldstart-k8s coldstart-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete deployment coldstart-substrate-pool -n anything-but-agents --ignore-not-found
+  kubectl delete serviceaccount,role,rolebinding coldstart-gateway coldstart-gateway-ns -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding coldstart-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding coldstart-gateway-cluster coldstart-gateway-auth-delegator --ignore-not-found
+  kubectl delete apiservice v1beta1.external.metrics.k8s.io --ignore-not-found
+  free_workers
+}
+
 act2_coldstart() {
   ensure_router_port_forward
-  banner "ACT II: 'The Instant Cloner' — Skipping a 12-Second Cold Start via Golden Snapshots"
-  reset_act_resources clone-1 clone-2 clone-3
+  banner "ACT II: 'The Instant Cloner & Production HPA QPS Race' — 12s Cold-Start Index vs. 100ms Golden Snapshot Clones"
+  reset_act_resources clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3
 
-  step "1. Create 3 separate actors from the 'coldstart' template (whose Golden Snapshot already ran the 12s prime sieve)"
-  run_cmd kubectl ate create actor clone-1 -a "${ATESPACE}" --template coldstart
-  run_cmd kubectl ate create actor clone-2 -a "${ATESPACE}" --template coldstart
-  run_cmd kubectl ate create actor clone-3 -a "${ATESPACE}" --template coldstart
+  step "1. Create 3 search engine actors from 'coldstart' template (whose Golden Snapshot already built the 50,000-doc trigram index in 12s)"
+  run_cmd kubectl ate create actor coldstart-1 -a "${ATESPACE}" --template coldstart
+  run_cmd kubectl ate create actor coldstart-2 -a "${ATESPACE}" --template coldstart
+  run_cmd kubectl ate create actor coldstart-3 -a "${ATESPACE}" --template coldstart
 
-  step "2. Query clone-1 and clone-2 — both wake in ~100ms with the SAME golden_heap_fingerprint and 78,498 primes in RAM!"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/clone-1" "${ROUTER_URL}/?add_symbol=user_a_module"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/clone-2" "${ROUTER_URL}/?add_symbol=user_b_module"
+  step "2. Query coldstart-1 & coldstart-2 — both wake in ~100ms with the SAME golden_heap_fingerprint, 50,000 indexed docs (~65MB RAM), and isolated overlays!"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/coldstart-1" "${ROUTER_URL}/search?q=kubernetes+horizontal+pod+autoscaler&add_symbol=user_a_module"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/coldstart-2" "${ROUTER_URL}/search?q=gvisor+memory+snapshot+restore&add_symbol=user_b_module"
 
+  step "3. Suspend coldstart-2 and coldstart-3 to GCS (\$0 idle compute) so our HPA pool starts at 1/3 active replicas (20 QPS capacity)"
+  run_cmd kubectl ate suspend actor coldstart-2 -a "${ATESPACE}"
+  run_cmd kubectl ate suspend actor coldstart-3 -a "${ATESPACE}"
+
+  local cs_port="${COLDSTART_PORT:-8091}"
+  local cs_url="http://localhost:${cs_port}"
+  echo "Starting Cold-Start HPA & Production QPS Comparison Gateway on ${cs_url}..."
+  (
+    cd "${REPO_ROOT}"
+    go run ./cmd/coldstart \
+      --mode=local \
+      --addr=":${cs_port}" \
+      --init-delay=12s \
+      --min-query-duration=200ms \
+      --max-concurrent=4 >/dev/null 2>&1
+  ) &
+  GATEWAY_PID=$!
+  trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
+
+  for _ in {1..30}; do
+    if curl -s -o /dev/null --connect-timeout 1 "${cs_url}/readyz" 2>/dev/null; then
+      break
+    fi
+    sleep 0.3
+  done
+
+  echo ""
+  echo "  Live HPA & Production QPS Dashboard : ${cs_url}/dashboard"
+  echo ""
+
+  step "4. PRODUCTION HPA QPS RACE: Trigger a 60 QPS Traffic Spike (minReplicas: 1 -> maxReplicas: 3, 20 QPS/replica cap)"
+  curl -fsS -X POST "${cs_url}/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=2&spike_sec=15&cooldown_sec=2" >/dev/null
+
+  printf "\n  %-4s | %-22s | %-18s | %-20s | %-18s | %-20s\n" \
+    "SEC" "PHASE (DEMAND)" "K8S HPA (READY)" "K8S GOODPUT / SHED" "SUB HPA (ACTIVE)" "SUB GOODPUT / SHED"
+  printf "  %s\n" "------------------------------------------------------------------------------------------------------------------------"
+
+  for ((sec = 1; sec <= 18; sec++)); do
+    sleep 1
+    local snap
+    snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
+    if [[ -n "${snap}" ]]; then
+      local phase k8s_des k8s_rdy k8s_good k8s_shed sub_des sub_rdy sub_good sub_shed
+      phase="$(echo "${snap}" | awk -F'"' '/"scenario_phase":/ {print $4; exit}')"
+      k8s_des="$(echo "${snap}" | awk '/"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
+      k8s_rdy="$(echo "${snap}" | awk '/"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
+      k8s_good="$(echo "${snap}" | awk '/"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
+      k8s_shed="$(echo "${snap}" | awk '/"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
+      sub_des="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
+      sub_rdy="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
+      sub_good="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
+      sub_shed="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
+      printf "  %2ds  | %-22s | %s/%s Ready (%2d QPS) | %5s OK / %5s 429 | %s/%s Ready (%2d QPS) | %5s OK / %5s 429\n" \
+        "${sec}" "${phase}" \
+        "${k8s_rdy:-1}" "${k8s_des:-1}" "$(( ${k8s_rdy:-1} * 20 ))" "${k8s_good:-0}" "${k8s_shed:-0}" \
+        "${sub_rdy:-1}" "${sub_des:-1}" "$(( ${sub_rdy:-1} * 20 ))" "${sub_good:-0}" "${sub_shed:-0}"
+    fi
+  done
+
+  echo ""
+  local final_snap k8s_tot sub_tot k8s_drop sub_drop mult extra
+  final_snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
+  k8s_tot="$(echo "${final_snap}" | awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}')"
+  k8s_drop="$(echo "${final_snap}" | awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}')"
+  sub_tot="$(echo "${final_snap}" | awk '/"substrate":/,0' | awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}')"
+  sub_drop="$(echo "${final_snap}" | awk '/"substrate":/,0' | awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}')"
+  mult="$(echo "${final_snap}" | awk '/"goodput_multiplier":/ {gsub(/,/,"",$2); print $2; exit}')"
+  extra="$(echo "${final_snap}" | awk '/"extra_queries_served":/ {gsub(/,/,"",$2); print $2; exit}')"
+
+  echo "  ================================================================================"
+  echo "  PRODUCTION HPA + COLD-START SCORECARD (minReplicas: 1 -> maxReplicas: 3)"
+  echo "  --------------------------------------------------------------------------------"
+  echo "  Standard K8s HPA (12s Cold-Start Pods) : ${k8s_tot:-0} searches served (200 OK) | ${k8s_drop:-0} shed (429)"
+  echo "  Agent Substrate HPA (~100ms Snapshot)  : ${sub_tot:-0} searches served (200 OK) | ${sub_drop:-0} shed (429)"
+  echo "  Production QPS Advantage               : ${mult:-1.0}x effective goodput (+${extra:-0} extra queries served!)"
+  echo "  ================================================================================"
+
+  if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
+    echo ""
+    echo ">>> Cold-Start HPA Dashboard (${cs_url}/dashboard) is still live!"
+    read -r -p "    [Press Enter when finished exploring the browser UI] " _
+  fi
+
+  kill "${GATEWAY_PID:-}" 2>/dev/null || true
   free_workers
 }
 
@@ -590,7 +761,8 @@ run_all_acts() {
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_dungeon2d_gateway
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
+  cleanup_coldstart_hpa
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
@@ -602,20 +774,22 @@ cleanup_all() {
 }
 
 case "${1:-}" in
-  bootstrap-gke)     bootstrap_gke ;;
-  deploy)            deploy_all ;;
-  deploy-dungeon2d)  deploy_dungeon2d_gateway ;;
-  cleanup-dungeon2d) cleanup_dungeon2d_gateway ;;
-  run-all)           run_all_acts ;;
-  act1-dungeon)      act1_dungeon ;;
-  act1b-dungeon2d)   act1b_dungeon2d ;;
-  act2-coldstart)    act2_coldstart ;;
-  act3-tenantdb)     act3_tenantdb ;;
-  act4-honeypot)     act4_honeypot ;;
-  act5-timewarp)     act5_timewarp ;;
-  cleanup)           cleanup_all ;;
+  bootstrap-gke)        bootstrap_gke ;;
+  deploy)               deploy_all ;;
+  deploy-dungeon2d)     deploy_dungeon2d_gateway ;;
+  cleanup-dungeon2d)    cleanup_dungeon2d_gateway ;;
+  deploy-coldstart-hpa) deploy_coldstart_hpa ;;
+  cleanup-coldstart-hpa) cleanup_coldstart_hpa ;;
+  run-all)              run_all_acts ;;
+  act1-dungeon)         act1_dungeon ;;
+  act1b-dungeon2d)      act1b_dungeon2d ;;
+  act2-coldstart)       act2_coldstart ;;
+  act3-tenantdb)        act3_tenantdb ;;
+  act4-honeypot)        act4_honeypot ;;
+  act5-timewarp)        act5_timewarp ;;
+  cleanup)              cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac
