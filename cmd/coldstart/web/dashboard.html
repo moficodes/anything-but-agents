@@ -299,31 +299,33 @@
     }
 
     button.hw-btn.theme-toggle {
-      padding: 4px;
-      gap: 4px;
+      padding: 3px;
+      gap: 3px;
       border-color: var(--hairline-strong);
       background: var(--panel);
-      font-weight: 700;
     }
 
     .theme-seg {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 5px 10px;
+      justify-content: center;
+      width: 30px;
+      height: 28px;
       border-radius: 2px;
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      border: 1px solid transparent;
       color: var(--text-muted);
-      transition: background-color 0.15s ease, color 0.15s ease;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .theme-seg svg {
+      width: 15px;
+      height: 15px;
     }
 
     .theme-seg.active {
       background: var(--sig-ice-dim);
       color: var(--sig-ice-bright);
-      border: 1px solid var(--sig-ice);
+      border-color: var(--sig-ice);
     }
 
     /* 4-Bay Top Readout Strip (Open Hairline Grid) */
@@ -1106,18 +1108,16 @@
 
         <div class="top-right-controls">
           <button id="btnThemeToggle" class="hw-btn theme-toggle" onclick="toggleTheme()" title="Toggle Projector Light Mode vs Dark Scope Mode (Shortcut: T)" aria-label="Toggle Light and Dark Theme">
-            <span class="theme-seg active" id="themeSegDark">
+            <span class="theme-seg active" id="themeSegDark" title="Dark Scope Mode">
               <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
               </svg>
-              DARK
             </span>
-            <span class="theme-seg" id="themeSegLight">
+            <span class="theme-seg" id="themeSegLight" title="Projector Light Mode">
               <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="4"></circle>
                 <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
               </svg>
-              <span id="themeToggleLabel">PROJECTOR LIGHT</span>
             </span>
           </button>
         </div>
