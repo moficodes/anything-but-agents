@@ -17,23 +17,59 @@
       --soc-panel-alt: #0f172a;
       --soc-bay: #0d1424;
       --soc-bay-hover: #152038;
+      --soc-subhead-bg: #080d18;
+      --soc-th-bg: #090e1a;
+      --soc-code-bg: #03060c;
+      --soc-input-bg: #04070e;
       --soc-border: #1e293b;
       --soc-border-strong: #334155;
       --soc-text: #f8fafc;
       --soc-text-secondary: #cbd5e1;
       --soc-text-muted: #64748b;
+      --rack-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      --soc-header-bg: linear-gradient(90deg, rgba(239, 68, 68, 0.14), rgba(15, 23, 42, 0.4));
 
-      /* Daylight Enterprise Facade ("The Movie Set") Tokens */
-      --set-bg: #f1f5f9;
-      --set-surface: #ffffff;
-      --set-surface-alt: #f8fafc;
-      --set-border: #cbd5e1;
-      --set-border-strong: #94a3b8;
-      --set-ink: #0f172a;
-      --set-ink-secondary: #334155;
-      --set-ink-muted: #64748b;
-      --set-accent-blue: #0284c7;
-      --set-accent-blue-bg: rgba(2, 132, 199, 0.08);
+      /* Enterprise Intranet Facade ("The Movie Set") Tokens — Dark Mode */
+      --set-bg: #080e1c;
+      --set-chrome-bg: #0c1528;
+      --set-url-bg: #050913;
+      --set-url-text: #e2e8f0;
+      --set-url-border: #334155;
+      --set-surface: #0d1629;
+      --set-surface-alt: #121e36;
+      --set-border: #1e293b;
+      --set-border-strong: #334155;
+      --set-ink: #f8fafc;
+      --set-ink-secondary: #cbd5e1;
+      --set-ink-muted: #94a3b8;
+      --set-accent-blue: #38bdf8;
+      --set-accent-blue-bg: rgba(56, 189, 248, 0.14);
+      --set-stage-pill-bg: rgba(245, 158, 11, 0.16);
+      --set-stage-pill-text: #fbbf24;
+      --set-stage-pill-border: #f59e0b;
+      --set-debug-pill-bg: rgba(239, 68, 68, 0.18);
+      --set-debug-pill-text: #f87171;
+      --set-debug-pill-border: #ef4444;
+      --webshell-bg: #060a12;
+      --webshell-chrome-bg: #04070e;
+      --term-bg: #02040a;
+      --term-text: #34d399;
+      --term-input-text: #ffffff;
+
+      /* One-Way Mirror & Forensics Tokens — Dark Mode */
+      --mirror-bg: linear-gradient(180deg, #090d16 0%, #111a2e 50%, #090d16 100%);
+      --mirror-border-left: #334155;
+      --mirror-border-right: rgba(239, 68, 68, 0.55);
+      --mirror-label: #94a3b8;
+      --canary-alert-bg: rgba(127, 29, 29, 0.26);
+      --canary-alert-text: #fecaca;
+      --canary-clean-bg: rgba(6, 78, 59, 0.22);
+      --canary-clean-text: #a7f3d0;
+      --badge-unchanged-bg: #1e293b;
+      --badge-unchanged-text: #94a3b8;
+      --badge-deleted-bg: rgba(244, 63, 94, 0.2);
+      --badge-deleted-text: #fda4af;
+      --badge-deleted-border: #f43f5e;
 
       /* Intentional Hardware Signal Tokens */
       --sig-emerald: #10b981;
@@ -53,7 +89,7 @@
       --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
-    /* High-Contrast Projector Light Mode (Daylight Telemetry Instrument Palette) */
+    /* High-Contrast Projector Light Mode (Pure Token Overrides — Zero Layout Shift) */
     [data-theme="light"] {
       --chassis: #cbd5e1;
       --soc-bg: #f1f5f9;
@@ -61,18 +97,59 @@
       --soc-panel-alt: #f8fafc;
       --soc-bay: #e2e8f0;
       --soc-bay-hover: #cbd5e1;
+      --soc-subhead-bg: #e2e8f0;
+      --soc-th-bg: #e2e8f0;
+      --soc-code-bg: #f8fafc;
+      --soc-input-bg: #ffffff;
       --soc-border: #cbd5e1;
       --soc-border-strong: #94a3b8;
       --soc-text: #0f172a;
       --soc-text-secondary: #1e293b;
       --soc-text-muted: #475569;
+      --rack-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+      --soc-header-bg: linear-gradient(90deg, rgba(220, 38, 38, 0.12), rgba(226, 232, 240, 0.7));
 
-      /* Warm corporate ivory for Movie Set so left vs right remains distinct in Projector Mode */
-      --set-bg: #fefce8;
+      /* Enterprise Intranet Facade ("The Movie Set") Tokens — Daylight Mode */
+      --set-bg: #eff6ff;
+      --set-chrome-bg: #dbeafe;
+      --set-url-bg: #ffffff;
+      --set-url-text: #0f172a;
+      --set-url-border: #94a3b8;
       --set-surface: #ffffff;
-      --set-surface-alt: #fef9c3;
-      --set-border: #fde047;
-      --set-border-strong: #eab308;
+      --set-surface-alt: #f8fafc;
+      --set-border: #cbd5e1;
+      --set-border-strong: #94a3b8;
+      --set-ink: #0f172a;
+      --set-ink-secondary: #334155;
+      --set-ink-muted: #475569;
+      --set-accent-blue: #0284c7;
+      --set-accent-blue-bg: rgba(2, 132, 199, 0.1);
+      --set-stage-pill-bg: #fffbeb;
+      --set-stage-pill-text: #b45309;
+      --set-stage-pill-border: #d97706;
+      --set-debug-pill-bg: #fef2f2;
+      --set-debug-pill-text: #b91c1c;
+      --set-debug-pill-border: #dc2626;
+      --webshell-bg: #f8fafc;
+      --webshell-chrome-bg: #e2e8f0;
+      --term-bg: #ffffff;
+      --term-text: #047857;
+      --term-input-text: #0f172a;
+
+      /* One-Way Mirror & Forensics Tokens — Daylight Mode */
+      --mirror-bg: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+      --mirror-border-left: #94a3b8;
+      --mirror-border-right: #dc2626;
+      --mirror-label: #1e293b;
+      --canary-alert-bg: #fef2f2;
+      --canary-alert-text: #991b1b;
+      --canary-clean-bg: #ecfdf5;
+      --canary-clean-text: #065f46;
+      --badge-unchanged-bg: #e2e8f0;
+      --badge-unchanged-text: #475569;
+      --badge-deleted-bg: #ffe4e6;
+      --badge-deleted-text: #be123c;
+      --badge-deleted-border: #e11d48;
 
       /* Deep saturated signal pigments for high-lumen projector legibility on white */
       --sig-emerald: #059669;
@@ -87,86 +164,6 @@
       --sig-ice: #0284c7;
       --sig-ice-bright: #0369a1;
       --sig-ice-dim: rgba(2, 132, 199, 0.13);
-    }
-
-    [data-theme="light"] .rack-shell {
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
-    }
-
-    [data-theme="light"] .tab-btn.active {
-      color: #0f172a;
-      box-shadow: none;
-    }
-
-    [data-theme="light"] .tab-ver-badge {
-      background: #ffffff;
-      color: #b45309;
-    }
-
-    [data-theme="light"] .actor-spawn-input {
-      background: #ffffff;
-      color: #0f172a;
-    }
-
-    [data-theme="light"] .one-way-mirror {
-      background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
-      border-left: 1px solid #94a3b8;
-      border-right: 2px solid #dc2626;
-    }
-
-    [data-theme="light"] .mirror-label {
-      color: #1e293b;
-    }
-
-    [data-theme="light"] .soc-header {
-      background: linear-gradient(90deg, rgba(220, 38, 38, 0.12), rgba(226, 232, 240, 0.7));
-    }
-
-    [data-theme="light"] .snap-node {
-      background: #f8fafc;
-      color: #1e293b;
-    }
-
-    [data-theme="light"] .snap-node:hover {
-      color: #0f172a;
-    }
-
-    [data-theme="light"] .canary-box {
-      background: #fef2f2;
-      color: #991b1b;
-    }
-
-    [data-theme="light"] .canary-box.clean {
-      background: #ecfdf5;
-      color: #065f46;
-    }
-
-    [data-theme="light"] .subpanel-head,
-    [data-theme="light"] table.delta-table th {
-      background: #e2e8f0;
-      color: #1e293b;
-    }
-
-    [data-theme="light"] .badge.UNCHANGED {
-      background: #e2e8f0;
-      color: #475569;
-    }
-
-    [data-theme="light"] .badge.DELETED {
-      background: #ffe4e6;
-      color: #be123c;
-    }
-
-    [data-theme="light"] .inspector-body,
-    [data-theme="light"] .audit-list {
-      background: #f8fafc;
-      color: #0f172a;
-    }
-
-    [data-theme="light"] .btn.theme-toggle {
-      background: #0284c7;
-      border-color: #0369a1;
-      color: #ffffff;
     }
 
     * {
@@ -202,7 +199,7 @@
       margin: 0 auto;
       border: 1px solid var(--soc-border-strong);
       background: var(--soc-bg);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      box-shadow: var(--rack-shadow);
       display: flex;
       flex-direction: column;
     }
@@ -225,6 +222,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
     }
 
     .rack-ears {
@@ -258,6 +256,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 0;
     }
 
     .title-eyebrow {
@@ -282,6 +281,7 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 10px;
+      margin-left: auto;
     }
 
     .session-tabs {
@@ -313,16 +313,16 @@
 
     .tab-btn.active {
       background: var(--sig-ice-dim);
-      color: #ffffff;
+      color: var(--soc-text);
       border-color: var(--sig-ice);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
     }
 
     .tab-ver-badge {
       padding: 1px 5px;
       border-radius: 2px;
       font-size: 10px;
-      background: rgba(15, 23, 42, 0.75);
+      background: var(--soc-panel-alt);
       border: 1px solid var(--soc-border-strong);
       color: var(--sig-amber-bright);
     }
@@ -352,7 +352,7 @@
     }
 
     .actor-spawn-input {
-      background: #04070e;
+      background: var(--soc-input-bg);
       border: 1px solid var(--soc-border-strong);
       border-radius: 3px;
       padding: 6px 9px;
@@ -364,6 +364,38 @@
 
     .actor-spawn-input:focus {
       outline: 1px solid var(--sig-ice);
+      border-color: var(--sig-ice);
+    }
+
+    /* Icon-Only Segmented Theme Toggle (Constant Dimensions — Zero Layout Shift) */
+    .btn.theme-toggle {
+      padding: 3px;
+      gap: 3px;
+      border-color: var(--soc-border-strong);
+      background: var(--soc-panel-alt);
+      flex-shrink: 0;
+    }
+
+    .theme-seg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 26px;
+      border-radius: 2px;
+      border: 1px solid transparent;
+      color: var(--soc-text-muted);
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .theme-seg svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .theme-seg.active {
+      background: var(--sig-ice-dim);
+      color: var(--sig-ice-bright);
       border-color: var(--sig-ice);
     }
 
@@ -390,7 +422,7 @@
     }
 
     /* ==========================================================================
-       LEFT PANE: THE MOVIE SET (DAYLIGHT CORPORATE INTRANET FACADE)
+       LEFT PANE: THE MOVIE SET (CORPORATE INTRANET FACADE)
        ========================================================================== */
     .movie-set-pane {
       background: var(--set-bg);
@@ -401,7 +433,7 @@
     }
 
     .browser-chrome {
-      background: #e2e8f0;
+      background: var(--set-chrome-bg);
       border-bottom: 1px solid var(--set-border-strong);
       padding: 9px 14px;
       display: flex;
@@ -432,9 +464,9 @@
     .url-bar {
       flex: 1;
       min-width: 240px;
-      background: #0f172a;
-      color: #e2e8f0;
-      border: 1px solid #334155;
+      background: var(--set-url-bg);
+      color: var(--set-url-text);
+      border: 1px solid var(--set-url-border);
       border-radius: 4px;
       padding: 5px 10px;
       font-family: var(--font-mono);
@@ -461,9 +493,9 @@
       font-family: var(--font-mono);
       font-size: 10.5px;
       font-weight: 700;
-      background: #fffbeb;
-      color: #b45309;
-      border: 1px solid #f59e0b;
+      background: var(--set-stage-pill-bg);
+      color: var(--set-stage-pill-text);
+      border: 1px solid var(--set-stage-pill-border);
     }
 
     .movie-set-body {
@@ -492,7 +524,7 @@
       align-items: flex-start;
       gap: 10px;
       flex-wrap: wrap;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid var(--set-border);
       padding-bottom: 9px;
     }
 
@@ -534,9 +566,9 @@
       font-weight: 700;
       padding: 3px 8px;
       border-radius: 3px;
-      background: #fef2f2;
-      color: #b91c1c;
-      border: 1px solid #f87171;
+      background: var(--set-debug-pill-bg);
+      color: var(--set-debug-pill-text);
+      border: 1px solid var(--set-debug-pill-border);
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -595,7 +627,7 @@
 
     .decoy-inspect-btn {
       align-self: flex-start;
-      background: #ffffff;
+      background: var(--set-surface);
       color: var(--set-ink-secondary);
       border: 1px solid var(--set-border-strong);
       border-radius: 3px;
@@ -615,13 +647,13 @@
       background: var(--set-accent-blue-bg);
     }
 
-    /* Embedded Dark Web-Shell Drawer inside Movie Set */
+    /* Embedded Web-Shell Drawer inside Movie Set */
     .webshell-drawer {
-      background: #090d16;
-      border: 1px solid #1e293b;
+      background: var(--webshell-bg);
+      border: 1px solid var(--soc-border-strong);
       border-radius: 6px;
       padding: 12px;
-      color: #f8fafc;
+      color: var(--soc-text);
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -639,7 +671,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: #94a3b8;
+      color: var(--soc-text-muted);
     }
 
     .playbook-bar {
@@ -649,9 +681,9 @@
     }
 
     .btn {
-      background: #131c2e;
-      color: #f8fafc;
-      border: 1px solid #334155;
+      background: var(--soc-bay);
+      color: var(--soc-text);
+      border: 1px solid var(--soc-border-strong);
       border-radius: 4px;
       padding: 7px 10px;
       font-family: var(--font-mono);
@@ -669,7 +701,7 @@
     }
 
     .btn:hover {
-      background: #1e293b;
+      background: var(--soc-bay-hover);
       border-color: var(--sig-ice);
     }
 
@@ -678,14 +710,13 @@
     }
 
     .btn.danger {
-      background: rgba(185, 28, 28, 0.22);
-      border-color: #dc2626;
-      color: #fecaca;
+      background: var(--sig-crimson-dim);
+      border-color: var(--sig-crimson);
+      color: var(--sig-crimson-bright);
     }
 
     .btn.danger:hover {
-      background: rgba(220, 38, 38, 0.35);
-      border-color: #f87171;
+      border-color: var(--sig-crimson-bright);
     }
 
     .terminal-chrome {
@@ -694,13 +725,13 @@
       justify-content: space-between;
       gap: 8px;
       padding: 6px 10px;
-      background: #050811;
-      border: 1px solid #1e293b;
+      background: var(--webshell-chrome-bg);
+      border: 1px solid var(--soc-border-strong);
       border-bottom: none;
       border-radius: 4px 4px 0 0;
       font-family: var(--font-mono);
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--soc-text-muted);
     }
 
     .terminal-meta-right {
@@ -727,8 +758,8 @@
 
     .term-clear-btn {
       background: transparent;
-      border: 1px solid #334155;
-      color: #94a3b8;
+      border: 1px solid var(--soc-border-strong);
+      color: var(--soc-text-muted);
       border-radius: 2px;
       padding: 1px 6px;
       font-family: var(--font-mono);
@@ -737,18 +768,18 @@
     }
 
     .term-clear-btn:hover {
-      color: #ffffff;
-      border-color: #64748b;
+      color: var(--soc-text);
+      border-color: var(--sig-ice);
     }
 
     .terminal {
-      background: #02040a;
-      border: 1px solid #1e293b;
+      background: var(--term-bg);
+      border: 1px solid var(--soc-border-strong);
       border-radius: 0 0 4px 4px;
       padding: 11px 12px;
       font-family: var(--font-mono);
       font-size: 12px;
-      color: var(--sig-emerald-bright);
+      color: var(--term-text);
       min-height: 230px;
       max-height: 340px;
       overflow-y: auto;
@@ -765,11 +796,11 @@
 
     .cmd-input {
       flex: 1;
-      background: #02040a;
-      border: 1px solid #334155;
+      background: var(--term-bg);
+      border: 1px solid var(--soc-border-strong);
       border-radius: 4px;
       padding: 8px 11px;
-      color: #ffffff;
+      color: var(--term-input-text);
       font-family: var(--font-mono);
       font-size: 12px;
     }
@@ -783,10 +814,9 @@
        CENTER SEAM: THE ONE-WAY MIRROR
        ========================================================================== */
     .one-way-mirror {
-      background:
-        linear-gradient(180deg, #090d16 0%, #111a2e 50%, #090d16 100%);
-      border-left: 1px solid #334155;
-      border-right: 2px solid rgba(239, 68, 68, 0.55);
+      background: var(--mirror-bg);
+      border-left: 1px solid var(--mirror-border-left);
+      border-right: 2px solid var(--mirror-border-right);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -822,7 +852,7 @@
       font-weight: 700;
       letter-spacing: 0.16em;
       text-transform: uppercase;
-      color: #94a3b8;
+      color: var(--mirror-label);
       white-space: nowrap;
     }
 
@@ -839,8 +869,7 @@
     .soc-header {
       padding: 10px 16px;
       border-bottom: 1px solid var(--soc-border-strong);
-      background:
-        linear-gradient(90deg, rgba(239, 68, 68, 0.14), rgba(15, 23, 42, 0.4));
+      background: var(--soc-header-bg);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -971,9 +1000,9 @@
     }
 
     .btn.soc-clone {
-      background: rgba(244, 63, 94, 0.16);
-      border-color: #f43f5e;
-      color: #fda4af;
+      background: var(--badge-deleted-bg);
+      border-color: var(--badge-deleted-border);
+      color: var(--badge-deleted-text);
     }
 
     .timeline-scrubber {
@@ -986,7 +1015,7 @@
     }
 
     .snap-node {
-      background: #070b14;
+      background: var(--soc-panel-alt);
       border: 1px solid var(--soc-border-strong);
       border-radius: 3px;
       padding: 4px 9px;
@@ -1002,7 +1031,7 @@
 
     .snap-node:hover {
       border-color: var(--sig-amber);
-      color: #ffffff;
+      color: var(--soc-text);
     }
 
     .snap-node.active {
@@ -1028,22 +1057,22 @@
 
     /* Canary Tripwire Alarm Strip */
     .canary-box {
-      background: rgba(127, 29, 29, 0.26);
+      background: var(--canary-alert-bg);
       border: 1px solid var(--sig-crimson);
       border-radius: 5px;
       padding: 9px 12px;
       font-family: var(--font-mono);
       font-size: 11.5px;
-      color: #fecaca;
+      color: var(--canary-alert-text);
       display: flex;
       flex-direction: column;
       gap: 5px;
     }
 
     .canary-box.clean {
-      background: rgba(6, 78, 59, 0.22);
+      background: var(--canary-clean-bg);
       border-color: var(--sig-emerald);
-      color: #a7f3d0;
+      color: var(--canary-clean-text);
     }
 
     .canary-head {
@@ -1079,7 +1108,7 @@
 
     .subpanel-head {
       padding: 7px 10px;
-      background: #080d18;
+      background: var(--soc-subhead-bg);
       border-bottom: 1px solid var(--soc-border);
       font-family: var(--font-mono);
       font-size: 10.5px;
@@ -1112,7 +1141,7 @@
       font-size: 9.5px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      background: #090e1a;
+      background: var(--soc-th-bg);
     }
 
     table.delta-table tbody tr {
@@ -1137,8 +1166,8 @@
     }
 
     .badge.UNCHANGED {
-      background: #1e293b;
-      color: #94a3b8;
+      background: var(--badge-unchanged-bg);
+      color: var(--badge-unchanged-text);
     }
 
     .badge.ADDED {
@@ -1154,16 +1183,16 @@
     }
 
     .badge.DELETED {
-      background: rgba(244, 63, 94, 0.2);
-      color: #fda4af;
-      border: 1px solid #f43f5e;
+      background: var(--badge-deleted-bg);
+      color: var(--badge-deleted-text);
+      border: 1px solid var(--badge-deleted-border);
       text-decoration: line-through;
     }
 
     .inspector-body {
       margin: 0;
       padding: 10px;
-      background: #03060c;
+      background: var(--soc-code-bg);
       color: var(--sig-ice-bright);
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1192,7 +1221,7 @@
     }
 
     .audit-list {
-      background: #03060c;
+      background: var(--soc-code-bg);
       padding: 8px 10px;
       max-height: 165px;
       overflow-y: auto;
@@ -1250,19 +1279,18 @@
             <span>Target</span>
           </button>
         </form>
-        <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle High-Contrast Projector Light Mode">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1" x2="12" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1" y1="12" x2="3" y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-          </svg>
-          <span id="themeToggleLabel">Projector Mode</span>
+        <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Projector Light Mode vs Dark Mode (Shortcut: T)" aria-label="Toggle Light and Dark Theme">
+          <span class="theme-seg active" id="themeSegDark" title="Dark Mode">
+            <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+          </span>
+          <span class="theme-seg" id="themeSegLight" title="Projector Light Mode">
+            <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+            </svg>
+          </span>
         </button>
       </div>
     </header>
@@ -1572,14 +1600,27 @@
     let currentTheme = "dark";
     const termHistory = {};
 
-    function toggleTheme() {
-      currentTheme = currentTheme === "light" ? "dark" : "light";
+    function applyTheme(theme) {
+      currentTheme = theme === "light" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", currentTheme);
-      const lbl = document.getElementById("themeToggleLabel");
-      if (lbl) {
-        lbl.textContent = currentTheme === "light" ? "Dark Rack" : "Projector Mode";
+      const segDark = document.getElementById("themeSegDark");
+      const segLight = document.getElementById("themeSegLight");
+      if (segDark && segLight) {
+        segDark.className = "theme-seg" + (currentTheme === "dark" ? " active" : "");
+        segLight.className = "theme-seg" + (currentTheme === "light" ? " active" : "");
       }
     }
+
+    function toggleTheme() {
+      applyTheme(currentTheme === "light" ? "dark" : "light");
+    }
+
+    document.addEventListener("keydown", ev => {
+      if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA")) return;
+      if (ev.key === "t" || ev.key === "T") {
+        toggleTheme();
+      }
+    });
 
     const PLAYBOOK_CMDS = {
       1: "id && uname -a && ls -la /tmp/honeypot",

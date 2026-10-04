@@ -352,12 +352,18 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 		`socClone()`,
 		`[data-theme="light"]`,
 		`id="themeToggleBtn"`,
+		`id="themeSegDark"`,
+		`id="themeSegLight"`,
 		`toggleTheme()`,
 	}
 	for _, marker := range requiredMarkers {
 		if !strings.Contains(html, marker) {
 			t.Errorf("GET / HTML missing required marker %q", marker)
 		}
+	}
+
+	if strings.Contains(html, "themeToggleLabel") {
+		t.Errorf("GET / HTML theme toggle must be icon-only without a text label that shifts layout")
 	}
 
 	if strings.Contains(html, ".innerHTML") {
