@@ -53,6 +53,122 @@
       --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
+    /* High-Contrast Projector Light Mode (Daylight Telemetry Instrument Palette) */
+    [data-theme="light"] {
+      --chassis: #cbd5e1;
+      --soc-bg: #f1f5f9;
+      --soc-panel: #ffffff;
+      --soc-panel-alt: #f8fafc;
+      --soc-bay: #e2e8f0;
+      --soc-bay-hover: #cbd5e1;
+      --soc-border: #cbd5e1;
+      --soc-border-strong: #94a3b8;
+      --soc-text: #0f172a;
+      --soc-text-secondary: #1e293b;
+      --soc-text-muted: #475569;
+
+      /* Warm corporate ivory for Movie Set so left vs right remains distinct in Projector Mode */
+      --set-bg: #fefce8;
+      --set-surface: #ffffff;
+      --set-surface-alt: #fef9c3;
+      --set-border: #fde047;
+      --set-border-strong: #eab308;
+
+      /* Deep saturated signal pigments for high-lumen projector legibility on white */
+      --sig-emerald: #059669;
+      --sig-emerald-bright: #047857;
+      --sig-emerald-dim: rgba(5, 150, 105, 0.13);
+      --sig-amber: #d97706;
+      --sig-amber-bright: #b45309;
+      --sig-amber-dim: rgba(217, 119, 6, 0.14);
+      --sig-crimson: #dc2626;
+      --sig-crimson-bright: #b91c1c;
+      --sig-crimson-dim: rgba(220, 38, 38, 0.13);
+      --sig-ice: #0284c7;
+      --sig-ice-bright: #0369a1;
+      --sig-ice-dim: rgba(2, 132, 199, 0.13);
+    }
+
+    [data-theme="light"] .rack-shell {
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+    }
+
+    [data-theme="light"] .tab-btn.active {
+      color: #0f172a;
+      box-shadow: none;
+    }
+
+    [data-theme="light"] .tab-ver-badge {
+      background: #ffffff;
+      color: #b45309;
+    }
+
+    [data-theme="light"] .actor-spawn-input {
+      background: #ffffff;
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .one-way-mirror {
+      background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+      border-left: 1px solid #94a3b8;
+      border-right: 2px solid #dc2626;
+    }
+
+    [data-theme="light"] .mirror-label {
+      color: #1e293b;
+    }
+
+    [data-theme="light"] .soc-header {
+      background: linear-gradient(90deg, rgba(220, 38, 38, 0.12), rgba(226, 232, 240, 0.7));
+    }
+
+    [data-theme="light"] .snap-node {
+      background: #f8fafc;
+      color: #1e293b;
+    }
+
+    [data-theme="light"] .snap-node:hover {
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .canary-box {
+      background: #fef2f2;
+      color: #991b1b;
+    }
+
+    [data-theme="light"] .canary-box.clean {
+      background: #ecfdf5;
+      color: #065f46;
+    }
+
+    [data-theme="light"] .subpanel-head,
+    [data-theme="light"] table.delta-table th {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    [data-theme="light"] .badge.UNCHANGED {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    [data-theme="light"] .badge.DELETED {
+      background: #ffe4e6;
+      color: #be123c;
+    }
+
+    [data-theme="light"] .inspector-body,
+    [data-theme="light"] .audit-list {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    [data-theme="light"] .btn.theme-toggle {
+      background: #0284c7;
+      border-color: #0369a1;
+      color: #ffffff;
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -1134,6 +1250,20 @@
             <span>Target</span>
           </button>
         </form>
+        <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle High-Contrast Projector Light Mode">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <span id="themeToggleLabel">Projector Mode</span>
+        </button>
       </div>
     </header>
 
@@ -1439,7 +1569,17 @@
     let selectedFile = "";
     let userPinnedFile = false;
     let lastStateData = null;
+    let currentTheme = "dark";
     const termHistory = {};
+
+    function toggleTheme() {
+      currentTheme = currentTheme === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", currentTheme);
+      const lbl = document.getElementById("themeToggleLabel");
+      if (lbl) {
+        lbl.textContent = currentTheme === "light" ? "Dark Rack" : "Projector Mode";
+      }
+    }
 
     const PLAYBOOK_CMDS = {
       1: "id && uname -a && ls -la /tmp/honeypot",

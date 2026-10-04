@@ -350,6 +350,9 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 		`socSuspend()`,
 		`socRevert()`,
 		`socClone()`,
+		`[data-theme="light"]`,
+		`id="themeToggleBtn"`,
+		`toggleTheme()`,
 	}
 	for _, marker := range requiredMarkers {
 		if !strings.Contains(html, marker) {
