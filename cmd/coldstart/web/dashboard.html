@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cold-Start HPA & Production QPS Race — Agent Substrate</title>
+  <style>
+    :root {
+      --bg-0: #080b11;
+      --bg-1: #0f1520;
+      --bg-2: #161f30;
+      --border: #25324a;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-purple: #a855f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 50% 0%, #131c2e 0%, var(--bg-0) 75%);
+      color: var(--text-main);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 16px 20px 28px;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 18px;
+      background: rgba(15, 21, 32, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 14px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-cyan);
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .brand p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 13px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      border-color: var(--accent-cyan);
+      background: #1d2940;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      border-color: #38bdf8;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.3);
+    }
+    button.primary:hover {
+      background: linear-gradient(135deg, #0369a1, #0284c7);
+    }
+    button.spike-btn {
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fcd34d;
+    }
+    button svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .kpi-card {
+      background: rgba(15, 21, 32, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .kpi-value {
+      font-size: 22px;
+      font-weight: 800;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .kpi-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .phase-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .phase-pill.spike {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fde68a;
+      border-color: rgba(245, 158, 11, 0.5);
+    }
+
+    .arena {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .lane {
+      background: rgba(15, 21, 32, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .lane.k8s-lane {
+      border-top: 3px solid var(--accent-amber);
+    }
+    .lane.sub-lane {
+      border-top: 3px solid var(--accent-emerald);
+    }
+    .lane-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .lane-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .lane-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .hpa-badge {
+      padding: 4px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      background: rgba(8, 11, 17, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .metric-box {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .metric-box .lbl {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .metric-box .val {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .val.good { color: var(--accent-emerald); }
+    .val.shed { color: var(--accent-red); }
+    .val.cyan { color: var(--accent-cyan); }
+
+    .chart-wrap {
+      background: #070a10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px 8px;
+    }
+    .chart-legend {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .legend-items {
+      display: flex;
+      gap: 12px;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    canvas.qps-chart {
+      width: 100%;
+      height: 135px;
+      display: block;
+    }
+
+    .replicas-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .replica-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: border-color 0.2s ease;
+    }
+    .replica-card.ready {
+      border-color: rgba(16, 185, 129, 0.45);
+    }
+    .replica-card.booting {
+      border-color: rgba(245, 158, 11, 0.65);
+      background: rgba(245, 158, 11, 0.06);
+    }
+    .replica-card.suspended {
+      border-color: rgba(56, 189, 248, 0.3);
+      opacity: 0.82;
+    }
+    .replica-card.offline {
+      opacity: 0.55;
+    }
+    .rep-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .rep-name {
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .state-tag {
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .state-tag.ready {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .state-tag.booting {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+    }
+    .state-tag.suspended {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .state-tag.offline {
+      background: rgba(148, 163, 184, 0.12);
+      color: #94a3b8;
+    }
+    .rep-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .fp-pill {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(168, 85, 247, 0.16);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #d8b4fe;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .progress-track {
+      width: 100%;
+      height: 5px;
+      background: #090d14;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.25s ease;
+    }
+    .progress-fill.ready { background: var(--accent-emerald); }
+    .progress-fill.booting { background: var(--accent-amber); }
+    .progress-fill.suspended { background: var(--accent-cyan); }
+
+    .inspector {
+      background: rgba(15, 21, 32, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .inspector-head h3 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    table.query-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    table.query-table th,
+    table.query-table td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(37, 50, 74, 0.6);
+    }
+    table.query-table th {
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10px;
+    }
+
+    @media (max-width: 1080px) {
+      .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .arena { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+      </div>
+      <div>
+        <h1>Production HPA + Cold-Start QPS Benchmark</h1>
+        <p>50,000-Doc In-Memory Trigram Search Engine (20 QPS/Replica Cap, 12s Index Build) — Standard K8s HPA vs. Agent Substrate Golden Snapshot HPA</p>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="primary" onclick="triggerSpikeScenario()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        Run 24s Production Spike (15 → 60 → 15 QPS)
+      </button>
+      <button onclick="setQPS(15)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        Baseline (15 QPS)
+      </button>
+      <button class="spike-btn" onclick="setQPS(60)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+        Spike (60 QPS)
+      </button>
+      <button onclick="setQPS(0)">Idle (0 QPS)</button>
+      <button onclick="resetAll()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+        Reset
+      </button>
+    </div>
+  </header>
+
+  <section class="kpi-strip">
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Load Balancer Demand</span>
+        <span id="phasePill" class="phase-pill mono">IDLE</span>
+      </div>
+      <div class="kpi-value mono">
+        <span id="targetQPSVal">0</span>
+        <span style="font-size:13px;color:var(--text-muted)">QPS per backend</span>
+      </div>
+      <div class="kpi-sub mono">HPA Metric: coldstart_lb_qps (AvgVal = 20 QPS/replica)</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Total Goodput (200 OK Searches)</span>
+      </div>
+      <div class="kpi-value mono">
+        <span id="subTotalGood" style="color:var(--accent-emerald)">0</span>
+        <span style="font-size:13px;color:var(--text-muted)">vs K8s</span>
+        <span id="k8sTotalGood" style="color:var(--accent-amber)">0</span>
+      </div>
+      <div class="kpi-sub mono" id="extraServedSub">+0 extra production queries served on Substrate</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Production QPS Multiplier</span>
+      </div>
+      <div class="kpi-value mono" style="color:var(--accent-cyan)">
+        <span id="multiplierVal">1.00x</span>
+        <span style="font-size:13px;color:var(--text-muted)">effective goodput</span>
+      </div>
+      <div class="kpi-sub mono" id="scaleReadySub">Scale-Out to 3/3 Ready: Sub ~100ms vs K8s ~12,000ms</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Resident Heap Search Index</span>
+      </div>
+      <div class="kpi-value mono">
+        <span id="heapMBVal">64.2 MB</span>
+        <span style="font-size:13px;color:var(--text-muted)">50,000 docs</span>
+      </div>
+      <div class="kpi-sub mono">Inverted Token + 3-Gram Index + 78,498 Primes</div>
+    </div>
+  </section>
+
+  <section class="arena">
+    <!-- Left Column: Standard Kubernetes HPA -->
+    <div class="lane k8s-lane">
+      <div class="lane-header">
+        <div>
+          <h2 class="lane-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Standard Kubernetes HPA + Deployment
+          </h2>
+          <div class="lane-sub">Every scaled Pod runs the 12s 50,000-doc index build before <code>/readyz</code> turns 200 OK</div>
+        </div>
+        <div class="hpa-badge mono" id="k8sHpaBadge">HPA: 1/3 Desired | 1/3 Ready</div>
+      </div>
+
+      <div class="metrics-row mono">
+        <div class="metric-box">
+          <span class="lbl">Goodput QPS (200)</span>
+          <span class="val good" id="k8sGoodQPS">0.0</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Shed QPS (429/503)</span>
+          <span class="val shed" id="k8sShedQPS">0.0</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Ready Capacity</span>
+          <span class="val" id="k8sCapQPS">20 QPS</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Success / Shed</span>
+          <span class="val" id="k8sRateVal">100% (0 shed)</span>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-legend">
+          <span>Real-Time Throughput (QPS)</span>
+          <div class="legend-items">
+            <span><i class="legend-dot" style="background:#10b981"></i>Goodput (200 OK)</span>
+            <span><i class="legend-dot" style="background:#ef4444"></i>Shed Load (429)</span>
+            <span><i class="legend-dot" style="background:#94a3b8"></i>Demand QPS</span>
+          </div>
+        </div>
+        <canvas id="k8sChart" class="qps-chart" width="600" height="135"></canvas>
+      </div>
+
+      <div class="replicas-grid" id="k8sReplicas"></div>
+    </div>
+
+    <!-- Right Column: Agent Substrate Golden Snapshot HPA -->
+    <div class="lane sub-lane">
+      <div class="lane-header">
+        <div>
+          <h2 class="lane-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Agent Substrate HPA + Golden Snapshot Actors
+          </h2>
+          <div class="lane-sub">12s index build captured ONCE in Golden Snapshot; actors restore in ~100ms on scale-out</div>
+        </div>
+        <div class="hpa-badge mono" id="subHpaBadge">HPA: 1/3 Desired | 1/3 Active</div>
+      </div>
+
+      <div class="metrics-row mono">
+        <div class="metric-box">
+          <span class="lbl">Goodput QPS (200)</span>
+          <span class="val good" id="subGoodQPS">0.0</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Shed QPS (429/503)</span>
+          <span class="val shed" id="subShedQPS">0.0</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Ready Capacity</span>
+          <span class="val cyan" id="subCapQPS">20 QPS</span>
+        </div>
+        <div class="metric-box">
+          <span class="lbl">Success / Shed</span>
+          <span class="val" id="subRateVal">100% (0 shed)</span>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-legend">
+          <span>Real-Time Throughput (QPS)</span>
+          <div class="legend-items">
+            <span><i class="legend-dot" style="background:#10b981"></i>Goodput (200 OK)</span>
+            <span><i class="legend-dot" style="background:#ef4444"></i>Shed Load (429)</span>
+            <span><i class="legend-dot" style="background:#94a3b8"></i>Demand QPS</span>
+          </div>
+        </div>
+        <canvas id="subChart" class="qps-chart" width="600" height="135"></canvas>
+      </div>
+
+      <div class="replicas-grid" id="subReplicas"></div>
+    </div>
+  </section>
+
+  <section class="inspector">
+    <div class="inspector-head">
+      <h3>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Live In-Memory Search Query Stream (50,000 Indexed Packages & Symbols)
+      </h3>
+      <span class="mono" style="font-size:11px;color:var(--text-muted)">Notice all Substrate clones share the exact same Golden Heap Fingerprint</span>
+    </div>
+    <table class="query-table mono">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Backend</th>
+          <th>Replica</th>
+          <th>Search Query</th>
+          <th>Docs Scanned</th>
+          <th>Top Ranked Symbol</th>
+          <th>Golden Heap Fingerprint</th>
+          <th>Latency</th>
+        </tr>
+      </thead>
+      <tbody id="searchLogBody"></tbody>
+    </table>
+  </section>
+
+  <script>
+    async function triggerSpikeScenario() {
+      await fetch('/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=3&spike_sec=18&cooldown_sec=3', { method: 'POST' });
+      fetchState();
+    }
+
+    async function setQPS(qps) {
+      await fetch('/api/target-qps?qps=' + encodeURIComponent(qps), { method: 'POST' });
+      fetchState();
+    }
+
+    async function resetAll() {
+      await fetch('/api/reset', { method: 'POST' });
+      fetchState();
+    }
+
+    function renderReplicas(containerId, replicas, isSubstrate) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = replicas.map(r => {
+        const stLower = r.state.toLowerCase().includes('boot') ? 'booting'
+          : r.state === 'READY' ? 'ready'
+          : r.state === 'SUSPENDED' ? 'suspended' : 'offline';
+
+        let pct = 0;
+        if (r.state === 'READY') pct = 100;
+        else if (r.state === 'COLD_BOOTING' && r.boot_target_ms > 0) {
+          pct = Math.min(98, Math.round((r.boot_elapsed_ms / r.boot_target_ms) * 100));
+        } else if (r.state === 'SUSPENDED') pct = 100;
+
+        const bootInfo = isSubstrate
+          ? (r.state === 'READY' ? `Golden Wake: ${r.wake_latency_ms || 95}ms` : `GCS Snapshot Ready ($0 idle)`)
+          : (r.state === 'COLD_BOOTING' ? `Cold Boot: ${(r.boot_elapsed_ms/1000).toFixed(1)}s / ${(r.boot_target_ms/1000).toFixed(1)}s` : (r.state === 'READY' ? `Ready (20 QPS cap)` : `Scaled down`));
+
+        return `
+          <div class="replica-card ${stLower}">
+            <div class="rep-top">
+              <div class="rep-name mono">
+                <span>#${r.index} ${r.name}</span>
+                <span class="fp-pill">heap:${r.golden_heap_fingerprint || 'pending'}</span>
+              </div>
+              <span class="state-tag ${stLower} mono">${r.state}</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill ${stLower}" style="width:${pct}%"></div>
+            </div>
+            <div class="rep-meta mono">
+              <span>${r.init_stage}</span>
+              <span>${bootInfo} | IP: ${r.pod_ip} | Heap: ${r.heap_alloc_mb.toFixed(1)}MB | 200 OK: ${r.served_count} | 429 Shed: ${r.shed_count}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function drawChart(canvasId, history, isSubstrate) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const maxQPS = 70;
+      const padL = 32, padR = 10, padT = 10, padB = 18;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px ui-monospace, monospace';
+      [0, 20, 40, 60].forEach(val => {
+        const y = padT + plotH - (val / maxQPS) * plotH;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+        ctx.fillText(String(val), 4, y + 3);
+      });
+
+      if (!history || history.length === 0) return;
+      const maxPts = 30;
+      const pts = history.slice(-maxPts);
+      const stepX = plotW / Math.max(1, maxPts - 1);
+
+      const xAt = i => padL + i * stepX;
+      const yAt = v => padT + plotH - (Math.min(maxQPS, Math.max(0, v)) / maxQPS) * plotH;
+
+      // Goodput filled area
+      ctx.beginPath();
+      ctx.moveTo(xAt(0), yAt(0));
+      pts.forEach((p, i) => {
+        const val = isSubstrate ? p.sub_goodput_qps : p.k8s_goodput_qps;
+        ctx.lineTo(xAt(i), yAt(val));
+      });
+      ctx.lineTo(xAt(pts.length - 1), yAt(0));
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+      ctx.fill();
+
+      // Goodput line
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const val = isSubstrate ? p.sub_goodput_qps : p.k8s_goodput_qps;
+        if (i === 0) ctx.moveTo(xAt(i), yAt(val));
+        else ctx.lineTo(xAt(i), yAt(val));
+      });
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Shed line
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const val = isSubstrate ? p.sub_shed_qps : p.k8s_shed_qps;
+        if (i === 0) ctx.moveTo(xAt(i), yAt(val));
+        else ctx.lineTo(xAt(i), yAt(val));
+      });
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      // Target Demand dashed line
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(xAt(i), yAt(p.target_qps));
+        else ctx.lineTo(xAt(i), yAt(p.target_qps));
+      });
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        const st = await res.json();
+
+        document.getElementById('targetQPSVal').textContent = st.target_qps.toFixed(0);
+        const pill = document.getElementById('phasePill');
+        pill.textContent = st.scenario_phase || 'IDLE';
+        pill.className = 'phase-pill mono' + (st.target_qps >= 40 ? ' spike' : '');
+
+        document.getElementById('subTotalGood').textContent = st.substrate.total_goodput;
+        document.getElementById('k8sTotalGood').textContent = st.k8s.total_goodput;
+        document.getElementById('extraServedSub').textContent = `+${st.extra_queries_served} extra production queries served on Substrate`;
+        document.getElementById('multiplierVal').textContent = st.goodput_multiplier.toFixed(2) + 'x';
+
+        const subReadyStr = st.substrate.scale_out_ready_ms > 0 ? `${st.substrate.scale_out_ready_ms}ms` : '~100ms';
+        const k8sReadyStr = st.k8s.scale_out_ready_ms > 0 ? `${st.k8s.scale_out_ready_ms}ms` : '~12,000ms';
+        document.getElementById('scaleReadySub').textContent = `Scale-Out to 3/3 Ready: Sub ${subReadyStr} vs K8s ${k8sReadyStr}`;
+
+        if (st.substrate.replicas && st.substrate.replicas.length > 0) {
+          document.getElementById('heapMBVal').textContent = st.substrate.replicas[0].heap_alloc_mb.toFixed(1) + ' MB';
+        }
+
+        // K8s lane
+        document.getElementById('k8sHpaBadge').textContent = `HPA: ${st.k8s.hpa_desired_replicas}/3 Desired | ${st.k8s.ready_replicas}/3 Ready`;
+        document.getElementById('k8sGoodQPS').textContent = st.k8s.goodput_qps.toFixed(1);
+        document.getElementById('k8sShedQPS').textContent = st.k8s.shed_qps.toFixed(1);
+        document.getElementById('k8sCapQPS').textContent = `${st.k8s.active_capacity_qps.toFixed(0)} QPS`;
+        document.getElementById('k8sRateVal').textContent = `${st.k8s.success_rate_pct.toFixed(1)}% (${st.k8s.total_shed} shed)`;
+        renderReplicas('k8sReplicas', st.k8s.replicas || [], false);
+        drawChart('k8sChart', st.history || [], false);
+
+        // Substrate lane
+        document.getElementById('subHpaBadge').textContent = `HPA: ${st.substrate.hpa_desired_replicas}/3 Desired | ${st.substrate.ready_replicas}/3 Active`;
+        document.getElementById('subGoodQPS').textContent = st.substrate.goodput_qps.toFixed(1);
+        document.getElementById('subShedQPS').textContent = st.substrate.shed_qps.toFixed(1);
+        document.getElementById('subCapQPS').textContent = `${st.substrate.active_capacity_qps.toFixed(0)} QPS`;
+        document.getElementById('subRateVal').textContent = `${st.substrate.success_rate_pct.toFixed(1)}% (${st.substrate.total_shed} shed)`;
+        renderReplicas('subReplicas', st.substrate.replicas || [], true);
+        drawChart('subChart', st.history || [], true);
+
+        // Search stream
+        const tbody = document.getElementById('searchLogBody');
+        tbody.innerHTML = (st.recent_searches || []).slice(0, 8).map(s => `
+          <tr>
+            <td>${s.timestamp}</td>
+            <td style="color:${s.backend === 'substrate' ? '#10b981' : '#f59e0b'};font-weight:700">${s.backend.toUpperCase()}</td>
+            <td>${s.replica}</td>
+            <td>${s.query}</td>
+            <td>${s.docs_scanned} docs</td>
+            <td style="color:#38bdf8">${s.top_symbol || '-'}</td>
+            <td><span class="fp-pill">${s.golden_fingerprint || '-'}</span></td>
+            <td>${s.latency_ms.toFixed(1)}ms</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    fetchState();
+    setInterval(fetchState, 600);
+  </script>
+</body>
+</html>
