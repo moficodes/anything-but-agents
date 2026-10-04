@@ -6,25 +6,31 @@
   <title>Substrate Mission Control — Dungeon 2D Multiplexer Dashboard</title>
   <style>
     :root {
-      --bg: #0b0e14;
-      --panel: #141923;
-      --panel-inner: #0e121a;
-      --border: #2c3548;
-      --amber-border: #c28d42;
-      --amber-dim: #6e5025;
-      --text: #f3f4f6;
-      --muted: #94a3b8;
+      --bg: #15110d;
+      --stone-hi: #6e5f4b;
+      --stone-mid: #3a3228;
+      --stone-dark: #2a241c;
+      --stone-lo: #120e0a;
+      --stone-socket: #17130e;
+      --amber-border: #c8963e;
+      --amber-dim: #785828;
+      --text: #f5ebd6;
+      --muted: #b8a686;
       --cyan: #38bdf8;
       --emerald: #10b981;
       --amber: #f59e0b;
       --rose: #e11d48;
       --violet: #a855f7;
+      --parchment-top: #e4d2ac;
+      --parchment-mid: #d3bc8d;
+      --parchment-bot: #c1a46e;
+      --parchment-ink: #231709;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 0;
-      background: radial-gradient(circle at 50% 10%, #161d2b 0%, #0b0e14 80%);
+      background: radial-gradient(circle at 50% 10%, #282018 0%, #14100c 82%);
       color: var(--text);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       min-height: 100vh;
@@ -43,12 +49,44 @@
     }
     .icon-lg { width: 20px; height: 20px; }
 
-    /* Top RPG Header Bar */
+    /* 2004 Cracked Stone Beveled Slab */
+    .stone-slab {
+      background:
+        radial-gradient(circle at 18% 20%, rgba(255, 238, 200, 0.05) 0%, transparent 55%),
+        linear-gradient(180deg, #3f372d 0%, #2d261f 100%);
+      border-top: 2px solid var(--stone-hi);
+      border-left: 2px solid var(--stone-hi);
+      border-right: 2px solid var(--stone-lo);
+      border-bottom: 2px solid var(--stone-lo);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.65);
+    }
+
+    /* 2004 Sunken Stone Socket */
+    .stone-socket {
+      background: var(--stone-socket);
+      border-top: 2px solid #0e0b08;
+      border-left: 2px solid #0e0b08;
+      border-right: 2px solid #54483a;
+      border-bottom: 2px solid #54483a;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.85);
+    }
+
+    /* 2004 Rolled Aged-Parchment Scroll */
+    .parchment-scroll {
+      background: linear-gradient(180deg, var(--parchment-top) 0%, var(--parchment-mid) 55%, var(--parchment-bot) 100%);
+      border-top: 2px solid #8c6f3e;
+      border-bottom: 2px solid #5c4522;
+      border-left: 8px solid #856132;
+      border-right: 8px solid #856132;
+      border-radius: 4px;
+      color: var(--parchment-ink);
+      box-shadow: inset 0 0 14px rgba(107, 76, 35, 0.35), 0 6px 16px rgba(0, 0, 0, 0.65);
+    }
+
+    /* Top RPG Guild Header Bar */
     .topbar {
       padding: 12px 22px;
-      background: #10141d;
-      border-bottom: 1.5px solid var(--amber-dim);
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+      border-bottom: 3px solid var(--stone-lo);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -61,22 +99,21 @@
       gap: 12px;
     }
     .brand-crest {
-      width: 38px;
-      height: 38px;
-      border-radius: 6px;
-      background: #0b0e14;
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
       border: 1.5px solid var(--amber-border);
       display: flex;
       align-items: center;
       justify-content: center;
       color: #fbbf24;
-      box-shadow: inset 0 0 10px rgba(194, 141, 66, 0.25);
     }
     .brand-title {
       font-size: 16px;
       font-weight: 900;
       letter-spacing: 0.04em;
       color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
     }
     .brand-sub {
       font-size: 11px;
@@ -89,9 +126,7 @@
       flex-wrap: wrap;
     }
     .kpi-box {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 4px;
       padding: 5px 11px;
       display: flex;
       flex-direction: column;
@@ -99,6 +134,7 @@
     }
     .kpi-label {
       font-size: 9px;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--muted);
@@ -106,6 +142,7 @@
     .kpi-val {
       font-size: 16px;
       font-weight: 900;
+      text-shadow: 1px 1px 0 #000;
     }
     .top-actions {
       display: flex;
@@ -118,50 +155,57 @@
       justify-content: center;
       gap: 6px;
       padding: 7px 11px;
-      border-radius: 6px;
+      border-radius: 4px;
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 900;
       font-family: inherit;
-      border: 1.5px solid var(--border);
-      background: var(--panel);
+      background: linear-gradient(180deg, #4a4033 0%, #302920 100%);
+      border-top: 2px solid #786855;
+      border-left: 2px solid #786855;
+      border-right: 2px solid #14110d;
+      border-bottom: 2px solid #14110d;
       color: var(--text);
       cursor: pointer;
       text-decoration: none;
-      transition: all 0.14s ease;
+      text-shadow: 1px 1px 0 #000;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+      transition: filter 0.12s ease, transform 0.08s ease;
     }
-    .btn:hover { border-color: var(--amber-border); }
+    .btn:hover { filter: brightness(1.15); }
+    .btn:active {
+      border-top-color: #14110d;
+      border-left-color: #14110d;
+      border-right-color: #786855;
+      border-bottom-color: #786855;
+      transform: translateY(1px);
+    }
     .btn-primary {
-      background: rgba(194, 141, 66, 0.18);
-      border-color: var(--amber-border);
+      background: linear-gradient(180deg, #784b16 0%, #52320c 100%);
+      border-top-color: #f59e0b;
+      border-left-color: #f59e0b;
       color: #fde68a;
     }
     .btn-warn {
-      background: rgba(245, 158, 11, 0.16);
-      border-color: rgba(245, 158, 11, 0.55);
       color: #fbbf24;
     }
     .btn-fork {
-      background: rgba(168, 85, 247, 0.16);
-      border-color: rgba(168, 85, 247, 0.5);
       color: #c084fc;
     }
     .btn-danger {
-      background: rgba(225, 29, 72, 0.15);
-      border-color: rgba(225, 29, 72, 0.45);
       color: #fda4af;
     }
     .icon-sq-btn {
       width: 32px;
       height: 32px;
       padding: 0;
-      border-radius: 5px;
+      border-radius: 4px;
     }
 
     /* Main Grid */
     .dashboard-grid {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 350px;
+      grid-template-columns: 1fr 360px;
       gap: 16px;
       padding: 16px 22px;
     }
@@ -181,25 +225,24 @@
     }
     .section-title {
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.07em;
-      color: #fcd34d;
+      color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
-    /* 3-WorkerPool Multiplexer Cards */
+    /* 3-WorkerPool Multiplexer Stone Pedestals */
     .workers-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
     }
     .worker-card {
-      background: var(--panel);
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
+      border-radius: 5px;
       padding: 10px 12px;
       display: flex;
       flex-direction: column;
@@ -207,16 +250,16 @@
       transition: all 0.2s ease;
     }
     .worker-card.busy {
-      background: rgba(16, 185, 129, 0.14);
       border-color: var(--emerald);
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+      box-shadow: inset 0 0 14px rgba(16, 185, 129, 0.25), 0 0 18px rgba(16, 185, 129, 0.28);
     }
     .worker-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 900;
+      text-shadow: 1px 1px 0 #000;
     }
     .worker-ip {
       color: var(--cyan);
@@ -224,9 +267,7 @@
     }
     .worker-slot-pill {
       padding: 6px 9px;
-      border-radius: 5px;
-      background: #0b0e14;
-      border: 1px dashed #334155;
+      border-radius: 4px;
       font-size: 11px;
       color: var(--muted);
       display: flex;
@@ -234,35 +275,35 @@
       justify-content: space-between;
     }
     .worker-card.busy .worker-slot-pill {
-      border-style: solid;
       border-color: var(--emerald);
       color: #6ee7b7;
-      font-weight: 800;
+      font-weight: 900;
     }
 
-    /* Actor Session Cards Grid */
+    /* Actor Session Stone Tablets Grid */
     .actors-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(335px, 1fr));
       gap: 12px;
     }
     .actor-card {
-      background: var(--panel);
-      border: 1.5px solid var(--amber-dim);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 8px 20px rgba(0,0,0,0.45);
-      border-radius: 8px;
+      border-radius: 6px;
       padding: 12px;
       display: flex;
       flex-direction: column;
       gap: 9px;
     }
     .actor-card.state-dead {
-      border-color: var(--rose);
-      background: linear-gradient(180deg, rgba(225, 29, 72, 0.11), var(--panel));
+      border-top-color: var(--rose);
+      border-left-color: var(--rose);
+      background:
+        linear-gradient(180deg, rgba(159, 18, 57, 0.28) 0%, #2d261f 100%);
     }
     .actor-card.state-victory {
-      border-color: var(--amber);
-      background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), var(--panel));
+      border-top-color: var(--amber);
+      border-left-color: var(--amber);
+      background:
+        linear-gradient(180deg, rgba(217, 119, 6, 0.24) 0%, #2d261f 100%);
     }
     .actor-hdr {
       display: flex;
@@ -279,9 +320,8 @@
     .avatar-box {
       width: 34px;
       height: 34px;
-      background: #090c12;
       border: 1.5px solid var(--amber-border);
-      border-radius: 5px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -296,6 +336,7 @@
       font-size: 14px;
       font-weight: 900;
       color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -309,47 +350,50 @@
       align-items: center;
       gap: 4px;
       padding: 3px 7px;
-      border-radius: 4px;
+      border-radius: 3px;
       font-size: 9px;
-      font-weight: 800;
+      font-weight: 900;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       white-space: nowrap;
     }
     .badge-suspended {
-      background: rgba(245, 158, 11, 0.16);
+      background: #2b2113;
       color: #fbbf24;
       border: 1px solid var(--amber-border);
     }
     .badge-running {
-      background: rgba(16, 185, 129, 0.18);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.5);
-    }
-    .badge-dead {
-      background: rgba(225, 29, 72, 0.22);
-      color: #fda4af;
-      border: 1px solid var(--rose);
-    }
-    .badge-victory {
-      background: rgba(16, 185, 129, 0.22);
+      background: #064e3b;
       color: #6ee7b7;
       border: 1px solid var(--emerald);
     }
+    .badge-dead {
+      background: #7f1d1d;
+      color: #fecdd3;
+      border: 1px solid var(--rose);
+    }
+    .badge-victory {
+      background: #065f46;
+      color: #a7f3d0;
+      border: 1px solid var(--emerald);
+    }
 
-    /* Segmented RPG HP Bar */
+    /* Segmented 2004 RPG Hitpoints Bar */
     .hp-bar-outer {
       position: relative;
       width: 100%;
-      height: 14px;
-      background: #090c12;
-      border-radius: 3px;
+      height: 15px;
+      background: #120d0a;
+      border-radius: 2px;
       overflow: hidden;
-      border: 1px solid #3f202b;
+      border-top: 1.5px solid #090705;
+      border-left: 1.5px solid #090705;
+      border-right: 1.5px solid #5c3a2e;
+      border-bottom: 1.5px solid #5c3a2e;
     }
     .hp-bar-inner {
       height: 100%;
-      background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+      background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
       transition: width 0.25s ease;
     }
     .hp-bar-segments {
@@ -359,8 +403,8 @@
         to right,
         transparent 0px,
         transparent 16px,
-        rgba(9, 12, 18, 0.55) 16px,
-        rgba(9, 12, 18, 0.55) 18px
+        rgba(18, 13, 10, 0.55) 16px,
+        rgba(18, 13, 10, 0.55) 18px
       );
       pointer-events: none;
     }
@@ -372,12 +416,12 @@
       justify-content: space-between;
       padding: 0 7px;
       font-size: 9px;
-      font-weight: 800;
+      font-weight: 900;
       color: #fff;
-      text-shadow: 0 1px 2px #000;
+      text-shadow: 1px 1px 0 #000;
     }
 
-    /* Compact 5-Slot Inventory Chips */
+    /* Sunken Stone Inventory Chips */
     .inv-row {
       display: flex;
       align-items: center;
@@ -389,25 +433,22 @@
       align-items: center;
       gap: 4px;
       padding: 3px 6px;
-      border-radius: 4px;
+      border-radius: 3px;
       font-size: 10px;
-      font-weight: 700;
-      background: #0b0e14;
-      border: 1px solid #242d3f;
-      color: #475569;
+      font-weight: 800;
+      color: #6b5d4a;
     }
     .inv-chip.active {
       border-color: var(--amber-border);
       color: #fde68a;
-      background: rgba(194, 141, 66, 0.15);
+      background: radial-gradient(circle at 50% 50%, rgba(200, 150, 62, 0.24), #17130e 85%);
     }
     .pod-trail {
       font-size: 10px;
+      font-weight: 700;
       color: var(--cyan);
-      background: #0b0e14;
-      border: 1px solid #1e293b;
       padding: 5px 8px;
-      border-radius: 4px;
+      border-radius: 3px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -421,26 +462,21 @@
     .ver-select {
       flex: 1;
       min-width: 0;
-      background: #0b0e14;
       color: #fde68a;
-      border: 1px solid var(--amber-dim);
-      border-radius: 5px;
+      border-radius: 4px;
       padding: 5px 6px;
       font-size: 10px;
       font-family: inherit;
-      font-weight: 700;
+      font-weight: 800;
     }
 
-    /* Right Sidebar: QR + Live Telemetry Stream */
+    /* Right Sidebar: Parchment Recruitment Scroll (QR) + Parchment Chronicle Feed */
     .side-col {
       display: flex;
       flex-direction: column;
       gap: 14px;
     }
     .qr-card {
-      background: var(--panel);
-      border: 1.5px solid var(--amber-dim);
-      border-radius: 8px;
       padding: 13px;
       display: flex;
       align-items: center;
@@ -449,21 +485,25 @@
     .qr-img {
       width: 104px;
       height: 104px;
-      border-radius: 6px;
+      border-radius: 4px;
       background: #fff;
       padding: 4px;
       flex-shrink: 0;
-      border: 2px solid var(--amber-border);
+      border: 2px solid #5c4522;
     }
     .feed-card {
       flex: 1;
-      background: var(--panel);
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
       padding: 12px;
       display: flex;
       flex-direction: column;
       max-height: 600px;
+    }
+    .feed-card .section-title {
+      color: var(--parchment-ink);
+      text-shadow: none;
+      border-bottom: 1.5px solid #8c6f3e;
+      padding-bottom: 6px;
+      width: 100%;
     }
     .feed-list {
       flex: 1;
@@ -474,32 +514,35 @@
     }
     .feed-item {
       padding: 7px 9px;
-      border-radius: 5px;
-      background: #0b0e14;
-      border: 1px solid #1e293b;
-      border-left: 3px solid var(--cyan);
+      border-radius: 3px;
+      background: rgba(186, 156, 102, 0.55);
+      border: 1px solid #9c7e4c;
+      border-left: 4px solid #1d4ed8;
       font-size: 11px;
+      font-weight: 700;
+      color: var(--parchment-ink);
       display: flex;
       flex-direction: column;
       gap: 3px;
     }
-    .feed-item.ev-DEATH { border-left-color: var(--rose); }
-    .feed-item.ev-REVERT { border-left-color: var(--amber); }
-    .feed-item.ev-FORK { border-left-color: var(--violet); }
-    .feed-item.ev-VICTORY { border-left-color: var(--emerald); }
+    .feed-item.ev-DEATH { border-left-color: #9f1239; background: rgba(225, 29, 72, 0.12); }
+    .feed-item.ev-REVERT { border-left-color: #b45309; background: rgba(245, 158, 11, 0.18); }
+    .feed-item.ev-FORK { border-left-color: #6b21a8; }
+    .feed-item.ev-VICTORY { border-left-color: #065f46; }
     .feed-meta {
       display: flex;
       justify-content: space-between;
       font-size: 9px;
-      color: var(--muted);
+      font-weight: 900;
+      color: #5c431c;
     }
   </style>
 </head>
 <body>
 
-  <header class="topbar">
+  <header class="topbar stone-slab">
     <div class="brand">
-      <div class="brand-crest">
+      <div class="brand-crest stone-socket">
         <svg class="icon icon-lg" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
       </div>
       <div>
@@ -509,23 +552,23 @@
     </div>
 
     <div class="kpi-strip">
-      <div class="kpi-box">
+      <div class="kpi-box stone-socket">
         <span class="kpi-label">Game Actors</span>
         <span id="kpiTotal" class="kpi-val">0</span>
       </div>
-      <div class="kpi-box">
+      <div class="kpi-box stone-socket">
         <span class="kpi-label">Suspended (GCS)</span>
         <span id="kpiSuspended" class="kpi-val" style="color:var(--cyan)">0</span>
       </div>
-      <div class="kpi-box">
+      <div class="kpi-box stone-socket">
         <span class="kpi-label">GCS Snapshots</span>
         <span id="kpiSaves" class="kpi-val" style="color:var(--emerald)">0</span>
       </div>
-      <div class="kpi-box">
+      <div class="kpi-box stone-socket">
         <span class="kpi-label">Time-Travel Reverts</span>
         <span id="kpiReverts" class="kpi-val" style="color:var(--amber)">0</span>
       </div>
-      <div class="kpi-box">
+      <div class="kpi-box stone-socket">
         <span class="kpi-label">Victories</span>
         <span id="kpiVictories" class="kpi-val" style="color:#fbbf24">0</span>
       </div>
@@ -569,24 +612,24 @@
       </section>
     </div>
 
-    <!-- Right Sidebar: Join QR Code + Live Event Stream -->
+    <!-- Right Sidebar: Join QR Code Parchment Scroll + Live Event Stream Parchment Scroll -->
     <aside class="side-col">
-      <div class="qr-card">
+      <div class="qr-card parchment-scroll">
         <img id="qrImage" class="qr-img" src="/api/qr.svg" alt="Join QR Code" />
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <div style="font-size:13px;font-weight:900;color:#fde68a;">SCAN TO ENTER DUNGEON</div>
-          <div style="font-size:11px;color:var(--muted);line-height:1.4;">
+          <div style="font-size:13px;font-weight:900;color:#231709;text-transform:uppercase;">Scan to Enter Dungeon</div>
+          <div style="font-size:11px;font-weight:700;color:#4a3519;line-height:1.38;">
             Each player spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods.
           </div>
-          <a id="joinLinkText" href="/play" target="_blank" style="font-size:11px;color:var(--cyan);word-break:break-all;">/play</a>
+          <a id="joinLinkText" href="/play" target="_blank" style="font-size:11px;font-weight:900;color:#1e3a8a;word-break:break-all;">/play</a>
         </div>
       </div>
 
-      <div class="feed-card">
+      <div class="feed-card parchment-scroll">
         <div class="section-hdr">
           <div class="section-title">
-            <svg class="icon" viewBox="0 0 24 24" style="color:var(--amber)"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-            Live Substrate Event Stream
+            <svg class="icon" viewBox="0 0 24 24" style="color:#78350f"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+            Live Substrate Chronicle
           </div>
         </div>
         <div id="feedList" class="feed-list"></div>
@@ -699,7 +742,6 @@
       trash: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`
     };
 
-    // Preserve selected snapshot version dropdown value per actor across refreshes
     const selectedVersionByActor = {};
 
     function renderDashboard(snap) {
@@ -719,12 +761,12 @@
       workersEl.innerHTML = (snap.workers || []).map(w => {
         const busy = !!w.active_actor;
         return `
-          <div class="worker-card ${busy ? 'busy' : ''}">
+          <div class="worker-card stone-slab ${busy ? 'busy' : ''}">
             <div class="worker-top">
               <span>WORKER POD #${w.index} (${w.worker_pod.slice(-5)})</span>
               <span class="worker-ip">${w.ip}</span>
             </div>
-            <div class="worker-slot-pill">
+            <div class="worker-slot-pill stone-socket">
               <span>${busy ? `WAKING: ${w.active_actor} (${w.active_action})` : 'IDLE — 0 ACTORS PINNED'}</span>
               <span>Wakes: ${w.wake_count || 0}</span>
             </div>
@@ -735,7 +777,7 @@
       const gridEl = document.getElementById("actorsGrid");
       const sessions = snap.sessions || [];
       if (sessions.length === 0) {
-        gridEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:18px;border:1.5px dashed var(--border);border-radius:8px;">
+        gridEl.innerHTML = `<div class="stone-slab" style="color:var(--muted);font-size:12px;padding:18px;border-radius:6px;">
           No player actors yet. Scan the QR code, open <code>/play</code>, or click <strong>Spawn Demo Bot</strong> above!
         </div>`;
       } else {
@@ -748,7 +790,7 @@
           const latestVer = cps[0].version || rec.save_count || 1;
 
           let statusBadge = `<span class="badge badge-suspended">SNAPSHOT v${latestVer} &bull; GCS</span>`;
-          let cardClass = "actor-card";
+          let cardClass = "actor-card stone-slab";
           if (!s.alive) {
             statusBadge = `<span class="badge badge-dead">DEAD IN RAM</span>`;
             cardClass += " state-dead";
@@ -776,7 +818,7 @@
             <div class="${cardClass}">
               <div class="actor-hdr">
                 <div class="hero-ident">
-                  <div class="avatar-box">
+                  <div class="avatar-box stone-socket">
                     <canvas id="av-${rec.actor_name}" data-class="${s.character_class || 'paladin'}" width="16" height="16"></canvas>
                   </div>
                   <div style="min-width:0;">
@@ -797,17 +839,17 @@
               </div>
 
               <div class="inv-row">
-                <span class="inv-chip ${inv.includes('crypt-key') ? 'active' : ''}">${SVG_ICONS.key} Key</span>
-                <span class="inv-chip ${inv.includes('dragon-slayer-sword') ? 'active' : ''}">${SVG_ICONS.sword} Sword</span>
-                <span class="inv-chip ${inv.includes('fire-shield') ? 'active' : ''}">${SVG_ICONS.shield} Shield</span>
-                <span class="inv-chip ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
-                <span class="inv-chip ${potions > 0 ? 'active' : ''}">${SVG_ICONS.potion} x${potions}</span>
+                <span class="inv-chip stone-socket ${inv.includes('crypt-key') ? 'active' : ''}">${SVG_ICONS.key} Key</span>
+                <span class="inv-chip stone-socket ${inv.includes('dragon-slayer-sword') ? 'active' : ''}">${SVG_ICONS.sword} Sword</span>
+                <span class="inv-chip stone-socket ${inv.includes('fire-shield') ? 'active' : ''}">${SVG_ICONS.shield} Shield</span>
+                <span class="inv-chip stone-socket ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
+                <span class="inv-chip stone-socket ${potions > 0 ? 'active' : ''}">${SVG_ICONS.potion} x${potions}</span>
               </div>
 
-              <div class="pod-trail" title="Worker Pod IP Hop Trail">POD HOPS: ${podTrail}</div>
+              <div class="pod-trail stone-socket" title="Worker Pod IP Hop Trail">POD HOPS: ${podTrail}</div>
 
               <div class="card-actions">
-                <select class="ver-select" onchange="selectedVersionByActor['${rec.actor_name}'] = parseInt(this.value, 10)" title="Select Snapshot Version to Revert To">
+                <select class="ver-select stone-socket" onchange="selectedVersionByActor['${rec.actor_name}'] = parseInt(this.value, 10)" title="Select Snapshot Version to Revert To">
                   ${optionsHTML}
                 </select>
                 <button class="btn btn-warn icon-sq-btn" onclick="revertActor('${rec.actor_name}')" title="Revert Actor to Selected Snapshot Version">
@@ -840,7 +882,7 @@
             <span><strong>${ev.type}</strong> &bull; ${ev.actor_name}</span>
             <span>${ev.worker_ip ? ev.worker_ip + ' (' + (ev.latency_ms || 0) + 'ms)' : ''}</span>
           </div>
-          <div style="color:#e2e8f0;line-height:1.35;">${ev.message}</div>
+          <div style="color:#231709;line-height:1.35;">${ev.message}</div>
         </div>
       `).join("");
     }

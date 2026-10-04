@@ -6,31 +6,40 @@
   <title>Dungeon 2D — Agent Substrate Live Game</title>
   <style>
     :root {
-      --bg: #0b0e14;
-      --panel: #141923;
-      --panel-inner: #0e121a;
-      --border: #2c3548;
-      --amber-border: #c28d42;
-      --amber-dim: #6e5025;
-      --text: #f3f4f6;
-      --muted: #94a3b8;
+      --bg: #15110d;
+      --stone-hi: #6e5f4b;
+      --stone-mid: #3a3228;
+      --stone-dark: #2a241c;
+      --stone-lo: #120e0a;
+      --stone-socket: #17130e;
+      --amber-border: #c8963e;
+      --amber-dim: #785828;
+      --text: #f5ebd6;
+      --muted: #b8a686;
       --accent: #38bdf8;
       --amber: #f59e0b;
       --emerald: #10b981;
       --rose: #e11d48;
       --violet: #a855f7;
+      --parchment-top: #e4d2ac;
+      --parchment-mid: #d3bc8d;
+      --parchment-bot: #c1a46e;
+      --parchment-ink: #231709;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
     body {
       margin: 0;
       padding: 0;
-      background: radial-gradient(circle at 50% 20%, #151b28 0%, #0b0e14 75%);
+      background: radial-gradient(circle at 50% 18%, #282018 0%, #14100c 80%);
       color: var(--text);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       display: flex;
       flex-direction: column;
+      justify-content: space-between;
       min-height: 100dvh;
+      max-height: 100dvh;
       overflow-x: hidden;
+      overflow-y: auto;
     }
     .icon {
       width: 16px;
@@ -44,50 +53,79 @@
     }
     .icon-sm { width: 13px; height: 13px; }
     .icon-lg { width: 20px; height: 20px; }
-    .icon-xl { width: 32px; height: 32px; }
+    .icon-xl { width: 30px; height: 30px; }
 
-    /* Compact Single-Strip Top RPG HUD */
+    /* 2004 Cracked Stone Beveled Slab */
+    .stone-slab {
+      background:
+        radial-gradient(circle at 18% 20%, rgba(255, 238, 200, 0.05) 0%, transparent 55%),
+        linear-gradient(180deg, #3f372d 0%, #2d261f 100%);
+      border-top: 2px solid var(--stone-hi);
+      border-left: 2px solid var(--stone-hi);
+      border-right: 2px solid var(--stone-lo);
+      border-bottom: 2px solid var(--stone-lo);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.65);
+    }
+
+    /* 2004 Sunken Stone Socket */
+    .stone-socket {
+      background: var(--stone-socket);
+      border-top: 2px solid #0e0b08;
+      border-left: 2px solid #0e0b08;
+      border-right: 2px solid #54483a;
+      border-bottom: 2px solid #54483a;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.85);
+    }
+
+    /* 2004 Rolled Aged-Parchment Scroll */
+    .parchment-scroll {
+      background: linear-gradient(180deg, var(--parchment-top) 0%, var(--parchment-mid) 55%, var(--parchment-bot) 100%);
+      border-top: 2px solid #8c6f3e;
+      border-bottom: 2px solid #5c4522;
+      border-left: 8px solid #856132;
+      border-right: 8px solid #856132;
+      border-radius: 4px;
+      color: var(--parchment-ink);
+      box-shadow: inset 0 0 12px rgba(107, 76, 35, 0.35), 0 4px 10px rgba(0, 0, 0, 0.55);
+    }
+
+    /* Compact Single-Strip Top RPG HUD (Option A: Left Hero Slab + Right 4 Square Icon Buttons) */
     .top-hud {
       width: 100%;
-      max-width: 760px;
+      max-width: 540px;
       margin: 0 auto;
-      padding: 8px 12px 4px;
+      padding: 6px 10px 2px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px;
       position: relative;
       z-index: 30;
     }
     .hero-cluster {
       display: flex;
       align-items: center;
-      gap: 10px;
-      background: var(--panel);
-      border: 1.5px solid var(--amber-dim);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 4px 12px rgba(0, 0, 0, 0.5);
-      border-radius: 6px;
-      padding: 5px 10px 5px 6px;
+      gap: 8px;
+      border-radius: 5px;
+      padding: 5px 8px 5px 6px;
       min-width: 0;
       flex: 1;
       transition: border-color 0.2s ease, transform 0.15s ease;
     }
     .hero-cluster.damage-pulse {
       border-color: var(--rose);
-      background: rgba(225, 29, 72, 0.22);
+      background: linear-gradient(180deg, #5c1926 0%, #381018 100%);
       transform: scale(1.02);
     }
     .portrait-frame {
       width: 38px;
       height: 38px;
-      background: #090c12;
       border: 1.5px solid var(--amber-border);
       border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      box-shadow: inset 0 0 8px rgba(194, 141, 66, 0.2);
     }
     .portrait-frame canvas {
       width: 30px;
@@ -97,31 +135,32 @@
     .hero-bars {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 4px;
       flex: 1;
       min-width: 0;
     }
     .hp-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
     .hp-bar-outer {
       position: relative;
       flex: 1;
-      max-width: 190px;
       height: 15px;
-      background: #090c12;
-      border: 1px solid #3f202b;
-      border-radius: 3px;
+      background: #120d0a;
+      border-top: 1.5px solid #090705;
+      border-left: 1.5px solid #090705;
+      border-right: 1.5px solid #5c3a2e;
+      border-bottom: 1.5px solid #5c3a2e;
+      border-radius: 2px;
       overflow: hidden;
     }
     .hp-bar-fill {
       height: 100%;
-      background: linear-gradient(180deg, #f43f5e 0%, #be123c 100%);
+      background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
       transition: width 0.22s ease, background 0.22s ease;
     }
-    /* Segmented pixel grid overlay on HP bar */
     .hp-bar-segments {
       position: absolute;
       inset: 0;
@@ -129,8 +168,8 @@
         to right,
         transparent 0px,
         transparent 14px,
-        rgba(9, 12, 18, 0.55) 14px,
-        rgba(9, 12, 18, 0.55) 16px
+        rgba(18, 13, 10, 0.55) 14px,
+        rgba(18, 13, 10, 0.55) 16px
       );
       pointer-events: none;
     }
@@ -141,119 +180,113 @@
       align-items: center;
       justify-content: center;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 900;
       color: #fff;
-      text-shadow: 0 1px 2px #000, 0 0 4px #000;
+      text-shadow: 1px 1px 0 #000, 0 0 4px #000;
       letter-spacing: 0.04em;
     }
     .meta-badges {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       font-size: 11px;
-      font-weight: 700;
-      color: #cbd5e1;
+      font-weight: 800;
+      color: var(--text);
+      text-shadow: 1px 1px 0 #000;
       flex-wrap: wrap;
     }
     .meta-tag {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
     }
     .meta-tag .lbl {
       color: var(--muted);
       font-size: 10px;
     }
 
-    /* Top-Right 4 Compact Square Icon Buttons */
+    /* Top-Right 4 Compact Square Beveled Stone Icon Buttons */
     .hud-actions {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       position: relative;
+      flex-shrink: 0;
     }
     .icon-btn {
       position: relative;
       width: 38px;
       height: 38px;
-      border-radius: 6px;
-      background: var(--panel);
-      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      background: linear-gradient(180deg, #4a4033 0%, #302920 100%);
+      border-top: 2px solid #786855;
+      border-left: 2px solid #786855;
+      border-right: 2px solid #14110d;
+      border-bottom: 2px solid #14110d;
       color: var(--text);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
-      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+      transition: transform 0.08s ease, filter 0.12s ease;
+      box-shadow: 0 3px 7px rgba(0, 0, 0, 0.55);
     }
     .icon-btn:hover {
-      border-color: var(--amber-border);
-      background: #1c2331;
+      filter: brightness(1.15);
     }
     .icon-btn:active {
-      transform: scale(0.94);
+      border-top-color: #14110d;
+      border-left-color: #14110d;
+      border-right-color: #786855;
+      border-bottom-color: #786855;
+      transform: translateY(1px);
     }
-    .icon-btn.btn-save {
-      border-color: rgba(16, 185, 129, 0.5);
-      color: #34d399;
-    }
-    .icon-btn.btn-revert {
-      border-color: var(--amber-border);
-      color: #fbbf24;
-    }
-    .icon-btn.btn-fork {
-      border-color: rgba(168, 85, 247, 0.5);
-      color: #c084fc;
-    }
-    .icon-btn.btn-help {
-      border-color: rgba(56, 189, 248, 0.45);
-      color: var(--accent);
-    }
+    .icon-btn.btn-save { color: #34d399; }
+    .icon-btn.btn-revert { color: #fbbf24; }
+    .icon-btn.btn-fork { color: #c084fc; }
+    .icon-btn.btn-help { color: #38bdf8; }
+
     .ver-pill-mini {
       position: absolute;
       top: -5px;
       right: -5px;
-      background: #c28d42;
-      color: #090c12;
+      background: var(--amber-border);
+      color: #14110d;
       font-size: 9px;
       font-weight: 900;
       padding: 1px 4px;
-      border-radius: 4px;
-      border: 1px solid #090c12;
+      border-radius: 3px;
+      border: 1px solid #14110d;
       line-height: 1.1;
     }
 
-    /* Anchored REVERT TO SNAPSHOT Popover */
+    /* Anchored REVERT TO SNAPSHOT Stone/Parchment Popover */
     .revert-popover {
       position: absolute;
-      top: 46px;
+      top: 44px;
       right: 0;
-      width: 310px;
-      background: #121722;
-      border: 1.5px solid var(--amber-border);
-      border-radius: 8px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+      width: 300px;
+      border-radius: 6px;
       padding: 10px;
       z-index: 60;
       display: flex;
       flex-direction: column;
       gap: 6px;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.9);
     }
-    .revert-popover.hidden {
-      display: none;
-    }
+    .revert-popover.hidden { display: none; }
     .popover-hdr {
       display: flex;
       align-items: center;
       justify-content: space-between;
       font-size: 11px;
-      font-weight: 800;
-      color: #fbbf24;
+      font-weight: 900;
+      color: #fde68a;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       padding-bottom: 6px;
-      border-bottom: 1px solid #263042;
+      border-bottom: 1px solid #54483a;
+      text-shadow: 1px 1px 0 #000;
     }
     .popover-close {
       background: none;
@@ -261,14 +294,14 @@
       color: var(--muted);
       cursor: pointer;
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 900;
       padding: 0 4px;
     }
     .snap-list {
       display: flex;
       flex-direction: column;
       gap: 5px;
-      max-height: 210px;
+      max-height: 200px;
       overflow-y: auto;
     }
     .snap-item {
@@ -277,9 +310,9 @@
       justify-content: space-between;
       gap: 8px;
       padding: 7px 9px;
-      border-radius: 5px;
-      background: #0b0e14;
-      border: 1px solid #263042;
+      border-radius: 4px;
+      background: #1b1611;
+      border: 1.5px solid #4d4133;
       color: var(--text);
       font-size: 11px;
       text-align: left;
@@ -288,15 +321,14 @@
     }
     .snap-item:hover {
       border-color: var(--amber-border);
-      background: rgba(245, 158, 11, 0.12);
+      background: #2b2319;
     }
     .snap-ver {
       font-weight: 900;
-      color: #fbbf24;
-      background: rgba(245, 158, 11, 0.16);
-      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #14110d;
+      background: #fbbf24;
       padding: 1px 5px;
-      border-radius: 4px;
+      border-radius: 3px;
       flex-shrink: 0;
     }
     .snap-desc {
@@ -305,24 +337,25 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      color: #e2e8f0;
+      color: #f5ebd6;
     }
     .snap-meta {
       font-size: 10px;
+      font-weight: 800;
       color: #34d399;
       flex-shrink: 0;
     }
 
-    /* Main Stage: Dungeon Canvas + Single 1-Line Telemetry Strip */
+    /* Main Stage: Dungeon Canvas + Rolled Parchment Adventure Scroll */
     .stage-wrap {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 4px 12px;
+      padding: 2px 10px;
       gap: 6px;
-      max-width: 760px;
+      max-width: 540px;
       width: 100%;
       margin: 0 auto;
     }
@@ -330,10 +363,13 @@
       position: relative;
       width: 100%;
       aspect-ratio: 15 / 11;
-      background: #060911;
-      border: 2px solid #574126;
-      box-shadow: inset 0 0 0 1px #1e293b, 0 10px 28px rgba(0, 0, 0, 0.75);
-      border-radius: 8px;
+      background: #0d0a08;
+      border-top: 3px solid #6e5f4b;
+      border-left: 3px solid #6e5f4b;
+      border-right: 3px solid #17130e;
+      border-bottom: 3px solid #17130e;
+      box-shadow: inset 0 0 0 1.5px #261f18, 0 8px 24px rgba(0, 0, 0, 0.8);
+      border-radius: 5px;
       overflow: hidden;
     }
     canvas#gameCanvas {
@@ -343,112 +379,116 @@
       image-rendering: pixelated;
     }
 
-    /* Single 1-Line Telemetry Bar (Replaces top alert bar + bottom toast) */
+    /* Rolled Aged-Parchment Adventure Scroll (Replaces dark telemetry strip) */
     .telemetry-strip {
       width: 100%;
-      min-height: 30px;
-      background: #101520;
-      border: 1px solid #283246;
-      border-radius: 6px;
-      padding: 4px 10px;
+      min-height: 44px;
+      padding: 6px 10px;
       font-size: 11px;
       display: flex;
-      align-items: center;
-      gap: 8px;
-      overflow: hidden;
-      transition: border-color 0.2s ease, background 0.2s ease;
+      flex-direction: column;
+      justify-content: center;
+      gap: 3px;
+      transition: filter 0.2s ease, border-color 0.2s ease;
     }
     .telemetry-strip.combat-alert {
-      border-color: var(--rose);
-      background: rgba(88, 12, 31, 0.6);
-      color: #fecdd3;
+      border-top-color: #9f1239;
+      border-bottom-color: #881337;
+      box-shadow: inset 0 0 14px rgba(159, 18, 57, 0.35), 0 4px 10px rgba(0, 0, 0, 0.6);
     }
     .telemetry-strip.revert-alert {
-      border-color: var(--amber);
-      background: rgba(78, 46, 10, 0.65);
-      color: #fde68a;
+      border-top-color: #d97706;
+      border-bottom-color: #b45309;
+      box-shadow: inset 0 0 14px rgba(217, 119, 6, 0.4), 0 4px 10px rgba(0, 0, 0, 0.6);
+    }
+    .scroll-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
     }
     .actor-pill {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      font-size: 10px;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 4px;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      color: var(--accent);
+      font-size: 9px;
+      font-weight: 900;
+      padding: 1.5px 6px;
+      border-radius: 3px;
+      background: #261e15;
+      border: 1px solid #6e5839;
+      color: #fde68a;
       white-space: nowrap;
       flex-shrink: 0;
+      letter-spacing: 0.03em;
     }
     .actor-pill.waking {
-      background: rgba(245, 158, 11, 0.2);
-      border-color: var(--amber);
-      color: #fbbf24;
+      background: #78350f;
+      border-color: #f59e0b;
+      color: #fef3c7;
     }
     .actor-pill.reverted {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: var(--emerald);
-      color: #34d399;
+      background: #064e3b;
+      border-color: #10b981;
+      color: #a7f3d0;
     }
     .actor-pill.dead {
-      background: rgba(225, 29, 72, 0.22);
-      border-color: var(--rose);
-      color: #fda4af;
+      background: #7f1d1d;
+      border-color: #f43f5e;
+      color: #fecdd3;
     }
     .telemetry-msg {
-      flex: 1;
-      min-width: 0;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.3;
+      color: var(--parchment-ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: #e2e8f0;
+    }
+    .telemetry-strip.combat-alert .telemetry-msg {
+      color: #7f1d1d;
     }
 
-    /* Compact Bottom Control Dock: 5-Slot Pixel Inventory + Cross D-Pad */
+    /* Bottom Stone Control Dock: 5 Sunken Stone Inventory Sockets + Carved Stone Cross D-Pad */
     .bottom-dock {
       width: 100%;
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 2px 12px 10px;
+      max-width: 540px;
+      margin: 0 auto 6px;
+      padding: 7px 10px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 8px;
     }
     .inv-dock {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 4px;
     }
     .inv-dock-hdr {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      font-size: 10px;
-      font-weight: 700;
+      font-size: 9px;
+      font-weight: 900;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .inv-dock-hdr a {
-      color: var(--amber-border);
-      text-decoration: none;
+      letter-spacing: 0.06em;
+      text-shadow: 1px 1px 0 #000;
     }
     .inv-slots {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
     .item-slot {
       position: relative;
-      width: 44px;
-      height: 44px;
-      border-radius: 6px;
-      background: #0d1119;
-      border: 1.5px solid #252f42;
+      width: 41px;
+      height: 41px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -456,10 +496,10 @@
       transition: all 0.15s ease;
     }
     .item-slot canvas {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       image-rendering: pixelated;
-      opacity: 0.22;
+      opacity: 0.24;
       filter: grayscale(85%);
       transition: opacity 0.15s ease, filter 0.15s ease, transform 0.15s ease;
     }
@@ -468,14 +508,15 @@
       bottom: 2px;
       right: 3px;
       font-size: 8px;
-      font-weight: 800;
-      color: #64748b;
+      font-weight: 900;
+      color: #786a56;
       line-height: 1;
+      text-shadow: 1px 1px 0 #000;
     }
     .item-slot.owned {
       border-color: var(--amber-border);
-      background: radial-gradient(circle at 50% 50%, rgba(194, 141, 66, 0.22), #111622 80%);
-      box-shadow: 0 0 10px rgba(194, 141, 66, 0.25);
+      background: radial-gradient(circle at 50% 50%, rgba(200, 150, 62, 0.28), #17130e 82%);
+      box-shadow: 0 0 8px rgba(200, 150, 62, 0.28);
     }
     .item-slot.owned canvas {
       opacity: 1;
@@ -487,8 +528,8 @@
     .item-slot.usable {
       cursor: pointer;
       border-color: #f43f5e;
-      background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.24), #111622 80%);
-      box-shadow: 0 0 10px rgba(244, 63, 94, 0.28);
+      background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.28), #17130e 82%);
+      box-shadow: 0 0 8px rgba(244, 63, 94, 0.3);
     }
     .item-slot.usable canvas {
       opacity: 1;
@@ -501,58 +542,62 @@
       transform: scale(0.93);
     }
 
-    /* Compact Cross D-Pad */
+    /* Carved Stone Cross D-Pad */
     .dpad {
       display: grid;
-      grid-template-columns: repeat(3, 42px);
-      grid-template-rows: repeat(2, 40px);
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(2, 38px);
       gap: 4px;
+      flex-shrink: 0;
     }
     .dpad-btn {
-      background: var(--panel);
-      border: 1.5px solid #334155;
-      border-radius: 6px;
-      color: #f8fafc;
+      background: linear-gradient(180deg, #4f4436 0%, #342c22 100%);
+      border-top: 2px solid #7d6d58;
+      border-left: 2px solid #7d6d58;
+      border-right: 2px solid #14110d;
+      border-bottom: 2px solid #14110d;
+      border-radius: 4px;
+      color: #f5ebd6;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       touch-action: manipulation;
-      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.55);
     }
     .dpad-btn:hover {
-      border-color: var(--amber-border);
+      filter: brightness(1.12);
     }
     .dpad-btn:active {
       background: var(--amber-border);
-      color: #090c12;
+      color: #14110d;
+      border-top-color: #14110d;
+      border-left-color: #14110d;
     }
 
     /* Modals (Join / Help / Death / Victory) */
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(6, 9, 15, 0.88);
+      background: rgba(12, 9, 6, 0.88);
       backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 14px;
+      padding: 12px;
       z-index: 80;
       overflow-y: auto;
     }
     .modal-backdrop.hidden { display: none; }
     .modal-card {
       width: 100%;
-      max-width: 450px;
-      background: #141923;
-      border: 1.5px solid var(--amber-border);
-      border-radius: 10px;
-      padding: 16px;
+      max-width: 440px;
+      border-radius: 8px;
+      padding: 15px;
       display: flex;
       flex-direction: column;
-      gap: 11px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+      gap: 10px;
+      box-shadow: 0 22px 52px rgba(0, 0, 0, 0.92);
       max-height: 92dvh;
       overflow-y: auto;
     }
@@ -565,22 +610,22 @@
       box-shadow: 0 0 40px rgba(245, 158, 11, 0.35);
     }
     .modal-title {
-      font-size: 17px;
-      font-weight: 800;
+      font-size: 16px;
+      font-weight: 900;
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 8px;
       margin: 0;
       color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
     }
     .input-field {
       width: 100%;
       padding: 9px 11px;
-      border-radius: 6px;
-      border: 1.5px solid #2c3548;
-      background: #0b0e14;
-      color: #fff;
+      border-radius: 4px;
+      color: #fde68a;
       font-size: 14px;
+      font-weight: 700;
       font-family: inherit;
     }
     .class-row {
@@ -589,36 +634,34 @@
       gap: 8px;
     }
     .class-opt {
-      padding: 9px 6px;
-      border-radius: 8px;
-      border: 1.5px solid #2c3548;
-      background: #0b0e14;
+      padding: 8px 6px;
+      border-radius: 5px;
       color: var(--muted);
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
       text-align: center;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       transition: all 0.15s ease;
     }
     .class-opt canvas {
-      width: 44px;
-      height: 44px;
+      width: 42px;
+      height: 42px;
       image-rendering: pixelated;
     }
     .class-opt .class-sub {
-      font-size: 10px;
-      font-weight: 500;
-      color: #64748b;
+      font-size: 9px;
+      font-weight: 700;
+      color: #8c7b62;
     }
     .class-opt.selected {
       border-color: var(--amber-border);
-      background: rgba(194, 141, 66, 0.15);
+      background: radial-gradient(circle at 50% 50%, rgba(200, 150, 62, 0.25), #17130e 85%);
       color: #fde68a;
-      box-shadow: 0 0 12px rgba(194, 141, 66, 0.25);
+      box-shadow: 0 0 12px rgba(200, 150, 62, 0.3);
     }
     .class-opt.selected .class-sub {
       color: #fcd34d;
@@ -626,29 +669,27 @@
     .guide-list {
       display: flex;
       flex-direction: column;
-      gap: 7px;
-      background: #0b0e14;
-      border: 1px solid #263042;
-      border-radius: 8px;
+      gap: 6px;
       padding: 9px 11px;
     }
     .guide-step {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
+      gap: 7px;
       font-size: 11px;
-      line-height: 1.4;
-      color: #cbd5e1;
+      font-weight: 700;
+      line-height: 1.38;
+      color: var(--parchment-ink);
     }
     .guide-num {
-      width: 18px;
-      height: 18px;
-      border-radius: 4px;
-      background: rgba(194, 141, 66, 0.2);
-      border: 1px solid var(--amber-border);
-      color: #fbbf24;
+      width: 17px;
+      height: 17px;
+      border-radius: 3px;
+      background: #2b2113;
+      border: 1px solid #8c6f3e;
+      color: #fde68a;
       font-size: 10px;
-      font-weight: 800;
+      font-weight: 900;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -660,39 +701,45 @@
       justify-content: center;
       gap: 7px;
       padding: 10px 12px;
-      border-radius: 6px;
+      border-radius: 4px;
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 900;
       font-family: inherit;
-      border: 1.5px solid var(--amber-border);
-      background: rgba(194, 141, 66, 0.18);
+      background: linear-gradient(180deg, #4a4033 0%, #302920 100%);
+      border-top: 2px solid #786855;
+      border-left: 2px solid #786855;
+      border-right: 2px solid #14110d;
+      border-bottom: 2px solid #14110d;
       color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
       cursor: pointer;
     }
     .btn-save {
-      border-color: rgba(16, 185, 129, 0.55);
-      background: rgba(16, 185, 129, 0.18);
-      color: #34d399;
+      background: linear-gradient(180deg, #166534 0%, #14532d 100%);
+      border-top-color: #4ade80;
+      border-left-color: #4ade80;
+      color: #ecfdf5;
     }
     .btn-revert {
-      border-color: var(--amber-border);
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
+      background: linear-gradient(180deg, #92400e 0%, #78350f 100%);
+      border-top-color: #fbbf24;
+      border-left-color: #fbbf24;
+      color: #fef3c7;
     }
     .btn-fork {
-      border-color: rgba(168, 85, 247, 0.55);
-      background: rgba(168, 85, 247, 0.18);
-      color: #c084fc;
+      background: linear-gradient(180deg, #581c87 0%, #3b0764 100%);
+      border-top-color: #c084fc;
+      border-left-color: #c084fc;
+      color: #f3e8ff;
     }
   </style>
 </head>
 <body>
 
-  <!-- Compact Single-Strip Top RPG HUD -->
+  <!-- Top Chiseled Stone HUD (Option A: Left Hero Slab + Right 4 Square Stone Icon Buttons) -->
   <header class="top-hud">
-    <!-- Left: Framed Class Portrait + Segmented Red HP Bar + Inline Floor/Score/Pod Badges -->
-    <div id="hudHpCard" class="hero-cluster">
-      <div class="portrait-frame" title="Hero Class Portrait">
+    <div id="hudHpCard" class="hero-cluster stone-slab">
+      <div class="portrait-frame stone-socket" title="Hero Class Portrait">
         <canvas id="hudHeroPortrait" width="16" height="16"></canvas>
       </div>
       <div class="hero-bars">
@@ -720,7 +767,7 @@
       </div>
     </div>
 
-    <!-- Right: 4 Compact Square Icon Buttons + Versioned Revert Popover -->
+    <!-- Right: 4 Compact Square Stone Icon Buttons + Versioned Revert Popover -->
     <div class="hud-actions">
       <button class="icon-btn btn-save" onclick="triggerQuicksave()" title="Quicksave & Tag Checkpoint to GCS">
         <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -737,7 +784,7 @@
       </button>
 
       <!-- Anchored REVERT TO SNAPSHOT Version Picker Popover -->
-      <div id="revertPopover" class="revert-popover hidden" onclick="event.stopPropagation()">
+      <div id="revertPopover" class="revert-popover stone-slab hidden" onclick="event.stopPropagation()">
         <div class="popover-hdr">
           <span>Revert to Snapshot</span>
           <button class="popover-close" onclick="closeRevertPopover()">✕</button>
@@ -747,43 +794,46 @@
     </div>
   </header>
 
-  <!-- Main 2D Dungeon Canvas + Single 1-Line Telemetry Strip -->
+  <!-- Main 2D Dungeon Canvas + Rolled Aged-Parchment Adventure Scroll -->
   <main class="stage-wrap">
     <div class="canvas-box">
       <canvas id="gameCanvas" width="480" height="352"></canvas>
     </div>
-    <div id="eventToast" class="telemetry-strip">
-      <div id="actorPill" class="actor-pill">
-        <span id="actorStateText">SUSPENDED IN GCS</span>
+    <div id="eventToast" class="telemetry-strip parchment-scroll">
+      <div class="scroll-top-row">
+        <div id="actorPill" class="actor-pill">
+          <span id="actorStateText">SUSPENDED IN GCS</span>
+        </div>
+        <span style="font-size:9px;font-weight:900;color:#5c431c;text-transform:uppercase;">Chronicle Scroll</span>
       </div>
       <span id="eventToastText" class="telemetry-msg">Use D-Pad, tap a tile, or press WASD/Arrows. Tap the Rewind icon to revert to any snapshot!</span>
     </div>
   </main>
 
-  <!-- Compact Bottom Dock: 5-Slot Pixel Inventory + Cross D-Pad -->
-  <section class="bottom-dock">
+  <!-- Compact Bottom Stone Dock: 5 Sunken Stone Inventory Sockets + Carved Stone Cross D-Pad -->
+  <section class="bottom-dock stone-slab">
     <div class="inv-dock">
       <div class="inv-dock-hdr">
         <span>Gear &amp; Items</span>
       </div>
       <div class="inv-slots">
-        <div id="badgeKey" class="item-slot" title="Crypt Key (Unlocks Floor 1 Stairs)">
+        <div id="badgeKey" class="item-slot stone-socket" title="Crypt Key (Unlocks Floor 1 Stairs)">
           <canvas id="slot-key" width="16" height="16"></canvas>
           <span class="slot-tag">KEY</span>
         </div>
-        <div id="badgeSword" class="item-slot" title="Dragon-Slayer Sword (55 DMG — Required for Guard & Dragon)">
+        <div id="badgeSword" class="item-slot stone-socket" title="Dragon-Slayer Sword (55 DMG — Required for Guard & Dragon)">
           <canvas id="slot-sword" width="16" height="16"></canvas>
           <span class="slot-tag">55D</span>
         </div>
-        <div id="badgeShield" class="item-slot" title="Fire Shield (Blocks Dragon Breath)">
+        <div id="badgeShield" class="item-slot stone-socket" title="Fire Shield (Blocks Dragon Breath)">
           <canvas id="slot-shield" width="16" height="16"></canvas>
           <span class="slot-tag">SHD</span>
         </div>
-        <div id="badgeChalice" class="item-slot" title="Golden Chalice of State (Unlocks Exit Portal)">
+        <div id="badgeChalice" class="item-slot stone-socket" title="Golden Chalice of State (Unlocks Exit Portal)">
           <canvas id="slot-chalice" width="16" height="16"></canvas>
           <span class="slot-tag">WIN</span>
         </div>
-        <button id="btnDrinkPotion" class="item-slot" onclick="drinkPotion()" title="Tap to drink Healing Potion (+50 HP)">
+        <button id="btnDrinkPotion" class="item-slot stone-socket" onclick="drinkPotion()" title="Tap to drink Healing Potion (+50 HP)">
           <canvas id="slot-potion" width="16" height="16"></canvas>
           <span id="potionCountText" class="slot-tag">x0</span>
         </button>
@@ -810,7 +860,7 @@
 
   <!-- Start Session + Pixel-Art Class Selection + How-To-Play Modal -->
   <div id="joinModal" class="modal-backdrop">
-    <div class="modal-card">
+    <div class="modal-card stone-slab">
       <h2 class="modal-title">
         <svg class="icon icon-lg" viewBox="0 0 24 24" style="color:#fbbf24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>
         Enter the Substrate Dungeon
@@ -818,27 +868,27 @@
       <p style="margin:0;font-size:11px;color:var(--muted);line-height:1.45;">
         Your session is a dedicated gVisor Actor whose state lives 100% in Go heap RAM. Choose your hero class:
       </p>
-      <input id="heroNameInput" class="input-field" type="text" placeholder="Hero Name (e.g. mofi)" maxlength="24" />
+      <input id="heroNameInput" class="input-field stone-socket" type="text" placeholder="Hero Name (e.g. mofi)" maxlength="24" />
       <div class="class-row">
-        <div class="class-opt selected" data-class="paladin" onclick="selectClass(this)">
+        <div class="class-opt stone-socket selected" data-class="paladin" onclick="selectClass(this)">
           <canvas id="preview-paladin" width="16" height="16"></canvas>
           <span>Paladin</span>
           <span class="class-sub">Knight Plate</span>
         </div>
-        <div class="class-opt" data-class="ranger" onclick="selectClass(this)">
+        <div class="class-opt stone-socket" data-class="ranger" onclick="selectClass(this)">
           <canvas id="preview-ranger" width="16" height="16"></canvas>
           <span>Ranger</span>
           <span class="class-sub">Emerald Cloak</span>
         </div>
-        <div class="class-opt" data-class="mage" onclick="selectClass(this)">
+        <div class="class-opt stone-socket" data-class="mage" onclick="selectClass(this)">
           <canvas id="preview-mage" width="16" height="16"></canvas>
           <span>Pyromancer</span>
           <span class="class-sub">Arcane Flame</span>
         </div>
       </div>
 
-      <div class="guide-list">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#fbbf24;">
+      <div class="guide-list parchment-scroll">
+        <div style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.06em;color:#5c3a11;">
           How to Play &amp; Save-Scum
         </div>
         <div class="guide-step">
@@ -864,12 +914,12 @@
 
   <!-- Standalone How to Play Popup Modal -->
   <div id="helpModal" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card stone-slab">
       <h2 class="modal-title">
         <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
         How to Play Dungeon 2D
       </h2>
-      <div class="guide-list">
+      <div class="guide-list parchment-scroll">
         <div class="guide-step">
           <span class="guide-num">1</span>
           <span><strong>Floor 1 (Forgotten Crypt):</strong> Grab the <strong>Potion</strong> and <strong>Gold Chest</strong>, slay the <strong>Restless Skeleton</strong>, take the <strong>Crypt Key</strong>, and descend the bottom-right <strong>Stairs</strong>.</span>
@@ -900,14 +950,16 @@
 
   <!-- Death / Revert Save-Scum Modal with Version Picker -->
   <div id="deathModal" class="modal-backdrop hidden">
-    <div class="modal-card death-card">
+    <div class="modal-card stone-slab death-card">
       <h2 class="modal-title" style="color:#fda4af;">
         <svg class="icon icon-xl" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M8 20v2h8v-2"/><path d="m12.5 17-.5-1-.5 1h1z"/><path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20"/></svg>
         YOUR HERO DIED IN RAM!
       </h2>
-      <p id="deathReasonText" style="margin:0;font-size:12px;color:#fecdd3;line-height:1.45;">
-        Your in-memory Go struct now has <code>PlayerHP = 0</code> and <code>Alive = false</code>.
-      </p>
+      <div class="parchment-scroll" style="padding:8px 10px;">
+        <p id="deathReasonText" style="margin:0;font-size:12px;font-weight:800;color:#7f1d1d;line-height:1.4;">
+          Your in-memory Go struct now has <code>PlayerHP = 0</code> and <code>Alive = false</code>.
+        </p>
+      </div>
       <p style="margin:0;font-size:11px;color:var(--muted);line-height:1.4;">
         Your crashed actor was left uncommitted in pod memory. Revert to your latest GCS snapshot or pick any earlier snapshot version below:
       </p>
@@ -915,7 +967,7 @@
         <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         Revert to Latest Snapshot
       </button>
-      <div style="font-size:10px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">
+      <div style="font-size:10px;font-weight:900;color:#fbbf24;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">
         Or Choose a Specific Snapshot Version:
       </div>
       <div id="deathVersionList" class="snap-list" style="max-height:140px;"></div>
@@ -924,13 +976,15 @@
 
   <!-- Victory Modal -->
   <div id="victoryModal" class="modal-backdrop hidden">
-    <div class="modal-card victory-card">
+    <div class="modal-card stone-slab victory-card">
       <h2 class="modal-title" style="color:#fbbf24;">
         <svg class="icon icon-xl" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
         DUNGEON CONQUERED!
       </h2>
-      <p id="victorySummaryText" style="margin:0;font-size:12px;color:#fde68a;line-height:1.5;"></p>
-      <div id="victoryPodsBox" style="font-size:11px;padding:9px;background:#0b0e14;border:1px solid #2c3548;border-radius:6px;color:var(--accent);"></div>
+      <div class="parchment-scroll" style="padding:9px 11px;">
+        <p id="victorySummaryText" style="margin:0;font-size:12px;font-weight:800;color:#231709;line-height:1.45;"></p>
+      </div>
+      <div id="victoryPodsBox" class="stone-socket" style="font-size:11px;padding:9px;border-radius:4px;color:var(--accent);"></div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-fork" style="flex:1;" onclick="triggerFork()">
           <svg class="icon" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
@@ -1167,6 +1221,25 @@
       }
     }
 
+    // 2004 Starburst Combat Hit-Splat Renderer
+    function drawStarburstSplat(ctx2d, cx, cy, rOuter, rInner, points, fill) {
+      ctx2d.beginPath();
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? rOuter : rInner;
+        const a = (i * Math.PI) / points;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        if (i === 0) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+      }
+      ctx2d.closePath();
+      ctx2d.fillStyle = fill;
+      ctx2d.fill();
+      ctx2d.strokeStyle = "#000000";
+      ctx2d.lineWidth = 1.5;
+      ctx2d.stroke();
+    }
+
     const FLOOR_MAPS = {
       1: {
         name: "Floor 1: The Forgotten Crypt",
@@ -1266,7 +1339,8 @@
       damageFlash: 0,
       revertFlash: 0,
       shakeFrames: 0,
-      floatTexts: []
+      floatTexts: [],
+      hitSplats: []
     };
 
     const canvas = document.getElementById("gameCanvas");
@@ -1443,25 +1517,27 @@
       const dmgTaken = s.last_damage_taken || Math.max(0, prevHp - state.hp);
       const dmgDealt = s.last_damage_dealt || 0;
       const toastEl = document.getElementById("eventToast");
-      toastEl.className = "telemetry-strip";
+      toastEl.className = "telemetry-strip parchment-scroll";
 
       if (opts.isRevert || rec.last_event_type === "REVERT") {
         state.revertFlash = 26;
-        toastEl.className = "telemetry-strip revert-alert";
-        addFloatText(state.x, state.y - 0.4, `REVERTED TO v${state.saveCount}!`, "#fbbf24");
+        toastEl.className = "telemetry-strip parchment-scroll revert-alert";
+        addFloatText(state.x, state.y - 0.4, `REVERTED TO v${state.saveCount}!`, "#fef08a");
         addFloatText(state.x, state.y + 0.2, `HP ${state.hp}/${state.maxHp}`, "#34d399");
-      } else if (dmgTaken > 0) {
+      } else if (dmgTaken > 0 || dmgDealt > 0) {
         state.damageFlash = 22;
         state.shakeFrames = 14;
-        toastEl.className = "telemetry-strip combat-alert";
+        toastEl.className = "telemetry-strip parchment-scroll combat-alert";
         if (dmgDealt > 0) {
-          addFloatText(state.x, state.y - 0.6, `DEALT ${dmgDealt} DMG!`, "#fbbf24");
+          addHitSplat(state.x, state.y - 0.8, `-${dmgDealt}`, "#dc2626");
         }
-        addFloatText(state.x, state.y, `-${dmgTaken} HP!`, "#fb7185");
-        const hpCard = document.getElementById("hudHpCard");
-        if (hpCard) {
-          hpCard.classList.add("damage-pulse");
-          setTimeout(() => hpCard.classList.remove("damage-pulse"), 650);
+        if (dmgTaken > 0) {
+          addHitSplat(state.x, state.y + 0.2, `-${dmgTaken}`, "#b91c1c");
+          const hpCard = document.getElementById("hudHpCard");
+          if (hpCard) {
+            hpCard.classList.add("damage-pulse");
+            setTimeout(() => hpCard.classList.remove("damage-pulse"), 650);
+          }
         }
       }
 
@@ -1485,13 +1561,13 @@
       if (hpFill) {
         hpFill.style.width = hpPct + "%";
         hpFill.style.background = hpPct > 50
-          ? "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)"
-          : (hpPct > 25 ? "linear-gradient(180deg, #f59e0b 0%, #b45309 100%)" : "linear-gradient(180deg, #f43f5e 0%, #881337 100%)");
+          ? "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)"
+          : (hpPct > 25 ? "linear-gradient(180deg, #f59e0b 0%, #92400e 100%)" : "linear-gradient(180deg, #f43f5e 0%, #881337 100%)");
       }
       document.getElementById("hudScore").textContent = `${state.score}`;
       document.getElementById("hudPods").textContent = `${state.podIpHistory.length} POD${state.podIpHistory.length === 1 ? "" : "S"}`;
 
-      // Update 5-Slot Pixel Inventory Bar
+      // Update 5-Slot Sunken Stone Inventory Bar
       setSlotOwned("badgeKey", state.inventory.includes("crypt-key"));
       setSlotOwned("badgeSword", state.inventory.includes("dragon-slayer-sword"));
       setSlotOwned("badgeShield", state.inventory.includes("fire-shield"));
@@ -1500,7 +1576,7 @@
       const potions = state.inventory.filter(i => i === "healing-potion").length;
       const potionBtn = document.getElementById("btnDrinkPotion");
       document.getElementById("potionCountText").textContent = `x${potions}`;
-      potionBtn.className = potions > 0 ? "item-slot usable" : "item-slot";
+      potionBtn.className = potions > 0 ? "item-slot stone-socket usable" : "item-slot stone-socket";
 
       if (rec.last_message) {
         setToast(rec.last_message);
@@ -1526,7 +1602,7 @@
 
     function setSlotOwned(id, owned) {
       const el = document.getElementById(id);
-      if (el) el.className = owned ? "item-slot owned" : "item-slot";
+      if (el) el.className = owned ? "item-slot stone-socket owned" : "item-slot stone-socket";
     }
 
     function setToast(msg) {
@@ -1535,6 +1611,10 @@
 
     function addFloatText(x, y, text, color) {
       state.floatTexts.push({ x: x * TILE + 16, y: y * TILE + 10, text, color, life: 52 });
+    }
+
+    function addHitSplat(x, y, text, fill) {
+      state.hitSplats.push({ x: x * TILE + 16, y: y * TILE + 16, text, fill: fill || "#dc2626", life: 44 });
     }
 
     async function sendMilestone(action, target, entityId, x, y, prevX, prevY) {
@@ -1577,7 +1657,7 @@
     }
 
     async function triggerQuicksave() {
-      addFloatText(state.x, state.y, "SNAPSHOT SAVED!", "#38bdf8");
+      addFloatText(state.x, state.y, "SNAPSHOT SAVED!", "#fef08a");
       await sendMilestone("quicksave", `f${state.floor}:manual`, "", state.x, state.y, state.x, state.y);
     }
 
@@ -1651,7 +1731,7 @@
           }
           state.x = nx;
           state.y = ny;
-          addFloatText(nx, ny, "+" + ent.label, ent.color);
+          addFloatText(nx, ny, "+" + ent.label, "#fef08a");
           sendMilestone("pickup", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
@@ -1662,7 +1742,7 @@
         if (ent.type === "shrine") {
           state.x = nx;
           state.y = ny;
-          addFloatText(nx, ny, "HEALED 100HP & SAVED!", "#f59e0b");
+          addFloatText(nx, ny, "HEALED 100HP & SAVED!", "#fef08a");
           sendMilestone("quicksave", ent.target, ent.id, nx, ny, prevX, prevY);
           return;
         }
@@ -1720,6 +1800,14 @@
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { e.preventDefault(); stepHero(1, 0); }
     });
 
+    function drawShadowText(ctx2d, text, x, y, color, font) {
+      ctx2d.font = font || "bold 9px ui-monospace, monospace";
+      ctx2d.fillStyle = "#000000";
+      ctx2d.fillText(text, x + 1, y + 1);
+      ctx2d.fillStyle = color;
+      ctx2d.fillText(text, x, y);
+    }
+
     let frame = 0;
     function renderLoop() {
       frame++;
@@ -1733,7 +1821,7 @@
         ctx.translate(sx, sy);
       }
 
-      ctx.fillStyle = "#080b12";
+      ctx.fillStyle = "#120e0a";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       for (let y = 0; y < GRID_H; y++) {
@@ -1742,17 +1830,19 @@
           const px = x * TILE;
           const py = y * TILE;
           if (ch === "#") {
-            ctx.fillStyle = state.floor === 3 ? "#29151d" : (state.floor === 2 ? "#1e2636" : "#182030");
+            ctx.fillStyle = state.floor === 3 ? "#3d2224" : (state.floor === 2 ? "#353942" : "#3b3227");
             ctx.fillRect(px, py, TILE, TILE);
-            ctx.fillStyle = "rgba(255, 228, 181, 0.07)";
+            ctx.fillStyle = "rgba(255, 236, 195, 0.09)";
             ctx.fillRect(px + 2, py + 2, TILE - 4, 5);
-            ctx.fillStyle = "rgba(0,0,0,0.34)";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
             ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
-            ctx.strokeStyle = "rgba(0,0,0,0.55)";
+            ctx.strokeStyle = "#14100c";
             ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
           } else {
-            ctx.fillStyle = (x + y) % 2 === 0 ? "#0d121d" : "#101624";
+            ctx.fillStyle = (x + y) % 2 === 0 ? "#211c16" : "#262019";
             ctx.fillRect(px, py, TILE, TILE);
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
+            ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
           }
         }
       }
@@ -1771,30 +1861,26 @@
 
         if (ent.type === "boss") {
           drawPixelSprite(ctx, SPRITES.dragon, px, py + bob, 2);
-          ctx.fillStyle = "rgba(9,13,22,0.9)";
+          ctx.fillStyle = "rgba(18, 13, 9, 0.92)";
           ctx.fillRect(px - 28, py - 16, 88, 14);
-          ctx.fillStyle = "#1f2937";
+          ctx.fillStyle = "#2b1c17";
           ctx.fillRect(px - 26, py - 6, 84, 4);
-          ctx.fillStyle = "#f43f5e";
+          ctx.fillStyle = "#ef4444";
           ctx.fillRect(px - 26, py - 6, Math.max(0, (state.bossHp / state.bossMaxHp) * 84), 4);
-          ctx.fillStyle = "#fda4af";
-          ctx.font = "bold 8px ui-monospace, monospace";
           const hasBoth = state.inventory.includes("fire-shield") && state.inventory.includes("dragon-slayer-sword");
           const atkLabel = hasBoth ? `DRAGON ${state.bossHp}HP | ATK 20` : `NEED SWORD+SHIELD|100DMG`;
-          ctx.fillText(atkLabel, px - 26, py - 8);
+          drawShadowText(ctx, atkLabel, px - 26, py - 8, "#fef08a", "bold 8px ui-monospace, monospace");
         } else if (ent.type === "monster") {
           drawPixelSprite(ctx, SPRITES[ent.sprite] || SPRITES.skeleton, px, py + bob, 2);
-          ctx.fillStyle = "rgba(9,13,22,0.9)";
+          ctx.fillStyle = "rgba(18, 13, 9, 0.9)";
           ctx.fillRect(px - 18, py - 14, 68, 12);
-          ctx.strokeStyle = "#f43f5e88";
+          ctx.strokeStyle = "#8c6f3e";
           ctx.lineWidth = 1;
           ctx.strokeRect(px - 18, py - 14, 68, 12);
-          ctx.fillStyle = "#fecdd3";
-          ctx.font = "bold 8px ui-monospace, monospace";
           const mLabel = (ent.id === "f2:guard" && !state.inventory.includes("dragon-slayer-sword"))
             ? "NEED SWORD|-100HP"
             : `${ent.maxHp}HP|-${ent.atk}HP`;
-          ctx.fillText(mLabel, px - 15, py - 5);
+          drawShadowText(ctx, mLabel, px - 15, py - 5, "#fef08a", "bold 8px ui-monospace, monospace");
         } else if (ent.type === "portal") {
           ctx.fillStyle = "#0ea5e9";
           ctx.fillRect(px + 4, py + 2, 24, 28);
@@ -1802,41 +1888,35 @@
           ctx.fillRect(px + 7, py + 5, 18, 23);
           ctx.fillStyle = (frame % 20 < 10) ? "#e0f2fe" : "#7dd3fc";
           ctx.fillRect(px + 11, py + 9, 10, 16);
-          ctx.fillStyle = "rgba(9,13,22,0.85)";
+          ctx.fillStyle = "rgba(18, 13, 9, 0.88)";
           ctx.fillRect(px - 12, py - 11, 56, 10);
-          ctx.fillStyle = "#38bdf8";
-          ctx.font = "bold 8px ui-monospace, monospace";
-          ctx.fillText("EXIT DOOR", px - 8, py - 3);
+          drawShadowText(ctx, "EXIT DOOR", px - 8, py - 3, "#fef08a", "bold 8px ui-monospace, monospace");
         } else if (ent.type === "stairs") {
-          ctx.fillStyle = "#0f172a";
+          ctx.fillStyle = "#17130e";
           ctx.fillRect(px + 4, py + 4, 24, 24);
-          ctx.strokeStyle = "#38bdf8";
+          ctx.strokeStyle = "#c8963e";
           ctx.lineWidth = 2;
           ctx.strokeRect(px + 4, py + 4, 24, 24);
-          ctx.fillStyle = "#38bdf8";
+          ctx.fillStyle = "#fbbf24";
           ctx.fillRect(px + 7, py + 8, 18, 3);
           ctx.fillRect(px + 9, py + 14, 14, 3);
           ctx.fillRect(px + 11, py + 20, 10, 3);
-          ctx.fillStyle = "rgba(9,13,22,0.85)";
+          ctx.fillStyle = "rgba(18, 13, 9, 0.88)";
           ctx.fillRect(px - 8, py - 11, 48, 10);
-          ctx.fillStyle = "#38bdf8";
-          ctx.font = "bold 8px ui-monospace, monospace";
-          ctx.fillText(`DOWN FL${state.floor + 1}`, px - 5, py - 3);
+          drawShadowText(ctx, `DOWN FL${state.floor + 1}`, px - 5, py - 3, "#fef08a", "bold 8px ui-monospace, monospace");
         } else if (ent.type === "stairs_up") {
-          ctx.fillStyle = "#0f172a";
+          ctx.fillStyle = "#17130e";
           ctx.fillRect(px + 4, py + 4, 24, 24);
-          ctx.strokeStyle = "#94a3b8";
+          ctx.strokeStyle = "#a89878";
           ctx.lineWidth = 2;
           ctx.strokeRect(px + 4, py + 4, 24, 24);
-          ctx.fillStyle = "#cbd5e1";
+          ctx.fillStyle = "#e7d8b9";
           ctx.fillRect(px + 11, py + 8, 10, 3);
           ctx.fillRect(px + 9, py + 14, 14, 3);
           ctx.fillRect(px + 7, py + 20, 18, 3);
-          ctx.fillStyle = "rgba(9,13,22,0.85)";
+          ctx.fillStyle = "rgba(18, 13, 9, 0.88)";
           ctx.fillRect(px - 6, py - 11, 44, 10);
-          ctx.fillStyle = "#cbd5e1";
-          ctx.font = "bold 8px ui-monospace, monospace";
-          ctx.fillText(`UP FL${state.floor - 1}`, px - 2, py - 3);
+          drawShadowText(ctx, `UP FL${state.floor - 1}`, px - 2, py - 3, "#e7d8b9", "bold 8px ui-monospace, monospace");
         } else if (ent.type === "shrine") {
           ctx.fillStyle = "#78350f";
           ctx.fillRect(px + 6, py + 22, 20, 6);
@@ -1852,14 +1932,15 @@
         }
       }
 
-      // Draw Player Hero
+      // Draw Player Hero + Torchlight Glow
       const hx = state.x * TILE;
       const hy = state.y * TILE;
-      const light = ctx.createRadialGradient(hx + 16, hy + 16, 4, hx + 16, hy + 16, 76);
-      light.addColorStop(0, "rgba(245, 158, 11, 0.22)");
+      const flicker = 78 + Math.sin(frame * 0.2) * 5;
+      const light = ctx.createRadialGradient(hx + 16, hy + 16, 4, hx + 16, hy + 16, flicker);
+      light.addColorStop(0, "rgba(245, 158, 11, 0.24)");
       light.addColorStop(1, "transparent");
       ctx.fillStyle = light;
-      ctx.fillRect(hx - 60, hy - 60, 152, 152);
+      ctx.fillRect(hx - 64, hy - 64, 160, 160);
 
       const heroSprite = SPRITES[state.charClass] || SPRITES.paladin;
       drawPixelSprite(ctx, heroSprite, hx, hy, 2);
@@ -1878,29 +1959,41 @@
         ctx.strokeRect(hx - 1, hy + 12, 7, 11);
       }
 
-      // Subtle Floor Banner
-      ctx.fillStyle = "rgba(11, 14, 20, 0.78)";
-      ctx.fillRect(8, 8, 224, 20);
-      ctx.fillStyle = "#d97706";
-      ctx.font = "bold 10px ui-monospace, monospace";
-      ctx.fillText(map.name, 14, 21);
+      // Subtle Stone Floor Banner
+      ctx.fillStyle = "rgba(20, 16, 12, 0.85)";
+      ctx.fillRect(8, 8, 226, 20);
+      ctx.strokeStyle = "#6e5f4b";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(8.5, 8.5, 225, 19);
+      drawShadowText(ctx, map.name, 14, 21, "#fef08a", "bold 10px ui-monospace, monospace");
 
-      // Floating combat/loot text
+      // 2004 Starburst Combat Hit-Splats
+      for (let i = state.hitSplats.length - 1; i >= 0; i--) {
+        const sp = state.hitSplats[i];
+        drawStarburstSplat(ctx, sp.x, sp.y, 17, 10, 9, sp.fill);
+        ctx.font = "bold 10px ui-monospace, monospace";
+        const tw = ctx.measureText(sp.text).width;
+        drawShadowText(ctx, sp.text, sp.x - tw / 2, sp.y + 3, "#ffffff", "bold 10px ui-monospace, monospace");
+        sp.y -= 0.25;
+        sp.life--;
+        if (sp.life <= 0) state.hitSplats.splice(i, 1);
+      }
+
+      // 2004 Yellow Pixel Overhead Floating Text
       for (let i = state.floatTexts.length - 1; i >= 0; i--) {
         const ft = state.floatTexts[i];
-        ctx.fillStyle = "rgba(9, 13, 22, 0.85)";
         ctx.font = "bold 11px ui-monospace, monospace";
         const tw = ctx.measureText(ft.text).width;
+        ctx.fillStyle = "rgba(18, 13, 9, 0.85)";
         ctx.fillRect(ft.x - tw / 2 - 4, ft.y - 10, tw + 8, 14);
-        ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x - tw / 2, ft.y);
+        drawShadowText(ctx, ft.text, ft.x - tw / 2, ft.y, ft.color || "#fef08a", "bold 11px ui-monospace, monospace");
         ft.y -= 0.55;
         ft.life--;
         if (ft.life <= 0) state.floatTexts.splice(i, 1);
       }
 
       if (state.damageFlash > 0) {
-        ctx.fillStyle = `rgba(244, 63, 94, ${(state.damageFlash / 22) * 0.38})`;
+        ctx.fillStyle = `rgba(225, 29, 72, ${(state.damageFlash / 22) * 0.36})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = "#f43f5e";
         ctx.lineWidth = 6;

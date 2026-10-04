@@ -33,6 +33,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ATESPACE="anything-but-agents"
 ROUTER_URL="${ROUTER_URL:-http://localhost:8000}"
 PAUSE_BETWEEN_STEPS="${PAUSE_BETWEEN_STEPS:-1}"
+export PATH="/usr/bin/go/bin:${HOME}/google-cloud-sdk/bin:${HOME}/go/bin:${HOME}/.local/bin:${PATH}"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Load local .env if present; fall back to parent .ate-dev-env.sh if present.
