@@ -275,6 +275,26 @@ func TestHoneypotGatewayAutoCheckpointRevertAndClone(t *testing.T) {
 	if _, ok := cloneResult.Forensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
 		t.Fatalf("expected rootkit.sh in cloned forensic lab actor")
 	}
+
+	// 6. Verify mutating /api/soc/* endpoints reject GET (405) and malformed JSON (400)
+	for _, ep := range []string{"/api/soc/save", "/api/soc/suspend", "/api/soc/revert", "/api/soc/clone"} {
+		respGet, err := http.Get(srv.URL + ep)
+		if err != nil {
+			t.Fatalf("GET %s: %v", ep, err)
+		}
+		respGet.Body.Close()
+		if respGet.StatusCode != http.StatusMethodNotAllowed {
+			t.Fatalf("GET %s status = %d, want %d", ep, respGet.StatusCode, http.StatusMethodNotAllowed)
+		}
+	}
+	respBadJSON, err := http.Post(srv.URL+"/api/soc/save", "application/json", strings.NewReader("{bad"))
+	if err != nil {
+		t.Fatalf("POST /api/soc/save bad JSON: %v", err)
+	}
+	respBadJSON.Body.Close()
+	if respBadJSON.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /api/soc/save bad JSON status = %d, want %d", respBadJSON.StatusCode, http.StatusBadRequest)
+	}
 }
 
 func jsonNumber(n int) string {

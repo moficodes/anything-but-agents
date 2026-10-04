@@ -17,11 +17,24 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
+
+func decodeOptionalJSON(r *http.Request, dst any) error {
+	if r.Body == nil {
+		return nil
+	}
+	err := json.NewDecoder(r.Body).Decode(dst)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
 
 //go:embed web/*.html
 var webFS embed.FS
@@ -178,11 +191,18 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/api/soc/save", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		var req struct {
 			ActorName string `json:"actor_name"`
 			Reason    string `json:"reason"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
 		}
@@ -199,10 +219,17 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/api/soc/suspend", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		var req struct {
 			ActorName string `json:"actor_name"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
 		}
@@ -215,11 +242,18 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/api/soc/revert", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		var req struct {
 			ActorName     string `json:"actor_name"`
 			TargetVersion int    `json:"target_version"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
 		}
@@ -233,12 +267,19 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/api/soc/clone", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		var req struct {
 			SourceActor string `json:"source_actor"`
 			NewActor    string `json:"new_actor"`
 			TagName     string `json:"tag_name"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if req.SourceActor == "" {
 			req.SourceActor = "honeypot-203-0-113-5"
 		}
