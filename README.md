@@ -81,7 +81,11 @@ Each of the demos is designed to isolate and prove a specific architectural prop
      * **Agent Substrate HPA (`coldstart-1..3` on `WorkerPool`):** Actors 2 and 3 restore from the Golden Snapshot in **~100ms** (with the same `golden_heap_fingerprint` and 76.6 MB search index already in RAM) and immediately serve **`60 QPS`**—delivering **~2x more total successful queries** during the burst.
 * **How does Substrate fit into this:**
   * **`wakeupProbe` (`/readyz`)** gates when Substrate captures the `ActorTemplate` **Golden Snapshot**.
-  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a Kubernetes Secret token-gated Split-Screen HPA & Production QPS Dashboard (`/dashboard?key=...`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
+  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a Kubernetes Secret token-gated **Hardware Telemetry & Oscilloscope Rack Dashboard (`/dashboard?key=...`)**, implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
+  * **Hardware Telemetry Dashboard & Presenter Auth (`cmd/coldstart/web/dashboard.html`):**
+    * **6-Stage Index Warmup LED Matrix:** Visualizes Pods 2 & 3 stepping through `Stage 1/6..6/6` (~12s cold boot) on Standard K8s vs. `PRE-BAKED AT BUILD` (~100ms Golden Snapshot restore) on Substrate.
+    * **HiDPI Goodput & Load-Shedding Oscilloscope:** Plots real-time `200 OK` Served QPS against `429` Shed-Zone crosshatch and `20 QPS/pod` ceiling markers, plus a live **Dual-Backend Search Probe** (`/api/probe?q=...`), **Golden Heap Fingerprint Proof Strip** (`golden_heap_fingerprint`, `index_digest`, ~76.6 MB `HeapAlloc`), and a top-right icon-only Moon/Sun **Projector Light Mode** toggle.
+    * **Presenter Token Security (`Secret/coldstart-gateway`):** `/dashboard` and `/api/*` require `PRESENTER_TOKEN` (matching `cmd/dungeon2d`). Unlock in the browser via `/dashboard?key=<PRESENTER_TOKEN>` (which sets an `HttpOnly`, `SameSite=Strict` cookie `cs_presenter` and `303`-redirects to `/dashboard` to strip the key from the URL bar) or pass `-H "X-Presenter-Key: <PRESENTER_TOKEN>"` from CLI scripts.
 
 ---
 
@@ -208,7 +212,7 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh deploy-dungeon2d      # Deploy in-cluster Dungeon 2D Gateway + LoadBalancer + PRESENTER_TOKEN Secret
 ./hack/stage-demo.sh cleanup-dungeon2d     # Clean up in-cluster Dungeon 2D Gateway & d2d-* actors
 ./hack/stage-demo.sh act2-coldstart        # Act II: 12s Cold-Start Index -> 100ms Golden Snapshot Clones + HPA QPS Race
-./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy in-cluster K8s vs Substrate HPA QPS Comparison Stack & Gateway
+./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy in-cluster K8s vs Substrate HPA Stack + LoadBalancer + PRESENTER_TOKEN Secret
 ./hack/stage-demo.sh cleanup-coldstart-hpa # Clean up in-cluster Cold-Start HPA Stack & coldstart-* actors
 ./hack/stage-demo.sh act3-tenantdb         # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
 ./hack/stage-demo.sh act4-honeypot         # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery

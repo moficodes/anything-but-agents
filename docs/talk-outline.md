@@ -92,9 +92,10 @@ sequenceDiagram
   * *Why Cold Starts Kill Production QPS:* When a traffic spike (`15 -> 60 QPS`) triggers Kubernetes HPA (`1 -> 3` replicas, `20 QPS`/pod capacity on `coldstart_lb_qps`), newly scheduled Pods sit at `/readyz == 503` for 12+ seconds while Pod 1 drowns and sheds `40 QPS` (`429 Too Many Requests`).
   * *The Substrate Trick:* `ActorTemplate` waits for `wakeupProbe` (`/readyz`) before taking the **Golden Snapshot**—capturing the 50,000-doc inverted token & 3-gram search index once.
   * *Symmetrical 2-Hop Benchmark Architecture:* Both tracks route through a Kubernetes `Service` + L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router` routing to `WorkerPool`) so HTTP/1.1 keep-alives are load-balanced per request on an identical network path.
-  * **Live Demo (`./hack/stage-demo.sh act2-coldstart` + `/dashboard`):**
-    * Query `coldstart-1` and `coldstart-2`—both wake in ~100ms, share the **exact same `golden_heap_fingerprint`**, and execute real BM25 + 3-gram searches (`~53,400` posting intersections across `50,000` indexed packages in `~15ms` of CPU/RAM work).
-    * Trigger the **60 QPS Production HPA Spike** (`minReplicas: 1 -> maxReplicas: 3` on `coldstart_lb_qps`): watch Substrate wake Actors 2 & 3 in ~100ms and serve `60 QPS` immediately while Standard K8s HPA remains stuck at `20 QPS` for 12 seconds (**~2x more total successful queries served**).
+  * **Live Demo (`./hack/stage-demo.sh act2-coldstart` + `/dashboard?key=<PRESENTER_TOKEN>`):**
+    * Open the **Hardware Telemetry & Oscilloscope Rack UI** (authenticated via `Secret/coldstart-gateway` `PRESENTER_TOKEN`, with a top-right Moon/Sun **Projector Light Mode** toggle for auditorium screens).
+    * Query `coldstart-1` and `coldstart-2` via the **Live Dual-Backend Search Probe** (`/api/probe`)—both wake in ~100ms, share the **exact same `golden_heap_fingerprint`**, and execute real BM25 + 3-gram searches (`~53,400` posting intersections across `50,000` indexed packages in `~15ms` of CPU/RAM work).
+    * Trigger the **60 QPS Production HPA Spike** (`minReplicas: 1 -> maxReplicas: 3` on `coldstart_lb_qps`): watch the **6-Stage Index Warmup LED Matrix** and **HiDPI Goodput/429 Shed-Zone Oscilloscope** as Substrate wakes Actors 2 & 3 in ~100ms and serves `60 QPS` immediately while Standard K8s HPA remains stuck at `20 QPS` (shedding `40 QPS` as `429`) for 12 seconds (**~2x more total successful queries served**).
 
 * **Slide 12: Pattern 2 — One Database Process Per Customer (`cmd/tenantdb`)**
   * *Real-world examples:* Per-tenant SQLite, DuckDB, or embedded analytical engines.
