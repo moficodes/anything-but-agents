@@ -163,8 +163,35 @@ func TestHPAColdStartQPSAdvantage(t *testing.T) {
 	defer cancel()
 	gw.StartBackgroundLoops(ctx)
 
-	// Verify dashboard HTML serves cleanly with Hardware Telemetry Rack markers & security headers
-	dashReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	// 1. Unauthenticated /dashboard and /api/probe must be rejected with 401 Unauthorized
+	unauthReq := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	unauthRec := httptest.NewRecorder()
+	gw.Mux().ServeHTTP(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized || !strings.Contains(unauthRec.Body.String(), "Presenter Key Required") {
+		t.Fatalf("expected 401 Presenter Key Required for unauthenticated /dashboard, got %d", unauthRec.Code)
+	}
+	unauthProbeReq := httptest.NewRequest(http.MethodPost, "/api/probe?q=gvisor+snapshot", nil)
+	unauthProbeRec := httptest.NewRecorder()
+	gw.Mux().ServeHTTP(unauthProbeRec, unauthProbeReq)
+	if unauthProbeRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated /api/probe, got %d", unauthProbeRec.Code)
+	}
+
+	// 2. Unlocking /dashboard?key=<PRESENTER_TOKEN> sets HttpOnly cookie and redirects (303) to /dashboard
+	unlockReq := httptest.NewRequest(http.MethodGet, "/dashboard?key="+gw.PresenterKey(), nil)
+	unlockRec := httptest.NewRecorder()
+	gw.Mux().ServeHTTP(unlockRec, unlockReq)
+	if unlockRec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect on /dashboard?key=..., got %d", unlockRec.Code)
+	}
+	cookies := unlockRec.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Name != PresenterCookieName {
+		t.Fatalf("expected %s cookie on unlock, got %+v", PresenterCookieName, cookies)
+	}
+
+	// 3. Verify dashboard HTML serves cleanly with Hardware Telemetry Rack markers & security headers once authenticated
+	dashReq := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	dashReq.AddCookie(cookies[0])
 	dashRec := httptest.NewRecorder()
 	gw.Mux().ServeHTTP(dashRec, dashReq)
 	bodyStr := dashRec.Body.String()
@@ -188,12 +215,13 @@ func TestHPAColdStartQPSAdvantage(t *testing.T) {
 		t.Fatalf("expected X-Content-Type-Options=nosniff header on /dashboard")
 	}
 
-	// Verify /api/probe dispatches a synchronized dual-backend search probe
+	// 4. Verify /api/probe dispatches a synchronized dual-backend search probe when authenticated
 	probeReq := httptest.NewRequest(http.MethodPost, "/api/probe?q=gvisor+snapshot", nil)
+	probeReq.Header.Set(PresenterHeaderName, gw.PresenterKey())
 	probeRec := httptest.NewRecorder()
 	gw.Mux().ServeHTTP(probeRec, probeReq)
 	if probeRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 from /api/probe, got %d", probeRec.Code)
+		t.Fatalf("expected 200 from authenticated /api/probe, got %d", probeRec.Code)
 	}
 
 	// Run a 350ms spike at 60 QPS: K8s pods 2 & 3 are still in their 500ms cold-boot window,

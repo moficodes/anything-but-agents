@@ -400,6 +400,13 @@ spec:
         - --router-url=http://atenet-router.ate-system.svc.cluster.local:80
         - --ate-endpoint=api.ate-system.svc:443
         - --kubectl-ate-bin=/tools/kubectl-ate
+        env:
+        - name: PRESENTER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: coldstart-gateway
+              key: PRESENTER_TOKEN
+              optional: true
         volumeMounts:
         - name: tools
           mountPath: /tools

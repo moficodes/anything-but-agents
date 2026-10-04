@@ -516,6 +516,12 @@ deploy_coldstart_hpa() {
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   free_workers
 
+  if ! kubectl get secret coldstart-gateway -n anything-but-agents >/dev/null 2>&1; then
+    kubectl create secret generic coldstart-gateway \
+      -n anything-but-agents \
+      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
+  fi
+
   # Ensure ActorTemplate coldstart is up to date
   kubectl ate delete actor-template coldstart -a "${ATESPACE}" 2>/dev/null || true
   (
@@ -581,7 +587,7 @@ deploy_coldstart_hpa() {
   done
 
   echo ""
-  echo "  Cold-Start HPA & QPS Race Dashboard : http://${lb_ip:-<pending>}/dashboard"
+  echo "  Cold-Start HPA & QPS Race Dashboard : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
   kubectl get hpa -n anything-but-agents
 }
@@ -593,6 +599,7 @@ cleanup_coldstart_hpa() {
   done
   kubectl delete hpa coldstart-k8s coldstart-substrate -n anything-but-agents --ignore-not-found
   kubectl delete deployment,service coldstart-k8s coldstart-k8s-router coldstart-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete secret coldstart-gateway -n anything-but-agents --ignore-not-found
   kubectl delete deployment coldstart-substrate-pool -n anything-but-agents --ignore-not-found
   kubectl delete serviceaccount,role,rolebinding coldstart-gateway coldstart-gateway-ns -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding coldstart-gateway-token-minter -n ate-system --ignore-not-found
@@ -622,6 +629,11 @@ act2_coldstart() {
   local cs_port="${COLDSTART_PORT:-8091}"
   local cs_url="http://localhost:${cs_port}"
   local cluster_lb_ip=""
+  local presenter_token=""
+  presenter_token="$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(openssl rand -hex 24)"
+  fi
   cluster_lb_ip="$(kubectl get svc coldstart-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
 
   if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
@@ -631,7 +643,7 @@ act2_coldstart() {
     echo "Starting Cold-Start HPA & Production QPS Comparison Gateway on ${cs_url}..."
     (
       cd "${REPO_ROOT}"
-      go run ./cmd/coldstart \
+      PRESENTER_TOKEN="${presenter_token}" go run ./cmd/coldstart \
         --mode=gateway \
         --addr=":${cs_port}" \
         --metrics-addr="" \
@@ -654,11 +666,11 @@ act2_coldstart() {
   fi
 
   echo ""
-  echo "  Live HPA & Production QPS Dashboard : ${cs_url}/dashboard"
+  echo "  Live HPA & Production QPS Dashboard : ${cs_url}/dashboard?key=${presenter_token}"
   echo ""
 
   step "4. PRODUCTION HPA QPS RACE: Trigger a 60 QPS Traffic Spike (minReplicas: 1 -> maxReplicas: 3, 20 QPS/replica cap)"
-  curl -fsS -X POST "${cs_url}/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=2&spike_sec=18&cooldown_sec=2" >/dev/null
+  curl -fsS -H "X-Presenter-Key: ${presenter_token}" -X POST "${cs_url}/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=2&spike_sec=18&cooldown_sec=2" >/dev/null
 
   printf "\n  %-4s | %-22s | %-18s | %-20s | %-18s | %-20s\n" \
     "SEC" "PHASE (DEMAND)" "K8S HPA (READY)" "K8S GOODPUT / SHED" "SUB HPA (ACTIVE)" "SUB GOODPUT / SHED"
@@ -667,7 +679,7 @@ act2_coldstart() {
   for ((sec = 1; sec <= 21; sec++)); do
     sleep 1
     local snap
-    snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
+    snap="$(curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${cs_url}/api/state" 2>/dev/null || true)"
     if [[ -n "${snap}" ]]; then
       local phase k8s_des k8s_rdy k8s_good k8s_shed sub_des sub_rdy sub_good sub_shed
       phase="$(awk -F'"' '/"scenario_phase":/ {print $4; exit}' <<< "${snap}")"
@@ -688,7 +700,7 @@ act2_coldstart() {
 
   echo ""
   local final_snap k8s_tot sub_tot k8s_drop sub_drop mult extra
-  final_snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
+  final_snap="$(curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${cs_url}/api/state" 2>/dev/null || true)"
   k8s_tot="$(awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
   k8s_drop="$(awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
   sub_tot="$(awk '/"substrate":/ {in_sub=1} in_sub && /"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
@@ -706,7 +718,7 @@ act2_coldstart() {
 
   if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
     echo ""
-    echo ">>> Cold-Start HPA Dashboard (${cs_url}/dashboard) is still live!"
+    echo ">>> Cold-Start HPA Dashboard (${cs_url}/dashboard?key=${presenter_token}) is still live!"
     read -r -p "    [Press Enter when finished exploring the browser UI] " _
   fi
 

@@ -18,9 +18,12 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,7 +51,119 @@ const (
 	defaultTargetQPSPerPod  = 20.0
 	maxHistoryPoints        = 60
 	maxRecentSearchSamples  = 16
+
+	// PresenterCookieName is the HttpOnly cookie set when the presenter unlocks /dashboard?key=<PRESENTER_TOKEN>.
+	PresenterCookieName = "cs_presenter"
+	// PresenterHeaderName carries the presenter token for CLI scripts and tests.
+	PresenterHeaderName = "X-Presenter-Key"
 )
+
+const presenterKeyRequiredPage = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presenter Key Required — Cold-Start HPA Benchmark</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #06080d;
+      color: #f8fafc;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      max-width: 600px;
+      width: 100%;
+      background: #0b0f17;
+      border: 1px solid #334155;
+      border-top: 3px solid #10b981;
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.75);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #38bdf8;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      color: #f8fafc;
+    }
+    p {
+      margin: 0;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.55;
+    }
+    pre {
+      margin: 0;
+      padding: 10px 12px;
+      background: #04070b;
+      border: 1px solid #1e293b;
+      color: #38bdf8;
+      font-size: 11px;
+      overflow-x: auto;
+    }
+    form {
+      display: flex;
+      gap: 8px;
+    }
+    input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid #334155;
+      background: #04070b;
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    input:focus {
+      outline: 1px solid #38bdf8;
+      border-color: #38bdf8;
+    }
+    button {
+      padding: 9px 16px;
+      border: 1px solid #10b981;
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    button:hover {
+      background: rgba(16, 185, 129, 0.28);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="eyebrow">ATE-SCOPE // MODEL CS-50K · SECURITY GATE</div>
+    <h1>Presenter Key Required</h1>
+    <p>The Cold-Start HPA &amp; Production QPS Benchmark Dashboard is restricted to the presenter and GKE cluster owner. Open this page with <code>?key=&lt;PRESENTER_TOKEN&gt;</code> or paste the token below:</p>
+    <form method="GET" action="/dashboard">
+      <input type="password" name="key" placeholder="Paste PRESENTER_TOKEN..." required />
+      <button type="submit">Unlock</button>
+    </form>
+    <p>Retrieve <code>PRESENTER_TOKEN</code> from the <code>coldstart-gateway</code> Kubernetes Secret:</p>
+    <pre>kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d</pre>
+  </div>
+</body>
+</html>
+`
 
 // GatewayConfig configures the Coldstart HPA & QPS GatewayServer.
 type GatewayConfig struct {
@@ -62,6 +177,7 @@ type GatewayConfig struct {
 	KubectlAteBin          string
 	K8sDeploymentName      string
 	SubScaleDeploymentName string
+	PresenterKey           string
 
 	// Tunables for local simulator mode and unit tests
 	K8sColdBootDelay       time.Duration
@@ -264,10 +380,11 @@ func percentileSorted(sorted []float64, p float64) float64 {
 // GatewayServer coordinates the dual K8s vs Substrate load balancer, traffic generator,
 // Kubernetes external.metrics.k8s.io/v1beta1 endpoint, and live web dashboard.
 type GatewayServer struct {
-	cfg        GatewayConfig
-	httpClient *http.Client
-	k8sClient  *http.Client
-	k8sToken   string
+	cfg          GatewayConfig
+	presenterKey string
+	httpClient   *http.Client
+	k8sClient    *http.Client
+	k8sToken     string
 
 	mu                 sync.Mutex
 	targetQPS          float64
@@ -299,6 +416,12 @@ type GatewayServer struct {
 	rrK8s atomic.Uint64
 	rrSub atomic.Uint64
 	qSeq  atomic.Uint64
+}
+
+func randomPresenterKey() string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
@@ -348,8 +471,17 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		cfg.TickInterval = 100 * time.Millisecond
 	}
 
+	presenterKey := strings.TrimSpace(cfg.PresenterKey)
+	if presenterKey == "" {
+		presenterKey = strings.TrimSpace(os.Getenv("PRESENTER_TOKEN"))
+	}
+	if presenterKey == "" {
+		presenterKey = randomPresenterKey()
+	}
+
 	g := &GatewayServer{
-		cfg: cfg,
+		cfg:          cfg,
+		presenterKey: presenterKey,
 		httpClient: &http.Client{
 			Timeout: 4 * time.Second,
 			Transport: &http.Transport{
@@ -368,6 +500,41 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 	g.initK8sClient()
 	g.initLocalSimulator()
 	return g
+}
+
+// PresenterKey returns the secret token required to unlock /dashboard and its control APIs.
+func (g *GatewayServer) PresenterKey() string {
+	return g.presenterKey
+}
+
+// IsPresenter reports whether the request carries the presenter key in the
+// X-Presenter-Key header, the cs_presenter cookie, or the ?key= / ?token= query parameter.
+func (g *GatewayServer) IsPresenter(r *http.Request) bool {
+	key := r.Header.Get(PresenterHeaderName)
+	if key == "" {
+		if c, err := r.Cookie(PresenterCookieName); err == nil {
+			key = c.Value
+		}
+	}
+	if key == "" {
+		key = r.URL.Query().Get("key")
+	}
+	if key == "" {
+		key = r.URL.Query().Get("token")
+	}
+	return key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterKey)) == 1
+}
+
+func (g *GatewayServer) requirePresenter(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !g.IsPresenter(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "presenter key required"})
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (g *GatewayServer) initK8sClient() {
@@ -1502,14 +1669,14 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
-	mux.HandleFunc("/api/state", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/state", g.requirePresenter(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(g.StateSnapshot())
-	})
+	}))
 
-	mux.HandleFunc("/api/target-qps", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/target-qps", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1526,9 +1693,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		g.SetTargetQPS(qps, fmt.Sprintf("MANUAL (%.0f QPS)", qps))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(g.StateSnapshot())
-	})
+	}))
 
-	mux.HandleFunc("/api/reset", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/reset", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1536,9 +1703,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		g.Reset()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(g.StateSnapshot())
-	})
+	}))
 
-	mux.HandleFunc("/api/spike", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/spike", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1564,9 +1731,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(g.StateSnapshot())
-	})
+	}))
 
-	mux.HandleFunc("/api/probe", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/probe", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1594,9 +1761,36 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(g.StateSnapshot())
-	})
+	}))
 
-	serveDashboard := func(w http.ResponseWriter, _ *http.Request) {
+	serveDashboard := func(w http.ResponseWriter, r *http.Request) {
+		key := r.URL.Query().Get("key")
+		if key == "" {
+			key = r.URL.Query().Get("token")
+		}
+		if key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterKey)) == 1 {
+			http.SetCookie(w, &http.Cookie{
+				Name:     PresenterCookieName,
+				Value:    g.presenterKey,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+			})
+			target := "/dashboard"
+			if theme := r.URL.Query().Get("theme"); theme == "light" || theme == "dark" {
+				target += "?theme=" + theme
+			}
+			http.Redirect(w, r, target, http.StatusSeeOther)
+			return
+		}
+		if !g.IsPresenter(r) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(presenterKeyRequiredPage))
+			return
+		}
 		data, err := webFS.ReadFile("web/dashboard.html")
 		if err != nil {
 			http.Error(w, "dashboard asset missing", http.StatusInternalServerError)

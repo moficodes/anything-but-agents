@@ -81,7 +81,7 @@ Each of the demos is designed to isolate and prove a specific architectural prop
      * **Agent Substrate HPA (`coldstart-1..3` on `WorkerPool`):** Actors 2 and 3 restore from the Golden Snapshot in **~100ms** (with the same `golden_heap_fingerprint` and 76.6 MB search index already in RAM) and immediately serve **`60 QPS`**—delivering **~2x more total successful queries** during the burst.
 * **How does Substrate fit into this:**
   * **`wakeupProbe` (`/readyz`)** gates when Substrate captures the `ActorTemplate` **Golden Snapshot**.
-  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a live Split-Screen HPA & Production QPS Dashboard (`/dashboard`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
+  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a Kubernetes Secret token-gated Split-Screen HPA & Production QPS Dashboard (`/dashboard?key=...`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
 
 ---
 
