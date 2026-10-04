@@ -110,6 +110,17 @@ type ForensicsResponse struct {
 	PodIPHistory       []string          `json:"pod_ip_history"`
 }
 
+type inActorCheckpoint struct {
+	Version      int                    `json:"version"`
+	Reason       string                 `json:"reason"`
+	CreatedAt    time.Time              `json:"created_at"`
+	FilesOnDisk  map[string][]byte      `json:"files_on_disk"`
+	ModesOnDisk  map[string]os.FileMode `json:"modes_on_disk"`
+	KnownFiles   map[string]FileDeltaEntry `json:"known_files"`
+	ForensicLog  []ForensicEvent        `json:"forensic_log"`
+	CanaryAlerts []CanaryAlert          `json:"canary_alerts"`
+}
+
 type Honeypot struct {
 	mu           sync.Mutex
 	ScratchDir   string
@@ -119,6 +130,7 @@ type Honeypot struct {
 	CanaryAlerts []CanaryAlert
 	PodIPHistory []string
 	CurrentPodIP string
+	Checkpoints  map[int]inActorCheckpoint
 }
 
 func newHoneypot(scratchDir string) (*Honeypot, error) {
@@ -145,6 +157,7 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 		ForensicLog:  []ForensicEvent{},
 		CanaryAlerts: []CanaryAlert{},
 		PodIPHistory: []string{},
+		Checkpoints:  make(map[int]inActorCheckpoint),
 	}
 	curr, _ := hp.scanScratchDirLocked()
 	for k, v := range curr {
@@ -152,7 +165,99 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 		hp.Baseline[k] = v
 		hp.KnownFiles[k] = v
 	}
+	hp.saveCheckpointLocked(1, "Golden Snapshot Baseline")
 	return hp, nil
+}
+
+func (h *Honeypot) saveCheckpointLocked(version int, reason string) inActorCheckpoint {
+	filesOnDisk := make(map[string][]byte)
+	modesOnDisk := make(map[string]os.FileMode)
+	entries, _ := os.ReadDir(h.ScratchDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		full := filepath.Join(h.ScratchDir, entry.Name())
+		if data, err := os.ReadFile(full); err == nil {
+			filesOnDisk[entry.Name()] = data
+		}
+		if info, err := entry.Info(); err == nil {
+			modesOnDisk[entry.Name()] = info.Mode().Perm()
+		}
+	}
+	knownCopy := make(map[string]FileDeltaEntry, len(h.KnownFiles))
+	for k, v := range h.KnownFiles {
+		knownCopy[k] = v
+	}
+	cp := inActorCheckpoint{
+		Version:      version,
+		Reason:       reason,
+		CreatedAt:    time.Now().UTC(),
+		FilesOnDisk:  filesOnDisk,
+		ModesOnDisk:  modesOnDisk,
+		KnownFiles:   knownCopy,
+		ForensicLog:  slices.Clone(h.ForensicLog),
+		CanaryAlerts: slices.Clone(h.CanaryAlerts),
+	}
+	if h.Checkpoints == nil {
+		h.Checkpoints = make(map[int]inActorCheckpoint)
+	}
+	h.Checkpoints[version] = cp
+	return cp
+}
+
+func (h *Honeypot) SaveCheckpoint(version int, reason string) inActorCheckpoint {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if version <= 0 {
+		version = len(h.Checkpoints) + 1
+	}
+	return h.saveCheckpointLocked(version, reason)
+}
+
+func (h *Honeypot) RestoreCheckpoint(targetVersion int, podIP string) (ForensicsResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if targetVersion <= 0 {
+		for v := range h.Checkpoints {
+			if v > targetVersion {
+				targetVersion = v
+			}
+		}
+	}
+	cp, ok := h.Checkpoints[targetVersion]
+	if !ok {
+		// Fall back to highest available checkpoint if requested version wasn't found
+		highest := 0
+		for v := range h.Checkpoints {
+			if v > highest {
+				highest = v
+			}
+		}
+		cp, ok = h.Checkpoints[highest]
+	}
+	if ok {
+		entries, _ := os.ReadDir(h.ScratchDir)
+		for _, entry := range entries {
+			_ = os.RemoveAll(filepath.Join(h.ScratchDir, entry.Name()))
+		}
+		for name, data := range cp.FilesOnDisk {
+			mode := cp.ModesOnDisk[name]
+			if mode == 0 {
+				mode = 0o644
+			}
+			_ = os.WriteFile(filepath.Join(h.ScratchDir, name), data, mode)
+		}
+		h.KnownFiles = make(map[string]FileDeltaEntry, len(cp.KnownFiles))
+		for k, v := range cp.KnownFiles {
+			h.KnownFiles[k] = v
+		}
+		h.ForensicLog = slices.Clone(cp.ForensicLog)
+		h.CanaryAlerts = slices.Clone(cp.CanaryAlerts)
+	}
+	_, forensicsResp, err := h.executeInteractionLocked("", "", "", podIP)
+	return forensicsResp, err
 }
 
 func shortSHA256(b []byte) string {
@@ -170,6 +275,25 @@ func previewString(s string, maxLen int) string {
 func (h *Honeypot) recordPodIPLocked(podIP string) {
 	if podIP == "" {
 		podIP = "127.0.0.1"
+	}
+	if !strings.HasPrefix(podIP, "169.254.") && podIP != "127.0.0.1" && podIP != "unknown" {
+		filtered := make([]string, 0, len(h.PodIPHistory))
+		for _, ip := range h.PodIPHistory {
+			if !strings.HasPrefix(ip, "169.254.") {
+				filtered = append(filtered, ip)
+			}
+		}
+		h.PodIPHistory = filtered
+		for i := range h.ForensicLog {
+			if strings.HasPrefix(h.ForensicLog[i].PodIP, "169.254.") {
+				h.ForensicLog[i].PodIP = podIP
+			}
+		}
+		for i := range h.CanaryAlerts {
+			if strings.HasPrefix(h.CanaryAlerts[i].PodIP, "169.254.") {
+				h.CanaryAlerts[i].PodIP = podIP
+			}
+		}
 	}
 	h.CurrentPodIP = podIP
 	if !slices.Contains(h.PodIPHistory, podIP) {
@@ -528,20 +652,57 @@ func newMux(hp *Honeypot) *http.ServeMux {
 	})
 	mux.HandleFunc("/shell", func(w http.ResponseWriter, r *http.Request) {
 		dropFile, content, cmd := parseInteractionParams(r)
-		resp, err := hp.InteractShell(dropFile, content, cmd, currentPodIP())
+		resp, err := hp.InteractShell(dropFile, content, cmd, resolvePodIP(r))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writePrettyJSON(w, http.StatusOK, resp)
 	})
-	mux.HandleFunc("/forensics", func(w http.ResponseWriter, _ *http.Request) {
-		resp := hp.SnapshotForensics(currentPodIP())
+	mux.HandleFunc("/forensics", func(w http.ResponseWriter, r *http.Request) {
+		resp := hp.SnapshotForensics(resolvePodIP(r))
+		writePrettyJSON(w, http.StatusOK, resp)
+	})
+	mux.HandleFunc("/checkpoint/save", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Version int    `json:"version"`
+			Reason  string `json:"reason"`
+		}
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		cp := hp.SaveCheckpoint(req.Version, req.Reason)
+		writePrettyJSON(w, http.StatusOK, map[string]any{
+			"version":    cp.Version,
+			"reason":     cp.Reason,
+			"created_at": cp.CreatedAt,
+		})
+	})
+	mux.HandleFunc("/checkpoint/restore", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Version int `json:"version"`
+		}
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		resp, err := hp.RestoreCheckpoint(req.Version, resolvePodIP(r))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writePrettyJSON(w, http.StatusOK, resp)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		dropFile, content, cmd := parseInteractionParams(r)
-		resp, err := hp.Interact(dropFile, content, cmd, currentPodIP())
+		resp, err := hp.Interact(dropFile, content, cmd, resolvePodIP(r))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -551,15 +712,40 @@ func newMux(hp *Honeypot) *http.ServeMux {
 	return mux
 }
 
+func resolvePodIP(r *http.Request) string {
+	if r != nil {
+		if hdr := strings.TrimSpace(r.Header.Get("X-Worker-Pod-IP")); hdr != "" {
+			return hdr
+		}
+		if qp := strings.TrimSpace(r.URL.Query().Get("pod_ip")); qp != "" {
+			return qp
+		}
+	}
+	return currentPodIP()
+}
+
 func currentPodIP() string {
+	if envIP := strings.TrimSpace(os.Getenv("POD_IP")); envIP != "" {
+		return envIP
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return "unknown"
 	}
+	var fallback string
 	for _, addr := range addrs {
 		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
-			return ipnet.IP.String()
+			ip := ipnet.IP.String()
+			if !ipnet.IP.IsLinkLocalUnicast() && !strings.HasPrefix(ip, "169.254.") {
+				return ip
+			}
+			if fallback == "" {
+				fallback = ip
+			}
 		}
+	}
+	if fallback != "" {
+		return fallback
 	}
 	return "127.0.0.1"
 }

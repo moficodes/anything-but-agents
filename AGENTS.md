@@ -33,6 +33,7 @@ manifests/
   coldstart-template.yaml.tmpl  # ActorTemplate (12s warmup before /readyz -> Golden Snapshot)
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
   honeypot-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, gVisor sandbox)
+  honeypot-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for honeypot-gateway
   timewarp-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, heartbeat/lease anti-pattern)
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
@@ -66,6 +67,8 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh deploy            # Deploy WorkerPool + build/register all ActorTemplates via ko
    ./hack/stage-demo.sh deploy-dungeon2d  # Deploy interactive 2D Dungeon Gateway (prints presenter auth URL)
    ./hack/stage-demo.sh cleanup-dungeon2d # Clean up 2D Dungeon Gateway deployment/secret/actors/tags
+   ./hack/stage-demo.sh deploy-honeypot   # Deploy interactive Honeypot Split-Screen Gateway & LoadBalancer
+   ./hack/stage-demo.sh cleanup-honeypot  # Clean up Honeypot Gateway deployment/service/actors/tags
    ./hack/stage-demo.sh run-all           # Run all 5 live demos interactively
    PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
    ./hack/stage-demo.sh act1-dungeon      # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)

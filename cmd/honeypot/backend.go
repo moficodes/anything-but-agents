@@ -25,7 +25,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -476,7 +475,29 @@ func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) e
 	return nil
 }
 
-func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method, path string, body any, out any) error {
+func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName string) (workerIP, workerPod, snapshotURI string) {
+	raw, err := b.runKubectlAte(ctx, "get", "actors", actorName, "-a", b.atespace, "-o", "json")
+	if err != nil {
+		return "", "", ""
+	}
+	var parsed struct {
+		Status struct {
+			ExternalSnapshot struct {
+				SnapshotURI string `json:"snapshotUri"`
+			} `json:"externalSnapshot"`
+			WorkerAssignment struct {
+				WorkerPod   string `json:"workerPod"`
+				WorkerPodIP string `json:"workerPodIp"`
+			} `json:"workerAssignment"`
+		} `json:"status"`
+	}
+	if json.Unmarshal([]byte(raw), &parsed) != nil {
+		return "", "", ""
+	}
+	return parsed.Status.WorkerAssignment.WorkerPodIP, parsed.Status.WorkerAssignment.WorkerPod, parsed.Status.ExternalSnapshot.SnapshotURI
+}
+
+func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method, path, workerPodIP string, body any, out any) error {
 	var bodyReader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -490,6 +511,9 @@ func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method
 		return err
 	}
 	req.Header.Set("ate-target-actor", b.atespace+"/"+actorName)
+	if workerPodIP != "" {
+		req.Header.Set("X-Worker-Pod-IP", workerPodIP)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -501,6 +525,10 @@ func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method
 	if resp.StatusCode >= 300 {
 		msg, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("actor %s %s returned %d: %s", actorName, path, resp.StatusCode, string(msg))
+	}
+	if out == nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }
@@ -515,11 +543,15 @@ func (b *ClusterAteBackend) ExecShell(ctx context.Context, actorName, cmd, dropF
 		"content":   content,
 	}
 	var shellResp AttackerShellResponse
-	if err := b.callActorJSON(ctx, actorName, http.MethodPost, "/shell", payload, &shellResp); err != nil {
+	if err := b.callActorJSON(ctx, actorName, http.MethodPost, "/shell", "", payload, &shellResp); err != nil {
 		return nil, nil, err
 	}
+	workerIP, _, _ := b.inspectRunningActor(ctx, actorName)
+	if workerIP != "" {
+		shellResp.CurrentPodIP = workerIP
+	}
 	var forensicsResp ForensicsResponse
-	if err := b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", nil, &forensicsResp); err != nil {
+	if err := b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", workerIP, nil, &forensicsResp); err != nil {
 		return nil, nil, err
 	}
 	b.mu.Lock()
@@ -535,9 +567,16 @@ func (b *ClusterAteBackend) GetForensics(ctx context.Context, actorName string) 
 	if err := b.EnsureActor(ctx, actorName); err != nil {
 		return nil, err
 	}
+	workerIP, _, _ := b.inspectRunningActor(ctx, actorName)
 	var forensicsResp ForensicsResponse
-	if err := b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", nil, &forensicsResp); err != nil {
+	if err := b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", workerIP, nil, &forensicsResp); err != nil {
 		return nil, err
+	}
+	if workerIP == "" {
+		workerIP, _, _ = b.inspectRunningActor(ctx, actorName)
+		if workerIP != "" && strings.HasPrefix(forensicsResp.CurrentWorkerPodIP, "169.254.") {
+			_ = b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", workerIP, nil, &forensicsResp)
+		}
 	}
 	b.mu.Lock()
 	tr := b.ensureTrackerLocked(actorName)
@@ -548,21 +587,27 @@ func (b *ClusterAteBackend) GetForensics(ctx context.Context, actorName string) 
 }
 
 func (b *ClusterAteBackend) SaveActor(ctx context.Context, actorName, reason string) (int, error) {
-	out, err := b.runKubectlAte(ctx, "save", "actor", actorName, "-a", b.atespace)
-	if err != nil {
-		return 0, err
-	}
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	tr := b.ensureTrackerLocked(actorName)
 	nextVer := tr.SnapshotVersion + 1
-	// Parse version if output contains snapshot_version
-	for _, field := range strings.Fields(out) {
-		if v, convErr := strconv.Atoi(strings.TrimPrefix(field, "v")); convErr == nil && v > 0 {
-			nextVer = v
-		}
+	b.mu.Unlock()
+
+	// Save numbered checkpoint inside the actor's Go heap before suspending to GCS
+	_ = b.callActorJSON(ctx, actorName, http.MethodPost, "/checkpoint/save", "", map[string]any{
+		"version": nextVer,
+		"reason":  reason,
+	}, nil)
+
+	// Commit SNAPSHOT_CONTENT_SCOPE_FULL (rootfs overlay + Go heap RAM) to GCS via suspend
+	if _, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace); err != nil {
+		return 0, err
 	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	tr = b.ensureTrackerLocked(actorName)
 	tr.SnapshotVersion = nextVer
+	tr.Status = "SUSPENDED"
 	tr.Snapshots = append(tr.Snapshots, SnapshotRecord{
 		Version:   nextVer,
 		Reason:    reason,
@@ -583,20 +628,36 @@ func (b *ClusterAteBackend) SuspendActor(ctx context.Context, actorName string) 
 }
 
 func (b *ClusterAteBackend) RevertActor(ctx context.Context, actorName string, targetVersion int) (*ForensicsResponse, error) {
-	args := []string{"revert", "actor", actorName, "-a", b.atespace}
-	if targetVersion > 0 {
-		args = append(args, "--snapshot-version", strconv.Itoa(targetVersion))
+	// Revert running actor to its last committed GCS snapshot (if suspended, wake first so revert succeeds)
+	if _, err := b.runKubectlAte(ctx, "revert", "actor", actorName, "-a", b.atespace); err != nil {
+		var tmp ForensicsResponse
+		_ = b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", "", nil, &tmp)
+		_, _ = b.runKubectlAte(ctx, "revert", "actor", actorName, "-a", b.atespace)
 	}
-	if _, err := b.runKubectlAte(ctx, args...); err != nil {
-		return nil, err
+
+	workerIP, _, _ := b.inspectRunningActor(ctx, actorName)
+	var forensicsResp ForensicsResponse
+	if err := b.callActorJSON(ctx, actorName, http.MethodPost, "/checkpoint/restore", workerIP, map[string]any{
+		"version": targetVersion,
+	}, &forensicsResp); err != nil {
+		return b.GetForensics(ctx, actorName)
 	}
+	if workerIP == "" {
+		workerIP, _, _ = b.inspectRunningActor(ctx, actorName)
+		if workerIP != "" && strings.HasPrefix(forensicsResp.CurrentWorkerPodIP, "169.254.") {
+			_ = b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", workerIP, nil, &forensicsResp)
+		}
+	}
+
+	b.mu.Lock()
+	tr := b.ensureTrackerLocked(actorName)
 	if targetVersion > 0 {
-		b.mu.Lock()
-		tr := b.ensureTrackerLocked(actorName)
 		tr.SnapshotVersion = targetVersion
-		b.mu.Unlock()
 	}
-	return b.GetForensics(ctx, actorName)
+	tr.Status = "RUNNING"
+	tr.LastForensics = &forensicsResp
+	b.mu.Unlock()
+	return &forensicsResp, nil
 }
 
 func (b *ClusterAteBackend) CloneActor(ctx context.Context, sourceActor, newActor, tagName string) (*ForensicsResponse, error) {

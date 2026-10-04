@@ -212,6 +212,8 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh act2-coldstart    # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
 ./hack/stage-demo.sh act3-tenantdb     # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
 ./hack/stage-demo.sh act4-honeypot     # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
+./hack/stage-demo.sh deploy-honeypot   # Deploy in-cluster Honeypot Split-Screen Gateway + LoadBalancer
+./hack/stage-demo.sh cleanup-honeypot  # Clean up in-cluster Honeypot Gateway & honeypot-* actors
 ./hack/stage-demo.sh act5-timewarp     # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
 ```
 
