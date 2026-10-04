@@ -15,7 +15,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -134,7 +136,7 @@ func TestHoneypotShellVsForensicsSeparationAndRootfsDelta(t *testing.T) {
 }
 
 func TestHoneypotBackendLifecycleRevertAndClone(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
 
 	actorA := "honeypot-203-0-113-5"
@@ -301,4 +303,63 @@ func jsonNumber(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }
+
+func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	gw := NewGatewayServer(backend)
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(raw)
+
+	requiredMarkers := []string{
+		`id="movieSetPane"`,
+		`id="oneWayMirror"`,
+		`id="socBoothPane"`,
+		`https://staging-admin.acmecorp.internal/admin/debug`,
+		`id="actorTabs"`,
+		`id="attackerTargetLabel"`,
+		`id="terminalOutput"`,
+		`id="customCmdInput"`,
+		`id="checkpointToast"`,
+		`id="socActorState"`,
+		`id="socKernelProof"`,
+		`id="socPodTrail"`,
+		`id="socPodHopCount"`,
+		`id="socSnapVer"`,
+		`id="snapshotTimeline"`,
+		`id="canaryBanner"`,
+		`id="deltaTableBody"`,
+		`id="payloadInspector"`,
+		`id="inspectorFileTitle"`,
+		`id="inspectorFileBody"`,
+		`id="auditTrailBox"`,
+		`socSave()`,
+		`socSuspend()`,
+		`socRevert()`,
+		`socClone()`,
+	}
+	for _, marker := range requiredMarkers {
+		if !strings.Contains(html, marker) {
+			t.Errorf("GET / HTML missing required marker %q", marker)
+		}
+	}
+
+	if strings.Contains(html, ".innerHTML") {
+		t.Errorf("GET / HTML script must use safe DOM APIs (textContent/replaceChildren/createElement) instead of .innerHTML")
+	}
+}
+
 

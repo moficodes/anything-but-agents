@@ -3,474 +3,1442 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The Truman Show Deception Grid — Per-Attacker gVisor Sandbox vs. Covert SOC Director & Agent Substrate Time-Travel Telemetry Rack." />
   <title>The Truman Show Honeypot — Attacker Movie Set vs. SOC Director's Booth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg-dark: #070b14;
-      --panel-bg: #0f172a;
-      --panel-border: #1e293b;
-      --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --accent-blue: #38bdf8;
-      --accent-green: #4ade80;
-      --accent-amber: #fbbf24;
-      --accent-red: #f87171;
-      --accent-purple: #c084fc;
+      /* Global Chassis & SOC Dark-Room Rack Tokens */
+      --chassis: #05080f;
+      --soc-bg: #070b14;
+      --soc-panel: #0b111e;
+      --soc-panel-alt: #0f172a;
+      --soc-bay: #0d1424;
+      --soc-bay-hover: #152038;
+      --soc-border: #1e293b;
+      --soc-border-strong: #334155;
+      --soc-text: #f8fafc;
+      --soc-text-secondary: #cbd5e1;
+      --soc-text-muted: #64748b;
+
+      /* Daylight Enterprise Facade ("The Movie Set") Tokens */
+      --set-bg: #f1f5f9;
+      --set-surface: #ffffff;
+      --set-surface-alt: #f8fafc;
+      --set-border: #cbd5e1;
+      --set-border-strong: #94a3b8;
+      --set-ink: #0f172a;
+      --set-ink-secondary: #334155;
+      --set-ink-muted: #64748b;
+      --set-accent-blue: #0284c7;
+      --set-accent-blue-bg: rgba(2, 132, 199, 0.08);
+
+      /* Intentional Hardware Signal Tokens */
+      --sig-emerald: #10b981;
+      --sig-emerald-bright: #34d399;
+      --sig-emerald-dim: rgba(16, 185, 129, 0.14);
+      --sig-amber: #f59e0b;
+      --sig-amber-bright: #fbbf24;
+      --sig-amber-dim: rgba(245, 158, 11, 0.15);
+      --sig-crimson: #ef4444;
+      --sig-crimson-bright: #f87171;
+      --sig-crimson-dim: rgba(239, 68, 68, 0.16);
+      --sig-ice: #38bdf8;
+      --sig-ice-bright: #7dd3fc;
+      --sig-ice-dim: rgba(56, 189, 248, 0.14);
+
+      --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
-    * { box-sizing: border-box; }
-    body {
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
       margin: 0;
-      background: var(--bg-dark);
-      color: var(--text-main);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 0;
+      background-color: var(--chassis);
+      color: var(--soc-text);
+      font-family: var(--font-display);
+      font-size: 15px;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
       min-height: 100vh;
+      padding: 12px 16px 24px;
+      background-image:
+        radial-gradient(circle at 18% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 42%),
+        radial-gradient(circle at 82% 0%, rgba(239, 68, 68, 0.07) 0%, transparent 44%);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .rack-shell {
+      max-width: 1720px;
+      margin: 0 auto;
+      border: 1px solid var(--soc-border-strong);
+      background: var(--soc-bg);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
       display: flex;
       flex-direction: column;
     }
-    header {
-      background: #0b1120;
-      border-bottom: 1px solid var(--panel-border);
-      padding: 12px 20px;
+
+    /* Top Deception Control Deck */
+    header.faceplate {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
       flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--soc-border-strong);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%),
+        var(--soc-panel);
+    }
+
+    .instrument-id {
+      display: flex;
+      align-items: center;
       gap: 12px;
     }
-    .brand {
+
+    .rack-ears {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 12px;
+      height: 40px;
+      border-right: 1px solid var(--soc-border-strong);
+      padding-right: 7px;
+      color: var(--soc-text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      line-height: 1;
+      user-select: none;
+    }
+
+    .brand-badge {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--sig-crimson);
+      background: var(--sig-crimson-dim);
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 16px;
+      justify-content: center;
+      color: var(--sig-crimson-bright);
+      flex-shrink: 0;
     }
-    .brand svg { color: var(--accent-blue); flex-shrink: 0; }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .title-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--sig-ice-bright);
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 1.18rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--soc-text);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
     .session-tabs {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
     }
+
     .tab-btn {
-      background: #1e293b;
-      color: var(--text-muted);
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-size: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--soc-bay);
+      color: var(--soc-text-secondary);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 3px;
+      padding: 6px 11px;
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      font-weight: 600;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
+      gap: 7px;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
     }
+
+    .tab-btn:hover {
+      background: var(--soc-bay-hover);
+      border-color: var(--sig-ice);
+    }
+
     .tab-btn.active {
-      background: rgba(56, 189, 248, 0.15);
-      color: #fff;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+      background: var(--sig-ice-dim);
+      color: #ffffff;
+      border-color: var(--sig-ice);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.22);
     }
+
+    .tab-ver-badge {
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-size: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid var(--soc-border-strong);
+      color: var(--sig-amber-bright);
+    }
+
     .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       display: inline-block;
+      flex-shrink: 0;
     }
-    .dot.running { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
-    .dot.suspended { background: var(--accent-amber); }
-    .split-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      padding: 16px 20px;
-      flex: 1;
+
+    .dot.running {
+      background: var(--sig-emerald-bright);
+      box-shadow: 0 0 7px var(--sig-emerald);
     }
-    @media (max-width: 1024px) {
-      .split-grid { grid-template-columns: 1fr; }
+
+    .dot.suspended {
+      background: var(--sig-amber-bright);
+      box-shadow: 0 0 6px var(--sig-amber);
     }
-    .pane {
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      border-radius: 10px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .pane-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--panel-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: 700;
-      font-size: 13px;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-    }
-    .pane-header-title {
+
+    .actor-spawn-form {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 5px;
     }
-    .pane-header.attacker {
-      background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), transparent);
-      color: var(--accent-blue);
-    }
-    .pane-header.soc {
-      background: linear-gradient(90deg, rgba(248, 113, 113, 0.14), transparent);
-      color: var(--accent-red);
-    }
-    .pane-body {
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      flex: 1;
-    }
-    .portal-banner {
-      background: #131c31;
-      border: 1px solid #263554;
-      border-radius: 8px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .portal-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .debug-badge {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    .actor-spawn-input {
+      background: #04070e;
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 3px;
+      padding: 6px 9px;
+      color: var(--soc-text);
+      font-family: var(--font-mono);
       font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(251, 191, 36, 0.15);
-      color: var(--accent-amber);
-      border: 1px solid rgba(251, 191, 36, 0.4);
+      width: 165px;
     }
-    .decoy-cards {
+
+    .actor-spawn-input:focus {
+      outline: 1px solid var(--sig-ice);
+      border-color: var(--sig-ice);
+    }
+
+    /* Main Asymmetric Split Grid: Movie Set | One-Way Mirror | SOC Booth */
+    .truman-stage-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1.18fr);
+      min-height: calc(100vh - 102px);
+    }
+
+    @media (max-width: 1100px) {
+      .truman-stage-grid {
+        grid-template-columns: 1fr;
+      }
+      .one-way-mirror {
+        flex-direction: row !important;
+        height: 32px;
+        padding: 4px 12px !important;
+      }
+      .mirror-label {
+        writing-mode: horizontal-tb !important;
+        transform: none !important;
+      }
+    }
+
+    /* ==========================================================================
+       LEFT PANE: THE MOVIE SET (DAYLIGHT CORPORATE INTRANET FACADE)
+       ========================================================================== */
+    .movie-set-pane {
+      background: var(--set-bg);
+      color: var(--set-ink);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--set-border-strong);
+    }
+
+    .browser-chrome {
+      background: #e2e8f0;
+      border-bottom: 1px solid var(--set-border-strong);
+      padding: 9px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .window-dots {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .win-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .win-dot.close { background: #ef4444; }
+    .win-dot.min { background: #f59e0b; }
+    .win-dot.max { background: #10b981; }
+
+    .url-bar {
+      flex: 1;
+      min-width: 240px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .url-bar svg {
+      color: var(--sig-emerald-bright);
+      flex-shrink: 0;
+    }
+
+    .movie-stage-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      background: #fffbeb;
+      color: #b45309;
+      border: 1px solid #f59e0b;
+    }
+
+    .movie-set-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    /* AcmeCorp Enterprise Portal Card */
+    .corp-portal-card {
+      background: var(--set-surface);
+      border: 1px solid var(--set-border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
       gap: 10px;
     }
-    .decoy-card {
-      background: #090d16;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 10px;
-      font-size: 12px;
+
+    .corp-portal-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 9px;
     }
-    .decoy-card .label {
-      color: var(--text-muted);
+
+    .corp-brand-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .corp-logo-box {
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      background: var(--set-accent-blue-bg);
+      border: 1px solid var(--set-accent-blue);
+      color: var(--set-accent-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .corp-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--set-ink);
+    }
+
+    .corp-meta {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--set-ink-muted);
+      margin-top: 2px;
+    }
+
+    .debug-mode-pill {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #f87171;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .decoy-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    @media (max-width: 640px) {
+      .decoy-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .decoy-card {
+      background: var(--set-surface-alt);
+      border: 1px solid var(--set-border);
+      border-radius: 5px;
+      padding: 9px 11px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .decoy-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .decoy-card-label {
       font-size: 10px;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      color: var(--set-ink-muted);
     }
-    .decoy-card .val {
-      margin-top: 4px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    .decoy-card-val {
+      font-family: var(--font-mono);
       font-size: 11px;
-      color: #e2e8f0;
+      color: var(--set-ink);
       word-break: break-all;
+      line-height: 1.35;
     }
-    .playbook-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+
+    .decoy-path {
+      color: var(--set-accent-blue);
+      font-weight: 600;
     }
-    .btn {
-      background: #1e293b;
-      color: #f8fafc;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 7px 11px;
-      font-size: 12px;
+
+    .decoy-inspect-btn {
+      align-self: flex-start;
+      background: #ffffff;
+      color: var(--set-ink-secondary);
+      border: 1px solid var(--set-border-strong);
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-family: var(--font-mono);
+      font-size: 10px;
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
+      gap: 5px;
     }
+
+    .decoy-inspect-btn:hover {
+      border-color: var(--set-accent-blue);
+      color: var(--set-accent-blue);
+      background: var(--set-accent-blue-bg);
+    }
+
+    /* Embedded Dark Web-Shell Drawer inside Movie Set */
+    .webshell-drawer {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 12px;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    .playbook-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+    }
+
+    .playbook-bar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .btn {
+      background: #131c2e;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+
     .btn svg {
       flex-shrink: 0;
     }
-    .btn:hover { background: #334155; }
-    .btn.danger { background: rgba(185, 28, 28, 0.25); border-color: #dc2626; color: #fca5a5; }
-    .btn.danger:hover { background: rgba(185, 28, 28, 0.4); }
-    .btn.soc-suspend { background: rgba(2, 132, 199, 0.25); border-color: #0284c7; color: #7dd3fc; }
-    .btn.soc-revert { background: rgba(217, 119, 6, 0.25); border-color: #d97706; color: #fde68a; }
-    .btn.soc-clone { background: rgba(124, 58, 237, 0.25); border-color: #7c3aed; color: #ddd6fe; }
-    .terminal {
-      background: #030712;
+
+    .btn:hover {
+      background: #1e293b;
+      border-color: var(--sig-ice);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn.danger {
+      background: rgba(185, 28, 28, 0.22);
+      border-color: #dc2626;
+      color: #fecaca;
+    }
+
+    .btn.danger:hover {
+      background: rgba(220, 38, 38, 0.35);
+      border-color: #f87171;
+    }
+
+    .terminal-chrome {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #050811;
+      border: 1px solid #1e293b;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .terminal-meta-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .exit-pill {
+      padding: 1px 6px;
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--sig-emerald-dim);
+      color: var(--sig-emerald-bright);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .exit-pill.err {
+      background: var(--sig-crimson-dim);
+      color: var(--sig-crimson-bright);
+      border-color: rgba(239, 68, 68, 0.45);
+    }
+
+    .term-clear-btn {
+      background: transparent;
       border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #94a3b8;
+      border-radius: 2px;
+      padding: 1px 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .term-clear-btn:hover {
+      color: #ffffff;
+      border-color: #64748b;
+    }
+
+    .terminal {
+      background: #02040a;
+      border: 1px solid #1e293b;
+      border-radius: 0 0 4px 4px;
+      padding: 11px 12px;
+      font-family: var(--font-mono);
       font-size: 12px;
-      color: var(--accent-green);
-      min-height: 250px;
-      max-height: 360px;
+      color: var(--sig-emerald-bright);
+      min-height: 230px;
+      max-height: 340px;
       overflow-y: auto;
       white-space: pre-wrap;
+      word-break: break-word;
       line-height: 1.45;
       flex: 1;
     }
+
     .cmd-form {
       display: flex;
       gap: 8px;
     }
+
     .cmd-input {
       flex: 1;
-      background: #030712;
+      background: #02040a;
       border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #fff;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      border-radius: 4px;
+      padding: 8px 11px;
+      color: #ffffff;
+      font-family: var(--font-mono);
       font-size: 12px;
     }
-    .telemetry-strip {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+
+    .cmd-input:focus {
+      outline: 1px solid var(--sig-ice);
+      border-color: var(--sig-ice);
     }
-    .stat-box {
-      background: #090d16;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 8px 10px;
+
+    /* ==========================================================================
+       CENTER SEAM: THE ONE-WAY MIRROR
+       ========================================================================== */
+    .one-way-mirror {
+      background:
+        linear-gradient(180deg, #090d16 0%, #111a2e 50%, #090d16 100%);
+      border-left: 1px solid #334155;
+      border-right: 2px solid rgba(239, 68, 68, 0.55);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 4px;
+      user-select: none;
+      position: relative;
     }
-    .stat-box .k {
+
+    .mirror-sensor {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--sig-crimson);
+      background: var(--sig-crimson-dim);
+      color: var(--sig-crimson-bright);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .mirror-sensor.pulse {
+      transform: scale(1.18);
+      box-shadow: 0 0 14px var(--sig-crimson);
+    }
+
+    .mirror-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-family: var(--font-mono);
       font-size: 10px;
-      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
+      color: #94a3b8;
+      white-space: nowrap;
     }
-    .stat-box .v {
-      margin-top: 3px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
+
+    /* ==========================================================================
+       RIGHT PANE: BEHIND THE ONE-WAY MIRROR (COVERT SOC & SUBSTRATE RACK)
+       ========================================================================== */
+    .soc-booth-pane {
+      background: var(--soc-bg);
+      color: var(--soc-text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .soc-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--soc-border-strong);
+      background:
+        linear-gradient(90deg, rgba(239, 68, 68, 0.14), rgba(15, 23, 42, 0.4));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .soc-header-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--sig-crimson-bright);
+    }
+
+    .toast-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 3px;
+      background: var(--sig-amber-dim);
+      color: var(--sig-amber-bright);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+    }
+
+    /* 3-Bay Hardware Readout Strip */
+    .soc-readout-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-bottom: 1px solid var(--soc-border-strong);
+      background: var(--soc-panel);
+    }
+
+    @media (max-width: 720px) {
+      .soc-readout-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .soc-bay {
+      padding: 10px 14px;
+      border-right: 1px solid var(--soc-border);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .soc-bay:last-child {
+      border-right: none;
+    }
+
+    .soc-bay-head {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--soc-text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .soc-bay-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--soc-text);
+      word-break: break-word;
+    }
+
+    .soc-bay-sub {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--soc-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .soc-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    /* Substrate Time-Travel Deck & Snapshot Scrubber */
+    .timetravel-deck {
+      background: var(--soc-panel);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 5px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .deck-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .btn.soc-save {
+      background: var(--sig-emerald-dim);
+      border-color: var(--sig-emerald);
+      color: var(--sig-emerald-bright);
+    }
+
+    .btn.soc-suspend {
+      background: var(--sig-ice-dim);
+      border-color: var(--sig-ice);
+      color: var(--sig-ice-bright);
+    }
+
+    .btn.soc-revert {
+      background: var(--sig-amber-dim);
+      border-color: var(--sig-amber);
+      color: var(--sig-amber-bright);
+    }
+
+    .btn.soc-clone {
+      background: rgba(244, 63, 94, 0.16);
+      border-color: #f43f5e;
+      color: #fda4af;
+    }
+
+    .timeline-scrubber {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding-top: 6px;
+      border-top: 1px solid var(--soc-border);
+    }
+
+    .snap-node {
+      background: #070b14;
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 3px;
+      padding: 4px 9px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--soc-text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.14s ease, background-color 0.14s ease;
+    }
+
+    .snap-node:hover {
+      border-color: var(--sig-amber);
+      color: #ffffff;
+    }
+
+    .snap-node.active {
+      background: var(--sig-emerald-dim);
+      border-color: var(--sig-emerald);
+      color: var(--sig-emerald-bright);
       font-weight: 700;
     }
+
+    .snap-node.wiped-head {
+      background: var(--sig-crimson-dim);
+      border-color: var(--sig-crimson);
+      color: var(--sig-crimson-bright);
+      font-weight: 700;
+      cursor: default;
+    }
+
+    .snap-arrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--soc-text-muted);
+    }
+
+    /* Canary Tripwire Alarm Strip */
     .canary-box {
-      background: rgba(127, 29, 29, 0.28);
-      border: 1px solid #dc2626;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 12px;
+      background: rgba(127, 29, 29, 0.26);
+      border: 1px solid var(--sig-crimson);
+      border-radius: 5px;
+      padding: 9px 12px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
       color: #fecaca;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
     }
+
     .canary-box.clean {
-      background: rgba(20, 83, 45, 0.2);
-      border-color: #16a34a;
-      color: #bbf7d0;
+      background: rgba(6, 78, 59, 0.22);
+      border-color: var(--sig-emerald);
+      color: #a7f3d0;
     }
+
+    .canary-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    /* Split Rootfs Overlay Delta Table + Live Payload Inspector */
+    .forensic-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 780px) {
+      .forensic-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .delta-panel, .inspector-panel {
+      background: var(--soc-panel);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .subpanel-head {
+      padding: 7px 10px;
+      background: #080d18;
+      border-bottom: 1px solid var(--soc-border);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--soc-text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
     table.delta-table {
       width: 100%;
       border-collapse: collapse;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--font-mono);
       font-size: 11px;
     }
-    table.delta-table th, table.delta-table td {
+
+    table.delta-table th,
+    table.delta-table td {
       text-align: left;
       padding: 6px 8px;
-      border-bottom: 1px solid #1e293b;
+      border-bottom: 1px solid var(--soc-border);
     }
+
     table.delta-table th {
-      color: var(--text-muted);
-      font-size: 10px;
+      color: var(--soc-text-muted);
+      font-size: 9.5px;
       text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: #090e1a;
     }
+
+    table.delta-table tbody tr {
+      cursor: pointer;
+      transition: background-color 0.12s ease;
+    }
+
+    table.delta-table tbody tr:hover {
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    table.delta-table tbody tr.selected-row {
+      background: rgba(56, 189, 248, 0.16);
+    }
+
     .badge {
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 2px;
+      font-size: 9.5px;
       font-weight: 700;
+      display: inline-block;
     }
-    .badge.UNCHANGED { background: #1e293b; color: #94a3b8; }
-    .badge.ADDED { background: rgba(220, 38, 38, 0.25); color: #fca5a5; border: 1px solid #dc2626; }
-    .badge.MODIFIED { background: rgba(217, 119, 6, 0.25); color: #fde68a; border: 1px solid #d97706; }
-    .badge.DELETED { background: rgba(147, 51, 234, 0.25); color: #e9d5ff; border: 1px solid #9333ea; text-decoration: line-through; }
-    .audit-list {
-      background: #030712;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 8px 10px;
-      max-height: 150px;
+
+    .badge.UNCHANGED {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+
+    .badge.ADDED {
+      background: var(--sig-crimson-dim);
+      color: var(--sig-crimson-bright);
+      border: 1px solid var(--sig-crimson);
+    }
+
+    .badge.MODIFIED {
+      background: var(--sig-amber-dim);
+      color: var(--sig-amber-bright);
+      border: 1px solid var(--sig-amber);
+    }
+
+    .badge.DELETED {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+      border: 1px solid #f43f5e;
+      text-decoration: line-through;
+    }
+
+    .inspector-body {
+      margin: 0;
+      padding: 10px;
+      background: #03060c;
+      color: var(--sig-ice-bright);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 135px;
+      max-height: 210px;
       overflow-y: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      flex: 1;
+    }
+
+    .inspector-body.deleted-notice {
+      color: var(--sig-amber-bright);
+    }
+
+    /* Silent In-Memory Forensic Audit Trail */
+    .audit-panel {
+      background: var(--soc-panel);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .audit-list {
+      background: #03060c;
+      padding: 8px 10px;
+      max-height: 165px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
       font-size: 11px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
+      flex: 1;
     }
-    .toast {
-      font-size: 11px;
-      color: var(--accent-amber);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    .audit-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px dashed rgba(51, 65, 85, 0.5);
+    }
+
+    .audit-row:last-child {
+      border-bottom: none;
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-      <span>The "Truman Show" Deception Grid — Per-Attacker gVisor Sandbox (SNAPSHOT_CONTENT_SCOPE_FULL)</span>
-    </div>
-    <div class="session-tabs" id="actorTabs"></div>
-  </header>
-
-  <main class="split-grid">
-    <!-- LEFT PANE: THE MOVIE SET (ATTACKER VIEW) -->
-    <section class="pane">
-      <div class="pane-header attacker">
-        <span class="pane-header-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="4 17 10 11 4 5"/>
-            <line x1="12" y1="19" x2="20" y2="19"/>
+  <div class="rack-shell">
+    <!-- TOP DECEPTION CONTROL DECK -->
+    <header class="faceplate">
+      <div class="instrument-id">
+        <div class="rack-ears" aria-hidden="true">
+          <span>o</span>
+          <span>o</span>
+        </div>
+        <div class="brand-badge" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <circle cx="12" cy="11" r="2.5"/>
           </svg>
-          <span>The Movie Set (What Attacker Sees)</span>
-        </span>
-        <span id="attackerTargetLabel">honeypot-203-0-113-5</span>
+        </div>
+        <div class="title-block">
+          <div class="title-eyebrow">ACT 04 // DECEPTION SANDBOX • SNAPSHOT_CONTENT_SCOPE_FULL • SANDBOX_CLASS_GVISOR</div>
+          <h1>The &ldquo;Truman Show&rdquo; Deception Grid</h1>
+        </div>
       </div>
-      <div class="pane-body">
-        <div class="portal-banner">
-          <div class="portal-top">
-            <div>
-              <strong>AcmeCorp Internal Payroll v1.4</strong>
-              <span style="color:var(--text-muted); font-size:12px; margin-left:6px;">staging-admin.acmecorp.internal</span>
-            </div>
-            <span class="debug-badge">DEBUG_MODE=TRUE</span>
-          </div>
-          <div class="decoy-cards">
-            <div class="decoy-card">
-              <div class="label">Payroll DB Credentials Backup</div>
-              <div class="val">10.99.0.14:5432 (payroll_admin)<br/>/tmp/honeypot/payroll_db_credentials.env.bak</div>
-            </div>
-            <div class="decoy-card">
-              <div class="label">Pending Executive Wire Batch #409</div>
-              <div class="val">3 Transfers ($428,500.00 USD)<br/>/tmp/honeypot/wire_transfer_batch_409.csv</div>
-            </div>
-          </div>
-        </div>
 
-        <div>
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">
-            1-Click Attack Playbook (executes real <code>/bin/sh -c</code> inside gVisor actor):
-          </div>
-          <div class="playbook-bar">
-            <button class="btn" onclick="runPlaybook(1)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <span>1. Recon (id &amp; uname -a)</span>
-            </button>
-            <button class="btn" onclick="runPlaybook(2)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <span>2. Exfiltrate DB Creds</span>
-            </button>
-            <button class="btn" onclick="runPlaybook(3)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span>3. Plant rootkit.sh</span>
-            </button>
-            <button class="btn danger" onclick="runPlaybook(4)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              <span>4. Wipe Tracks (rm -rf)</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="terminal" id="terminalOutput">root@payroll-admin-prod-01:/tmp/honeypot# _</div>
-
-        <form class="cmd-form" onsubmit="submitCustomCmd(event)">
-          <input class="cmd-input" id="customCmdInput" placeholder="Run any shell command in /tmp/honeypot (e.g. ls -la, cat rootkit.sh, ps aux)..." />
+      <div class="header-controls">
+        <div class="session-tabs" id="actorTabs"></div>
+        <form class="actor-spawn-form" id="customActorForm" onsubmit="submitCustomActor(event)">
+          <input class="actor-spawn-input" id="customActorInput" placeholder="Spawn IP (e.g. 192.0.2.99)" />
           <button type="submit" class="btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span>Execute</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>Target</span>
           </button>
         </form>
       </div>
-    </section>
+    </header>
 
-    <!-- RIGHT PANE: DIRECTOR'S BOOTH (SOC & SUBSTRATE TELEMETRY) -->
-    <section class="pane">
-      <div class="pane-header soc">
-        <span class="pane-header-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- ASYMMETRIC SPLIT STAGE: MOVIE SET | ONE-WAY MIRROR | SOC BOOTH -->
+    <main class="truman-stage-grid">
+      <!-- LEFT PANE: THE MOVIE SET (DAYLIGHT CORPORATE INTRANET PORTAL) -->
+      <section class="movie-set-pane" id="movieSetPane">
+        <div class="browser-chrome">
+          <div class="window-dots" aria-hidden="true">
+            <span class="win-dot close"></span>
+            <span class="win-dot min"></span>
+            <span class="win-dot max"></span>
+          </div>
+          <div class="url-bar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span>https://staging-admin.acmecorp.internal/admin/debug</span>
+          </div>
+          <span class="movie-stage-pill">
+            <span>THE MOVIE SET // ATTACKER VIEW:</span>
+            <strong id="attackerTargetLabel">honeypot-203-0-113-5</strong>
+          </span>
+        </div>
+
+        <div class="movie-set-body">
+          <!-- Decoy Enterprise Intranet Card -->
+          <div class="corp-portal-card">
+            <div class="corp-portal-top">
+              <div class="corp-brand-row">
+                <div class="corp-logo-box" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="corp-title">AcmeCorp Global Payroll &amp; Treasury v1.4-rc2</div>
+                  <div class="corp-meta">Host: payroll-admin-prod-01 • CWD: /tmp/honeypot • Zero Honeypot Indicators</div>
+                </div>
+              </div>
+              <span class="debug-mode-pill">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>DEBUG_MODE=TRUE</span>
+              </span>
+            </div>
+
+            <div class="decoy-grid">
+              <div class="decoy-card">
+                <div class="decoy-card-head">
+                  <span class="decoy-card-label">Payroll DB Connection Pool (.env.bak)</span>
+                </div>
+                <div class="decoy-card-val">
+                  10.99.0.14:5432 (payroll_admin)<br/>
+                  <span class="decoy-path">/tmp/honeypot/payroll_db_credentials.env.bak</span>
+                </div>
+                <button type="button" class="decoy-inspect-btn" onclick="execCmd('cat /tmp/honeypot/payroll_db_credentials.env.bak')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span>cat payroll_db_credentials.env.bak</span>
+                </button>
+              </div>
+
+              <div class="decoy-card">
+                <div class="decoy-card-head">
+                  <span class="decoy-card-label">Pending Executive Wire Batch #409</span>
+                </div>
+                <div class="decoy-card-val">
+                  3 Transfers ($428,500.00 USD)<br/>
+                  <span class="decoy-path">/tmp/honeypot/wire_transfer_batch_409.csv</span>
+                </div>
+                <button type="button" class="decoy-inspect-btn" onclick="execCmd('cat /tmp/honeypot/wire_transfer_batch_409.csv')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span>cat wire_transfer_batch_409.csv</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Embedded Dark Web-Shell Drawer -->
+          <div class="webshell-drawer">
+            <div class="playbook-header">
+              <span>1-Click Intruder Playbook (Real /bin/sh -c inside gVisor Actor)</span>
+              <span>CWD: /tmp/honeypot</span>
+            </div>
+            <div class="playbook-bar">
+              <button type="button" class="btn" onclick="runPlaybook(1)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <span>1. Recon (id &amp; uname -a)</span>
+              </button>
+              <button type="button" class="btn" onclick="runPlaybook(2)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span>2. Exfiltrate DB Creds</span>
+              </button>
+              <button type="button" class="btn" onclick="runPlaybook(3)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>3. Plant rootkit.sh</span>
+              </button>
+              <button type="button" class="btn danger" onclick="runPlaybook(4)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span>4. Wipe Tracks (rm -rf)</span>
+              </button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; flex:1;">
+              <div class="terminal-chrome">
+                <span>gVisor /bin/sh — root@payroll-admin-prod-01:/tmp/honeypot</span>
+                <div class="terminal-meta-right">
+                  <span class="exit-pill" id="lastExitBadge">exit: 0</span>
+                  <button type="button" class="term-clear-btn" onclick="clearTerm()">Clear</button>
+                </div>
+              </div>
+              <div class="terminal" id="terminalOutput">root@payroll-admin-prod-01:/tmp/honeypot# _</div>
+            </div>
+
+            <form class="cmd-form" onsubmit="submitCustomCmd(event)">
+              <input class="cmd-input" id="customCmdInput" placeholder="Run any shell command in /tmp/honeypot (e.g. ls -la, cat rootkit.sh, ps aux)..." />
+              <button type="submit" class="btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Execute</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- CENTER SEAM: THE ONE-WAY MIRROR -->
+      <aside class="one-way-mirror" id="oneWayMirror" aria-label="One-Way Observation Mirror">
+        <div class="mirror-sensor" id="mirrorPulse" title="One-Way Telemetry Tap (Attacker -> SOC)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </div>
+        <span class="mirror-label">ONE-WAY MIRROR • gVISOR SENTRY • ZERO LEAKBACK</span>
+        <div class="mirror-sensor" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
-          <span>Behind the One-Way Mirror (SOC Director &amp; Substrate Controls)</span>
-        </span>
-        <span class="toast" id="checkpointToast"></span>
-      </div>
-      <div class="pane-body">
-        <div class="telemetry-strip">
-          <div class="stat-box">
-            <div class="k">Actor State &amp; Compute</div>
-            <div class="v" id="socActorState">RUNNING</div>
+        </div>
+      </aside>
+
+      <!-- RIGHT PANE: BEHIND THE ONE-WAY MIRROR (SOC DIRECTOR & SUBSTRATE TELEMETRY) -->
+      <section class="soc-booth-pane" id="socBoothPane">
+        <div class="soc-header">
+          <span class="soc-header-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span>BEHIND THE ONE-WAY MIRROR // SOC DIRECTOR &amp; SUBSTRATE TELEMETRY</span>
+          </span>
+          <span class="toast-pill" id="checkpointToast">Golden Snapshot Baseline Ready</span>
+        </div>
+
+        <!-- 3-Bay Hardware Readout Strip -->
+        <div class="soc-readout-strip">
+          <div class="soc-bay">
+            <div class="soc-bay-head">
+              <span>01 // SANDBOX &amp; COMPUTE</span>
+              <span>GVISOR</span>
+            </div>
+            <div class="soc-bay-val" id="socActorState">RUNNING (gVisor)</div>
+            <div class="soc-bay-sub" id="socKernelProof">Linux 4.4.0 #1 SMP PREEMPT (gVisor Sentry)</div>
           </div>
-          <div class="stat-box">
-            <div class="k">Worker Pod IP Migration Trail</div>
-            <div class="v" id="socPodTrail">127.0.0.1</div>
+
+          <div class="soc-bay">
+            <div class="soc-bay-head">
+              <span>02 // WORKER POD MIGRATION TRAIL</span>
+              <span id="socPodHopCount">1 Worker Pod</span>
+            </div>
+            <div class="soc-bay-val" id="socPodTrail">10.44.0.9</div>
+            <div class="soc-bay-sub">Cross-Pod State Preserved via GCS</div>
           </div>
-          <div class="stat-box">
-            <div class="k">Saved Snapshot Version</div>
-            <div class="v" id="socSnapVer">v1 (Golden Baseline)</div>
+
+          <div class="soc-bay">
+            <div class="soc-bay-head">
+              <span>03 // ACTIVE CHECKPOINT</span>
+              <span>SCOPE_FULL</span>
+            </div>
+            <div class="soc-bay-val" id="socSnapVer">v1</div>
+            <div class="soc-bay-sub" id="socSnapSummary">Golden Snapshot Baseline</div>
           </div>
         </div>
 
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn soc-suspend" onclick="socSuspend()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-            <span>Suspend to GCS ($0/hr Idle)</span>
-          </button>
-          <button class="btn soc-revert" onclick="socRevert()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            <span>Revert Pre-Wipe Snapshot (Undo rm -rf)</span>
-          </button>
-          <button class="btn soc-clone" onclick="socClone()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-            <span>Clone to Forensic Lab (--tag)</span>
-          </button>
-        </div>
+        <div class="soc-body">
+          <!-- Substrate Time-Travel Deck & Interactive Snapshot Timeline -->
+          <div class="timetravel-deck">
+            <div class="deck-controls">
+              <button type="button" class="btn soc-save" onclick="socSave()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <span>+ Save Checkpoint</span>
+              </button>
 
-        <div class="canary-box clean" id="canaryBanner">
-          No Canary alerts triggered yet for this session.
-        </div>
+              <button type="button" class="btn soc-suspend" onclick="socSuspend()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6" y="4" width="4" height="16"/>
+                  <rect x="14" y="4" width="4" height="16"/>
+                </svg>
+                <span>Suspend to GCS ($0/hr)</span>
+              </button>
 
-        <div>
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; font-weight:700;">
-            Rootfs Overlay Delta Inspector (/tmp/honeypot)
+              <button type="button" class="btn soc-revert" onclick="socRevert()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10"/>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
+                <span>Revert Pre-Wipe Snapshot</span>
+              </button>
+
+              <button type="button" class="btn soc-clone" onclick="socClone()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="6" y1="3" x2="6" y2="15"/>
+                  <circle cx="18" cy="6" r="3"/>
+                  <circle cx="6" cy="18" r="3"/>
+                  <path d="M18 9a9 9 0 0 1-9 9"/>
+                </svg>
+                <span>Clone Forensic Lab (--tag)</span>
+              </button>
+            </div>
+
+            <div class="timeline-scrubber" id="snapshotTimeline"></div>
           </div>
-          <table class="delta-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>File</th>
-                <th>Mode / Size</th>
-                <th>SHA-256</th>
-                <th>Preview</th>
-              </tr>
-            </thead>
-            <tbody id="deltaTableBody"></tbody>
-          </table>
-        </div>
 
-        <div>
-          <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; font-weight:700;">
-            Silent In-Memory Forensic Audit Trail &amp; gVisor Proof
+          <!-- Canary Tripwire Alarm Strip -->
+          <div class="canary-box clean" id="canaryBanner">
+            Zero Canary alerts triggered — decoy files untouched.
           </div>
-          <div class="audit-list" id="auditTrailBox"></div>
+
+          <!-- Split Rootfs Overlay Delta Table + Live Payload Inspector -->
+          <div class="forensic-split">
+            <div class="delta-panel">
+              <div class="subpanel-head">
+                <span>Rootfs Overlay Delta (/tmp/honeypot)</span>
+                <span>Click Row to Inspect</span>
+              </div>
+              <table class="delta-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>File</th>
+                    <th>Mode / Size</th>
+                    <th>SHA-256</th>
+                  </tr>
+                </thead>
+                <tbody id="deltaTableBody"></tbody>
+              </table>
+            </div>
+
+            <div class="inspector-panel" id="payloadInspector">
+              <div class="subpanel-head">
+                <span id="inspectorFileTitle">Payload Inspector</span>
+                <span id="inspectorFileMeta">Select a file</span>
+              </div>
+              <pre class="inspector-body" id="inspectorFileBody">Select any file in the Rootfs Overlay Delta table to inspect its live or pre-wipe contents.</pre>
+            </div>
+          </div>
+
+          <!-- Silent In-Memory Forensic Audit Trail -->
+          <div class="audit-panel">
+            <div class="subpanel-head">
+              <span>Silent In-Memory Forensic Audit Trail &amp; gVisor Proof</span>
+              <span>Zero Attacker Visibility</span>
+            </div>
+            <div class="audit-list" id="auditTrailBox"></div>
+          </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 
   <script>
     let currentActor = "honeypot-203-0-113-5";
+    let selectedFile = "";
+    let userPinnedFile = false;
+    let lastStateData = null;
     const termHistory = {};
 
     const PLAYBOOK_CMDS = {
@@ -480,72 +1448,233 @@
       4: "rm -f /tmp/honeypot/rootkit.sh && ls -la /tmp/honeypot"
     };
 
-    function escapeHtml(str) {
-      return String(str == null ? "" : str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+    function pulseMirror() {
+      const el = document.getElementById("mirrorPulse");
+      if (!el) return;
+      el.classList.add("pulse");
+      setTimeout(() => el.classList.remove("pulse"), 360);
     }
 
     function appendTerm(actor, cmd, shellResp) {
       if (!termHistory[actor]) termHistory[actor] = "";
       if (cmd) {
-        termHistory[actor] += `root@payroll-admin-prod-01:/tmp/honeypot# ${cmd}\n`;
+        termHistory[actor] += "root@payroll-admin-prod-01:/tmp/honeypot# " + cmd + "\n";
       }
       if (shellResp) {
         if (shellResp.stdout) termHistory[actor] += shellResp.stdout;
         if (shellResp.stderr) termHistory[actor] += shellResp.stderr;
-        if (!(shellResp.stdout || "").endsWith("\n")) termHistory[actor] += "\n";
+        const combined = (shellResp.stdout || "") + (shellResp.stderr || "");
+        if (combined && !combined.endsWith("\n")) {
+          termHistory[actor] += "\n";
+        }
+        const badge = document.getElementById("lastExitBadge");
+        if (badge) {
+          const code = typeof shellResp.exit_code === "number" ? shellResp.exit_code : 0;
+          badge.textContent = "exit: " + code;
+          badge.className = code === 0 ? "exit-pill" : "exit-pill err";
+        }
       }
+      renderTerm();
+    }
+
+    function clearTerm() {
+      termHistory[currentActor] = "";
       renderTerm();
     }
 
     function renderTerm() {
       const el = document.getElementById("terminalOutput");
+      if (!el) return;
       el.textContent = (termHistory[currentActor] || "") + "root@payroll-admin-prod-01:/tmp/honeypot# _";
       el.scrollTop = el.scrollHeight;
     }
 
+    function chooseDefaultInspectedFile(deltas) {
+      if (!Array.isArray(deltas) || deltas.length === 0) return "";
+      if (userPinnedFile && selectedFile) {
+        const stillExists = deltas.some(d => d.name === selectedFile);
+        if (stillExists) return selectedFile;
+      }
+      const rootkit = deltas.find(d => d.name === "rootkit.sh" && d.status !== "UNCHANGED");
+      if (rootkit) return rootkit.name;
+      const changed = deltas.find(d => d.status === "ADDED" || d.status === "MODIFIED" || d.status === "DELETED");
+      if (changed) return changed.name;
+      return deltas[0].name;
+    }
+
+    function renderPayloadInspector(f) {
+      const titleEl = document.getElementById("inspectorFileTitle");
+      const metaEl = document.getElementById("inspectorFileMeta");
+      const bodyEl = document.getElementById("inspectorFileBody");
+      if (!titleEl || !metaEl || !bodyEl) return;
+
+      const deltas = (f && f.rootfs_delta) ? f.rootfs_delta : [];
+      const filesMap = (f && f.files_in_rootfs_tmp) ? f.files_in_rootfs_tmp : {};
+
+      if (!selectedFile || !deltas.some(d => d.name === selectedFile)) {
+        selectedFile = chooseDefaultInspectedFile(deltas);
+      }
+
+      const entry = deltas.find(d => d.name === selectedFile);
+      if (!entry) {
+        titleEl.textContent = "Payload Inspector";
+        metaEl.textContent = "No files";
+        bodyEl.className = "inspector-body";
+        bodyEl.textContent = "No files in /tmp/honeypot.";
+        return;
+      }
+
+      titleEl.textContent = "/tmp/honeypot/" + entry.name;
+      metaEl.textContent = entry.status + " • sha256:" + (entry.sha256 || "n/a");
+
+      if (entry.status === "DELETED") {
+        bodyEl.className = "inspector-body deleted-notice";
+        bodyEl.textContent =
+          "[ANTI-FORENSIC WIPE DETECTED]\n" +
+          "File \"" + entry.name + "\" was deleted from the live /tmp/honeypot overlay (rm -rf).\n" +
+          "Last known SHA-256: " + (entry.sha256 || "unknown") + " (" + (entry.size_bytes || 0) + " bytes)\n" +
+          "Last preview: " + (entry.content_preview || "(empty)") + "\n\n" +
+          "-> Click [Revert Pre-Wipe Snapshot] or a vN checkpoint node above to restore the wiped file and Go heap state.";
+      } else {
+        bodyEl.className = "inspector-body";
+        const raw = filesMap[entry.name];
+        bodyEl.textContent = (raw !== undefined && raw !== null) ? raw : (entry.content_preview || "");
+      }
+    }
+
+    function renderSnapshotTimeline(data, currentTracker, hasDeletedFiles) {
+      const container = document.getElementById("snapshotTimeline");
+      if (!container) return;
+
+      const nodes = [];
+      const snapshots = (currentTracker && Array.isArray(currentTracker.snapshots) && currentTracker.snapshots.length > 0)
+        ? currentTracker.snapshots
+        : [{ version: data.snapshot_version || 1, reason: "Golden Snapshot Baseline" }];
+
+      snapshots.forEach((snap, idx) => {
+        if (idx > 0) {
+          const arrow = document.createElement("span");
+          arrow.className = "snap-arrow";
+          arrow.textContent = "->";
+          nodes.push(arrow);
+        }
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const isActive = snap.version === (data.snapshot_version || 1) && !hasDeletedFiles;
+        btn.className = "snap-node" + (isActive ? " active" : "");
+        btn.textContent = "v" + snap.version + " • " + (snap.reason || "Checkpoint");
+        btn.title = "Click to revert actor to snapshot v" + snap.version;
+        btn.onclick = () => socRevert(snap.version);
+        nodes.push(btn);
+      });
+
+      if (hasDeletedFiles) {
+        const arrow = document.createElement("span");
+        arrow.className = "snap-arrow";
+        arrow.textContent = "->";
+        nodes.push(arrow);
+
+        const warnNode = document.createElement("span");
+        warnNode.className = "snap-node wiped-head";
+        warnNode.textContent = "LIVE HEAD • Wiped by rm -rf (Click v" + (data.snapshot_version || 1) + " to Restore)";
+        nodes.push(warnNode);
+      }
+
+      container.replaceChildren(...nodes);
+    }
+
     function renderState(data) {
+      if (!data) return;
+      lastStateData = data;
+      pulseMirror();
+
       document.getElementById("attackerTargetLabel").textContent = currentActor;
       if (data.checkpoint_reason) {
         document.getElementById("checkpointToast").textContent = data.checkpoint_reason;
       }
 
-      // Render Actor Tabs
+      const actors = data.actors || [];
+      const currentTracker = actors.find(a => a.actor_name === currentActor) || null;
+
+      // Render Actor Session Tabs safely
       const tabsEl = document.getElementById("actorTabs");
-      tabsEl.innerHTML = "";
-      (data.actors || []).forEach(a => {
+      const tabButtons = actors.map(a => {
         const btn = document.createElement("button");
+        btn.type = "button";
         btn.className = "tab-btn" + (a.actor_name === currentActor ? " active" : "");
+
         const dotSpan = document.createElement("span");
         dotSpan.className = "dot " + (a.status === "SUSPENDED" ? "suspended" : "running");
+
         const labelSpan = document.createElement("span");
         labelSpan.textContent = a.label;
+
+        const verSpan = document.createElement("span");
+        verSpan.className = "tab-ver-badge";
+        verSpan.textContent = "v" + (a.snapshot_version || 1);
+
         btn.appendChild(dotSpan);
         btn.appendChild(labelSpan);
+        btn.appendChild(verSpan);
         btn.onclick = () => selectActor(a.actor_name);
-        tabsEl.appendChild(btn);
+        return btn;
       });
+      tabsEl.replaceChildren(...tabButtons);
 
-      // Render Telemetry Strip
+      // Bay 01: Actor State & Compute
       const stateEl = document.getElementById("socActorState");
       if (data.status === "SUSPENDED") {
-        stateEl.innerHTML = `<span style="color:var(--accent-amber);">SUSPENDED IN GCS ($0/hr)</span>`;
+        stateEl.textContent = "SUSPENDED IN GCS ($0/hr)";
+        stateEl.style.color = "var(--sig-amber-bright)";
       } else {
-        stateEl.innerHTML = `<span style="color:var(--accent-green);">RUNNING (gVisor)</span>`;
+        stateEl.textContent = "RUNNING (gVisor)";
+        stateEl.style.color = "var(--sig-emerald-bright)";
       }
-      document.getElementById("socSnapVer").textContent = `v${data.snapshot_version || 1}`;
+
+      // Bay 03: Active Snapshot Version & Summary
+      const snapVer = data.snapshot_version || 1;
+      document.getElementById("socSnapVer").textContent = "v" + snapVer;
+      const summaryEl = document.getElementById("socSnapSummary");
+      if (summaryEl) {
+        let snapReason = data.checkpoint_reason || "Golden Snapshot Baseline";
+        if (currentTracker && Array.isArray(currentTracker.snapshots)) {
+          const matchedSnap = currentTracker.snapshots.find(s => s.version === snapVer);
+          if (matchedSnap && matchedSnap.reason) {
+            snapReason = matchedSnap.reason;
+          }
+        }
+        summaryEl.textContent = snapReason;
+      }
 
       const f = data.forensics;
-      if (!f) return;
+      if (!f) {
+        renderSnapshotTimeline(data, currentTracker, false);
+        return;
+      }
 
-      const trail = (f.pod_ip_history && f.pod_ip_history.length > 0) ? f.pod_ip_history.join(" -> ") : (f.current_worker_pod_ip || "127.0.0.1");
-      document.getElementById("socPodTrail").textContent = trail;
+      // Kernel proof in Bay 01
+      const kernelEl = document.getElementById("socKernelProof");
+      if (kernelEl && f.gvisor_sandbox_proof && f.gvisor_sandbox_proof.kernel_version) {
+        kernelEl.textContent = f.gvisor_sandbox_proof.kernel_version;
+      }
 
-      // Render Canary Alerts
+      // Bay 02: Worker Pod IP Migration Trail
+      const podHist = Array.isArray(f.pod_ip_history) && f.pod_ip_history.length > 0
+        ? f.pod_ip_history
+        : [f.current_worker_pod_ip || "127.0.0.1"];
+      document.getElementById("socPodTrail").textContent = podHist.join(" -> ");
+      const hopEl = document.getElementById("socPodHopCount");
+      if (hopEl) {
+        hopEl.textContent = podHist.length === 1
+          ? "1 Worker Pod"
+          : podHist.length + " Worker Hops (State Preserved)";
+      }
+
+      const deltas = f.rootfs_delta || [];
+      const hasDeletedFiles = deltas.some(d => d.status === "DELETED");
+      renderSnapshotTimeline(data, currentTracker, hasDeletedFiles);
+
+      // Canary Tripwire Alarm Strip
       const canaryEl = document.getElementById("canaryBanner");
       const alerts = f.canary_alerts || [];
       if (alerts.length === 0) {
@@ -554,51 +1683,131 @@
       } else {
         canaryEl.className = "canary-box";
         const latest = alerts[alerts.length - 1];
-        canaryEl.innerHTML = `<strong>[${escapeHtml(latest.severity)}] ${escapeHtml(latest.rule)} (${escapeHtml(alerts.length)} total):</strong> ${escapeHtml(latest.summary)}`;
+        const headDiv = document.createElement("div");
+        headDiv.className = "canary-head";
+
+        const titleSpan = document.createElement("span");
+        titleSpan.textContent = "[" + latest.severity + "] " + latest.rule + " (" + alerts.length + " total): " + latest.summary;
+
+        const podSpan = document.createElement("span");
+        podSpan.textContent = "@" + (latest.pod_ip || "gvisor");
+
+        headDiv.appendChild(titleSpan);
+        headDiv.appendChild(podSpan);
+        canaryEl.replaceChildren(headDiv);
       }
 
-      // Render Rootfs Delta Table
+      // Auto-select interesting file if rootkit.sh changed or not pinned
+      if (!userPinnedFile) {
+        selectedFile = chooseDefaultInspectedFile(deltas);
+      }
+
+      // Render Rootfs Delta Table safely
       const tbody = document.getElementById("deltaTableBody");
-      tbody.innerHTML = "";
-      (f.rootfs_delta || []).forEach(d => {
+      const rows = deltas.map(d => {
         const tr = document.createElement("tr");
-        const safeStatus = escapeHtml(d.status);
-        tr.innerHTML = `
-          <td><span class="badge ${safeStatus}">${safeStatus}</span></td>
-          <td><strong>${escapeHtml(d.name)}</strong></td>
-          <td>${escapeHtml(d.mode)} (${escapeHtml(d.size_bytes)}B)</td>
-          <td><code>${escapeHtml(d.sha256)}</code></td>
-          <td style="color:var(--text-muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(d.content_preview || "")}</td>
-        `;
-        tbody.appendChild(tr);
-      });
+        if (d.name === selectedFile) {
+          tr.className = "selected-row";
+        }
+        tr.onclick = () => {
+          selectedFile = d.name;
+          userPinnedFile = true;
+          if (lastStateData && lastStateData.forensics) {
+            renderState(lastStateData);
+          }
+        };
 
-      // Render Forensic Audit Trail
+        const tdStatus = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "badge " + (d.status || "UNCHANGED");
+        badge.textContent = d.status || "UNCHANGED";
+        tdStatus.appendChild(badge);
+
+        const tdName = document.createElement("td");
+        const nameStrong = document.createElement("strong");
+        nameStrong.textContent = d.name;
+        tdName.appendChild(nameStrong);
+
+        const tdMode = document.createElement("td");
+        tdMode.textContent = (d.mode || "-rw-r--r--") + " (" + (d.size_bytes || 0) + "B)";
+
+        const tdSha = document.createElement("td");
+        const shaCode = document.createElement("code");
+        shaCode.textContent = d.sha256 || "";
+        tdSha.appendChild(shaCode);
+
+        tr.appendChild(tdStatus);
+        tr.appendChild(tdName);
+        tr.appendChild(tdMode);
+        tr.appendChild(tdSha);
+        return tr;
+      });
+      tbody.replaceChildren(...rows);
+
+      renderPayloadInspector(f);
+
+      // Render Silent In-Memory Forensic Audit Trail safely
       const auditBox = document.getElementById("auditTrailBox");
-      auditBox.innerHTML = "";
-      const proof = f.gvisor_sandbox_proof ? `[Kernel Proof] ${f.gvisor_sandbox_proof.kernel_version}` : "";
-      if (proof) {
-        const pDiv = document.createElement("div");
-        pDiv.style.color = "var(--accent-blue)";
-        pDiv.textContent = proof;
-        auditBox.appendChild(pDiv);
+      const auditNodes = [];
+      if (f.gvisor_sandbox_proof) {
+        const proofDiv = document.createElement("div");
+        proofDiv.className = "audit-row";
+        proofDiv.style.color = "var(--sig-ice-bright)";
+        proofDiv.textContent =
+          "[Sandbox Proof] " +
+          (f.gvisor_sandbox_proof.sandbox_class || "SANDBOX_CLASS_GVISOR") +
+          " • " +
+          (f.gvisor_sandbox_proof.kernel_version || "");
+        auditNodes.push(proofDiv);
       }
+
       (f.forensic_audit_trail || []).slice().reverse().forEach(ev => {
         const row = document.createElement("div");
-        row.innerHTML = `<span style="color:var(--text-muted);">[#${escapeHtml(ev.seq)} @ ${escapeHtml(ev.pod_ip)}]</span> <strong>${escapeHtml(ev.action)}:</strong> <code>${escapeHtml(ev.command || ev.detail)}</code>`;
-        auditBox.appendChild(row);
+        row.className = "audit-row";
+
+        const metaSpan = document.createElement("span");
+        metaSpan.style.color = "var(--soc-text-muted)";
+        metaSpan.textContent = "[#" + ev.seq + " @ " + (ev.pod_ip || "local") + "]";
+
+        const actionStrong = document.createElement("strong");
+        actionStrong.style.color = ev.canary_triggered ? "var(--sig-crimson-bright)" : "var(--sig-emerald-bright)";
+        actionStrong.textContent = ev.action + " (exit " + (ev.exit_code || 0) + "):";
+
+        const cmdCode = document.createElement("code");
+        cmdCode.style.color = "var(--soc-text)";
+        cmdCode.textContent = ev.command || ev.detail || "";
+
+        row.appendChild(metaSpan);
+        row.appendChild(actionStrong);
+        row.appendChild(cmdCode);
+        auditNodes.push(row);
       });
+      auditBox.replaceChildren(...auditNodes);
     }
 
     async function selectActor(actorName) {
       currentActor = actorName;
+      userPinnedFile = false;
       renderTerm();
-      const res = await fetch(`/api/state?actor=${encodeURIComponent(actorName)}`);
+      const res = await fetch("/api/state?actor=" + encodeURIComponent(actorName));
       const data = await res.json();
       renderState(data);
     }
 
+    function submitCustomActor(e) {
+      e.preventDefault();
+      const input = document.getElementById("customActorInput");
+      const raw = (input.value || "").trim();
+      if (!raw) return;
+      input.value = "";
+      const actorName = raw.startsWith("honeypot-")
+        ? raw
+        : "honeypot-" + raw.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+      selectActor(actorName);
+    }
+
     async function execCmd(cmd) {
+      userPinnedFile = false;
       const res = await fetch("/api/attacker/exec", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -623,6 +1832,16 @@
       execCmd(cmd);
     }
 
+    async function socSave() {
+      const res = await fetch("/api/soc/save", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({actor_name: currentActor, reason: "Manual SOC Checkpoint"})
+      });
+      const data = await res.json();
+      renderState(data);
+    }
+
     async function socSuspend() {
       const res = await fetch("/api/soc/suspend", {
         method: "POST",
@@ -633,18 +1852,23 @@
       renderState(data);
     }
 
-    async function socRevert() {
+    async function socRevert(targetVersion = 0) {
+      userPinnedFile = false;
       const res = await fetch("/api/soc/revert", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({actor_name: currentActor, target_version: 0})
+        body: JSON.stringify({actor_name: currentActor, target_version: targetVersion || 0})
       });
       const data = await res.json();
-      appendTerm(currentActor, "# [SOC DIRECTOR REVERTED SANDBOX TO PRE-WIPE SNAPSHOT]", {stdout: "Restored /tmp/honeypot overlay & RAM from checkpoint.\n"});
+      appendTerm(currentActor, "# [SOC DIRECTOR REVERTED SANDBOX TO PRE-WIPE SNAPSHOT]", {
+        stdout: "Restored /tmp/honeypot overlay & Go heap RAM from checkpoint v" + (data.snapshot_version || 1) + ".\n",
+        exit_code: 0
+      });
       renderState(data);
     }
 
     async function socClone() {
+      userPinnedFile = false;
       const res = await fetch("/api/soc/clone", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
