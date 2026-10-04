@@ -132,3 +132,58 @@ func TestHoneypotShellVsForensicsSeparationAndRootfsDelta(t *testing.T) {
 		t.Fatalf("expected rootkit.sh with status DELETED after rm -f, got %+v", forensics2.RootfsDelta)
 	}
 }
+
+func TestHoneypotBackendLifecycleRevertAndClone(t *testing.T) {
+	ctx := t.Context()
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+
+	actorA := "honeypot-203-0-113-5"
+	if err := backend.EnsureActor(ctx, actorA); err != nil {
+		t.Fatalf("EnsureActor: %v", err)
+	}
+
+	// Plant rootkit.sh and save snapshot v2
+	_, forensics, err := backend.ExecShell(ctx, actorA, "printf '#!/bin/sh\necho beacon\n' > rootkit.sh && chmod +x rootkit.sh", "", "")
+	if err != nil {
+		t.Fatalf("ExecShell plant: %v", err)
+	}
+	if _, ok := forensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected rootkit.sh on disk after plant")
+	}
+
+	ver, err := backend.SaveActor(ctx, actorA, "Auto-Checkpoint: rootkit.sh planted")
+	if err != nil {
+		t.Fatalf("SaveActor: %v", err)
+	}
+	if ver < 2 {
+		t.Fatalf("expected snapshot version >= 2, got %d", ver)
+	}
+
+	// Clone actorA into honeypot-forensic-lab before wipe
+	clonedForensics, err := backend.CloneActor(ctx, actorA, "honeypot-forensic-lab", "tag-forensic-203")
+	if err != nil {
+		t.Fatalf("CloneActor: %v", err)
+	}
+	if _, ok := clonedForensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected cloned forensic lab actor to contain rootkit.sh")
+	}
+
+	// Attacker wipes rootkit.sh on actorA
+	_, wipedForensics, err := backend.ExecShell(ctx, actorA, "rm -f rootkit.sh", "", "")
+	if err != nil {
+		t.Fatalf("ExecShell wipe: %v", err)
+	}
+	if _, ok := wipedForensics.FilesInRootfsTmp["rootkit.sh"]; ok {
+		t.Fatalf("expected rootkit.sh to be deleted after rm -f")
+	}
+
+	// Revert actorA back to saved checkpoint -> rootkit.sh is restored!
+	revertedForensics, err := backend.RevertActor(ctx, actorA, ver)
+	if err != nil {
+		t.Fatalf("RevertActor: %v", err)
+	}
+	if _, ok := revertedForensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected rootkit.sh to be restored after RevertActor, got %v", revertedForensics.FilesInRootfsTmp)
+	}
+}
+
