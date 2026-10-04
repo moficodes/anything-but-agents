@@ -352,6 +352,12 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		cfg: cfg,
 		httpClient: &http.Client{
 			Timeout: 4 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        256,
+				MaxIdleConnsPerHost: 64,
+				MaxConnsPerHost:     128,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 		k8sDesired:    defaultMinReplicas,
 		subDesired:    defaultMinReplicas,
@@ -386,10 +392,17 @@ func (g *GatewayServer) initK8sClient() {
 }
 
 func (g *GatewayServer) initLocalSimulator() {
-	// Build the Golden Snapshot template once at gateway startup.
+	corpusDocs := g.cfg.CorpusDocs
+	sieveLimit := g.cfg.SieveLimit
+	if g.cfg.Mode == "gateway" && g.k8sToken != "" {
+		// In-cluster gateway dispatches real HTTP traffic to K8s pods and Substrate actors;
+		// keep local slot placeholders lightweight so the load generator has zero GC pressure.
+		corpusDocs = 500
+		sieveLimit = 1000
+	}
 	tmpl := NewWarmHeapEngineWithConfig(WorkerConfig{
-		SieveLimit:       g.cfg.SieveLimit,
-		CorpusDocs:       g.cfg.CorpusDocs,
+		SieveLimit:       sieveLimit,
+		CorpusDocs:       corpusDocs,
 		MaxConcurrent:    g.cfg.WorkerMaxConcurrent,
 		MinQueryDuration: g.cfg.WorkerMinQueryDuration,
 	})
