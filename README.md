@@ -12,7 +12,7 @@ If you strip the word **"Agent"** out of Agent Substrate, you have a **Kubernete
 cmd/
   dungeon/     # Demo 1: "Look Ma, No Database" — Zork-style RPG in pure Go heap RAM (+ revert/tag save-scumming)
   dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — Mobile 2D 3-floor game + Live Mission-Control Dashboard
-  coldstart/   # Demo 2: "The Instant Cloner" — 12s cold-start prime sieve skipped via Golden Snapshot
+  coldstart/   # Demo 2: "The Instant Cloner & Production HPA QPS Race" — 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
   tenantdb/    # Demo 3: "One DB Per User" — Per-tenant embedded DB with DurableDir + FULL Pause / DATA Commit
   honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor deception sandbox
   timewarp/    # Demo 5: "Don't Try This at Home" — Wall-clock time-jump shock & Raft split-brain anti-pattern
@@ -21,7 +21,8 @@ manifests/
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
   dungeon2d-template.yaml.tmpl  # ActorTemplate for 2D multilevel dungeon actors (FULL pause, FULL commit)
   dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phone QR access
-  coldstart-template.yaml.tmpl  # ActorTemplate (12s warmup before /readyz -> Golden Snapshot)
+  coldstart-template.yaml.tmpl  # ActorTemplate (12s 50k-doc search index warmup -> Golden Snapshot)
+  coldstart-hpa.yaml.tmpl       # K8s Deployment, L7 Router, HPAs, External Metrics APIService & coldstart-gateway
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
   honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
   timewarp-template.yaml.tmpl   # ActorTemplate (heartbeat + lease loop for split-brain demo)
@@ -71,15 +72,15 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 * **Why this demo:**
   Cold-start latency isn't just a first-request annoyance—in production Kubernetes behind a Load Balancer and HorizontalPodAutoscaler (HPA), slow cold starts directly cap your service's **effective QPS (goodput)** during traffic bursts. When HPA scales a service from `1 -> 3` replicas, newly scheduled Pods sit at `Ready: 0/1` (`503 Service Unavailable`) while building their in-memory index, leaving existing Pods to drown and shed overflow requests (`429 Too Many Requests`).
 * **Why this demo specifically:**
-  `cmd/coldstart` runs a realistic **50,000-document In-Memory Package & Code Search Engine** (modeled after `pkg.go.dev` / `Zoekt`). Across 6 observable startup stages (`--init-delay=12s`), it builds an inverted word-level posting list, an inverted 3-gram (trigram) substring index, BM25 IDF weights, and a `1,000,000` prime lookup table in Go heap RAM (~65 MB `HeapAlloc`) before flipping `/readyz` from `503` to `200 OK`. Each replica enforces a strict **`20 QPS` concurrency ceiling** (`--max-concurrent=4`, `--min-query-duration=200ms`).
+  `cmd/coldstart` runs a realistic **50,000-document In-Memory Package & Code Search Engine** (modeled after `pkg.go.dev` / `Zoekt`). Across 6 observable startup stages (`--init-delay=12s`), it builds an inverted word-level posting list (`51,227` tokens), an inverted 3-gram (trigram) substring index (`2,025` trigrams), BM25 IDF weights, and a `1,000,000` prime lookup table in Go heap RAM (~76.6 MB post-GC `HeapAlloc`) before flipping `/readyz` from `503` to `200 OK`. Every `GET /search?q=...` request executes a real BM25 + 3-gram posting-list intersection (`~53,400` posting intersections across `~17,700` candidate docs in `~15ms` of CPU/RAM work) inside a strict **`20 QPS` per-replica concurrency ceiling** (`--max-concurrent=4`, `--min-query-duration=200ms`).
 * **What do we learn:**
-  1. `ActorTemplate` creation is a **cluster-wide `fork()` primitive**: the 12-second, 65 MB index build runs **once** before `wakeupProbe` (`/readyz`) returns `200 OK` and is frozen into the **Golden Snapshot**.
+  1. `ActorTemplate` creation is a **cluster-wide `fork()` primitive**: the 12-second, 76.6 MB index build runs **once** before `wakeupProbe` (`/readyz`) returns `200 OK` and is frozen into the **Golden Snapshot**.
   2. When scaling out from `minReplicas: 1` to `maxReplicas: 3` on a `60 QPS` traffic spike using the exact same Load Balancer QPS metric (`coldstart_lb_qps`, `AverageValue: 20`):
      * **Standard Kubernetes HPA (`Deployment/coldstart-k8s`):** Pods 2 and 3 spend 12+ seconds cold-booting their 50,000-doc search index, pinning cluster goodput at **`20 QPS`** and shedding **`40 QPS` (67% of traffic)** throughout the cold-start window.
-     * **Agent Substrate HPA (`coldstart-1..3` on `WorkerPool`):** Actors 2 and 3 restore from the Golden Snapshot in **~100ms** (with the same `golden_heap_fingerprint` and 65 MB search index already in RAM) and immediately serve **`60 QPS`**—delivering **2x–3x more total successful queries** during the burst.
+     * **Agent Substrate HPA (`coldstart-1..3` on `WorkerPool`):** Actors 2 and 3 restore from the Golden Snapshot in **~100ms** (with the same `golden_heap_fingerprint` and 76.6 MB search index already in RAM) and immediately serve **`60 QPS`**—delivering **~2x more total successful queries** during the burst.
 * **How does Substrate fit into this:**
   * **`wakeupProbe` (`/readyz`)** gates when Substrate captures the `ActorTemplate` **Golden Snapshot**.
-  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a live Split-Screen HPA & Production QPS Dashboard (`/dashboard`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` vs `svc/atenet-router`) → Backend Pod network path.
+  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a live Split-Screen HPA & Production QPS Dashboard (`/dashboard`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
 
 ---
 
