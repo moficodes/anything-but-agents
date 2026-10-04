@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Demo 2: "The Instant Cloner" — Runs a 12-second cold-start initialization
-# ONCE during Golden Snapshot creation (before /readyz returns 200 OK).
-# Every Actor created from this template restores in ~100ms with the
-# precomputed prime sieve and golden_heap_fingerprint already in RAM.
+# Demo 2: "The Instant Cloner & Production HPA QPS Race" — Runs a 12-second
+# cold-start initialization (building a 50,000-document inverted token & 3-gram
+# search index + prime lookup table in Go heap RAM) ONCE during Golden Snapshot
+# creation (before /readyz returns 200 OK).
+# Every Actor created from this template restores in ~100ms with the ~65MB
+# precomputed search index and golden_heap_fingerprint already warm in RAM.
 metadata:
   atespace: anything-but-agents
   name: coldstart
@@ -27,8 +29,12 @@ containers:
   image: ko://github.com/moficodes/anything-but-agents/cmd/coldstart
   command:
   - /ko-app/coldstart
+  - --mode=worker
   - --init-delay=12s
+  - --corpus-docs=50000
   - --sieve-limit=1000000
+  - --max-concurrent=4
+  - --min-query-duration=200ms
   wakeupProbe:
     httpGet:
       path: /readyz

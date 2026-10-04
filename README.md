@@ -12,7 +12,7 @@ If you strip the word **"Agent"** out of Agent Substrate, you have a **Kubernete
 cmd/
   dungeon/     # Demo 1: "Look Ma, No Database" — Zork-style RPG in pure Go heap RAM (+ revert/tag save-scumming)
   dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — Mobile 2D 3-floor game + Live Mission-Control Dashboard
-  coldstart/   # Demo 2: "The Instant Cloner" — 12s cold-start prime sieve skipped via Golden Snapshot
+  coldstart/   # Demo 2: "The Instant Cloner & Production HPA QPS Race" — 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
   tenantdb/    # Demo 3: "One DB Per User" — Per-tenant embedded DB with DurableDir + FULL Pause / DATA Commit
   honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor sandbox + Split-Screen SOC Director's Booth UI
   timewarp/    # Demo 5: "Don't Try This at Home" — Wall-clock time-jump shock & Raft split-brain anti-pattern
@@ -21,9 +21,11 @@ manifests/
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
   dungeon2d-template.yaml.tmpl  # ActorTemplate for 2D multilevel dungeon actors (FULL pause, FULL commit)
   dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phone QR access
-  coldstart-template.yaml.tmpl  # ActorTemplate (12s warmup before /readyz -> Golden Snapshot)
+  coldstart-template.yaml.tmpl  # ActorTemplate (12s 50k-doc search index warmup -> Golden Snapshot)
+  coldstart-hpa.yaml.tmpl       # K8s Deployment, L7 Router, HPAs, External Metrics APIService & coldstart-gateway
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
   honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
+  honeypot-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Split-Screen Honeypot UI
   timewarp-template.yaml.tmpl   # ActorTemplate (heartbeat + lease loop for split-brain demo)
 hack/
   stage-demo.sh                 # Interactive live-stage deployer & act-by-act demo runner
@@ -66,25 +68,20 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 
 ---
 
-### Demo 2: "The Instant Cloner" — Taming a 12-Second Cold-Start Monster (`cmd/coldstart`)
+### Demo 2: "The Instant Cloner & Production HPA QPS Race" — 12-Second Cold-Start Index vs. Golden Snapshot HPA (`cmd/coldstart`)
 
 * **Why this demo:**
-  Many workloads are terrible candidates for scale-to-zero serverless because their initialization phase takes 10 to 90 seconds—think legacy Enterprise Java/Spring Boot monoliths, language servers (`rust-analyzer`, `gopls`) indexing a monorepo AST, or Python scientific/financial models loading gigabytes of lookup tables into RAM.
+  Cold-start latency isn't just a first-request annoyance—in production Kubernetes behind a Load Balancer and HorizontalPodAutoscaler (HPA), slow cold starts directly cap your service's **effective QPS (goodput)** during traffic bursts. When HPA scales a service from `1 -> 3` replicas, newly scheduled Pods sit at `Ready: 0/1` (`503 Service Unavailable`) while building their in-memory index, leaving existing Pods to drown and shed overflow requests (`429 Too Many Requests`).
 * **Why this demo specifically:**
-  Instead of bringing a bloated 4GB enterprise dependency onto stage, `cmd/coldstart` deterministically simulates a 12-second heavy startup (`--init-delay=12s`), computes all `78,498` prime numbers up to `1,000,000` in RAM using a Sieve of Eratosthenes, and stamps a cryptographic random `golden_heap_fingerprint` into memory right before flipping `/readyz` from `503` to `200 OK`.
+  `cmd/coldstart` runs a realistic **50,000-document In-Memory Package & Code Search Engine** (modeled after `pkg.go.dev` / `Zoekt`). Across 6 observable startup stages (`--init-delay=12s`), it builds an inverted word-level posting list (`51,227` tokens), an inverted 3-gram (trigram) substring index (`2,025` trigrams), BM25 IDF weights, and a `1,000,000` prime lookup table in Go heap RAM (~76.6 MB post-GC `HeapAlloc`) before flipping `/readyz` from `503` to `200 OK`. Every `GET /search?q=...` request executes a real BM25 + 3-gram posting-list intersection (`~53,400` posting intersections across `~17,700` candidate docs in `~15ms` of CPU/RAM work) inside a strict **`20 QPS` per-replica concurrency ceiling** (`--max-concurrent=4`, `--min-query-duration=200ms`).
 * **What do we learn:**
-  `ActorTemplate` creation is not just registering YAML—it is a **cluster-wide `fork()` primitive**. Any work completed *before* the `wakeupProbe` (`/readyz`) returns `200 OK` is baked into the **Golden Snapshot** once and amortized across thousands of future actor instances.
-* **Why is Substrate here:**
-  In Kubernetes or Knative, scaling from 0 to 10 replicas means running container startup and `main()` initialization 10 separate times (paying the 12-second penalty on every cold start).
-* **What would be other ways to solve this:**
-  * *Overprovisioned warm pools (minReplicas > N):* You pay for idle RAM/CPU 24/7 just to hide startup latency, and each pod is already bound to a single tenant or shared across tenants.
-  * *JVM CRaC / Custom CRI Checkpoint Images:* Requires bespoke build pipelines, custom node configurations, and manual snapshot distribution, without an actor router to hydrate instances on demand.
-* **Why is this cool:**
-  On stage, you instantiate `clone-1`, `clone-2`, and `clone-3` and immediately `curl` them. Instead of waiting 12 seconds each, all three respond in `~100ms`, all three report `cold_boot_duration_ms: 12000`, and all three return the **exact same `golden_heap_fingerprint`**—proving they are copy-on-write memory clones of the same post-initialization process—while each clone independently tracks its own post-fork mutations!
+  1. `ActorTemplate` creation is a **cluster-wide `fork()` primitive**: the 12-second, 76.6 MB index build runs **once** before `wakeupProbe` (`/readyz`) returns `200 OK` and is frozen into the **Golden Snapshot**.
+  2. When scaling out from `minReplicas: 1` to `maxReplicas: 3` on a `60 QPS` traffic spike using the exact same Load Balancer QPS metric (`coldstart_lb_qps`, `AverageValue: 20`):
+     * **Standard Kubernetes HPA (`Deployment/coldstart-k8s`):** Pods 2 and 3 spend 12+ seconds cold-booting their 50,000-doc search index, pinning cluster goodput at **`20 QPS`** and shedding **`40 QPS` (67% of traffic)** throughout the cold-start window.
+     * **Agent Substrate HPA (`coldstart-1..3` on `WorkerPool`):** Actors 2 and 3 restore from the Golden Snapshot in **~100ms** (with the same `golden_heap_fingerprint` and 76.6 MB search index already in RAM) and immediately serve **`60 QPS`**—delivering **~2x more total successful queries** during the burst.
 * **How does Substrate fit into this:**
   * **`wakeupProbe` (`/readyz`)** gates when Substrate captures the `ActorTemplate` **Golden Snapshot**.
-  * **Golden Snapshot (`Full` scope)** freezes the post-init heap in GCS/S3.
-  * **`kubectl ate create actor --template coldstart`** points each new actor at the Golden Snapshot, skipping cold boot entirely on first `Resume`.
+  * **`cmd/coldstart --mode=gateway|k8s-router|local`** serves a live Split-Screen HPA & Production QPS Dashboard (`/dashboard`), implements the Kubernetes `external.metrics.k8s.io/v1beta1` API (`coldstart_lb_qps{backend="k8s|substrate"}`) for two symmetrical `autoscaling/v2` `HorizontalPodAutoscaler` resources (`manifests/coldstart-hpa.yaml.tmpl`), and places both backends on an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router`) → Backend Pod network path.
 
 ---
 
@@ -206,16 +203,18 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ```bash
 ./hack/stage-demo.sh run-all           # Run all 5 demos in sequence (or run them individually below)
 
-./hack/stage-demo.sh act1-dungeon      # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
-./hack/stage-demo.sh act1b-dungeon2d   # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
-./hack/stage-demo.sh deploy-dungeon2d  # Deploy in-cluster Dungeon 2D Gateway + LoadBalancer + PRESENTER_TOKEN Secret
-./hack/stage-demo.sh cleanup-dungeon2d # Clean up in-cluster Dungeon 2D Gateway & d2d-* actors
-./hack/stage-demo.sh act2-coldstart    # Act II: 12s Cold-Start Monster -> 100ms Golden Snapshot clones
-./hack/stage-demo.sh act3-tenantdb     # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
-./hack/stage-demo.sh act4-honeypot     # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
-./hack/stage-demo.sh deploy-honeypot   # Deploy in-cluster Honeypot Split-Screen Gateway + LoadBalancer
-./hack/stage-demo.sh cleanup-honeypot  # Clean up in-cluster Honeypot Gateway & honeypot-* actors
-./hack/stage-demo.sh act5-timewarp     # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
+./hack/stage-demo.sh act1-dungeon          # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
+./hack/stage-demo.sh act1b-dungeon2d       # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
+./hack/stage-demo.sh deploy-dungeon2d      # Deploy in-cluster Dungeon 2D Gateway + LoadBalancer + PRESENTER_TOKEN Secret
+./hack/stage-demo.sh cleanup-dungeon2d     # Clean up in-cluster Dungeon 2D Gateway & d2d-* actors
+./hack/stage-demo.sh act2-coldstart        # Act II: 12s Cold-Start Index -> 100ms Golden Snapshot Clones + HPA QPS Race
+./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy in-cluster K8s vs Substrate HPA QPS Comparison Stack & Gateway
+./hack/stage-demo.sh cleanup-coldstart-hpa # Clean up in-cluster Cold-Start HPA Stack & coldstart-* actors
+./hack/stage-demo.sh act3-tenantdb         # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
+./hack/stage-demo.sh act4-honeypot         # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
+./hack/stage-demo.sh deploy-honeypot       # Deploy in-cluster Honeypot Split-Screen Gateway + LoadBalancer
+./hack/stage-demo.sh cleanup-honeypot      # Clean up in-cluster Honeypot Gateway & honeypot-* actors
+./hack/stage-demo.sh act5-timewarp         # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
 ```
 
 ### 4. Cleanup

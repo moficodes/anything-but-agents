@@ -12,185 +12,148 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Command coldstart simulates a "Cold-Start Monster" (like a legacy JVM
-// monolith, a Rust LSP indexing a workspace, or a scientific model loader)
-// that takes 12+ seconds to initialize its in-memory data structures before
-// /readyz reports 200 OK.
-//
-// Because Agent Substrate waits for wakeupProbe (/readyz) to succeed before
-// capturing the ActorTemplate's Golden Snapshot, the agonizing cold start runs
-// ONCE at template creation time. Every Actor instantiated from the template
-// restores directly into the post-init heap in ~100ms, sharing the same
-// golden_heap_fingerprint while maintaining isolated per-actor mutations.
+// Command coldstart provides both:
+//  1. A production-realistic "Cold-Start Monster" In-Memory Package & Code Search
+//     Engine (--mode=worker, default) that builds a 50,000-document inverted
+//     token & trigram search index (~65 MB of Go heap) across 6 stages (~12s)
+//     before /readyz flips from 503 to 200 OK, and enforces a bounded 20 QPS
+//     per-replica concurrency ceiling.
+//  2. A Dual-Backend HPA & Production QPS Comparison Gateway (--mode=gateway
+//     or --mode=local) that drives identical traffic spikes against a Standard
+//     Kubernetes Deployment+HPA and an Agent Substrate Golden Snapshot Actor
+//     Pool+HPA, serving `coldstart_lb_qps` on external.metrics.k8s.io/v1beta1.
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
+	"context"
+	"crypto/tls"
 	"flag"
-	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
-type WarmHeapEngine struct {
-	ready                 atomic.Bool
-	ColdBootStartedAt     time.Time
-	ColdBootCompletedAt   time.Time
-	ColdBootDuration      time.Duration
-	GoldenHeapFingerprint string
-	PrimesUpToN           int
-	PrimeCount            int
-	LargestPrime          int
-
-	mu            sync.Mutex
-	QueryCount    int      `json:"query_count"`
-	CustomOverlay []string `json:"custom_overlay"`
-}
-
-func newWarmHeapEngine(sieveLimit int) *WarmHeapEngine {
-	return &WarmHeapEngine{
-		ColdBootStartedAt: time.Now().UTC(),
-		PrimesUpToN:       sieveLimit,
-	}
-}
-
-func (e *WarmHeapEngine) RunExpensiveInitialization(delay time.Duration) {
-	steps := 6
-	stepSleep := delay / time.Duration(steps)
-	for i := 1; i <= steps; i++ {
-		if stepSleep > 0 {
-			time.Sleep(stepSleep)
-		}
-		slog.Info("Cold-start monster warming heap...", slog.Int("step", i), slog.Int("total_steps", steps))
-	}
-
-	// Compute primes up to PrimesUpToN in RAM so there is real computed state in the heap.
-	count, largest := sieveOfEratosthenes(e.PrimesUpToN)
-	e.PrimeCount = count
-	e.LargestPrime = largest
-
-	var raw [8]byte
-	_, _ = rand.Read(raw[:])
-	e.GoldenHeapFingerprint = hex.EncodeToString(raw[:])
-	e.ColdBootCompletedAt = time.Now().UTC()
-	e.ColdBootDuration = e.ColdBootCompletedAt.Sub(e.ColdBootStartedAt)
-	e.ready.Store(true)
-
-	slog.Info("Golden heap initialized; /readyz now returning 200 OK",
-		slog.String("golden_heap_fingerprint", e.GoldenHeapFingerprint),
-		slog.Duration("cold_boot_duration", e.ColdBootDuration),
-		slog.Int("prime_count", e.PrimeCount),
-	)
-}
-
-func sieveOfEratosthenes(n int) (count int, largest int) {
-	if n < 2 {
-		return 0, 0
-	}
-	composite := make([]bool, n+1)
-	for p := 2; p*p <= n; p++ {
-		if !composite[p] {
-			for i := p * p; i <= n; i += p {
-				composite[i] = true
-			}
-		}
-	}
-	for p := 2; p <= n; p++ {
-		if !composite[p] {
-			count++
-			largest = p
-		}
-	}
-	return count, largest
-}
-
-func (e *WarmHeapEngine) HandleQuery(overlaySymbol string, podIP string) map[string]any {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.QueryCount++
-	if overlaySymbol != "" {
-		e.CustomOverlay = append(e.CustomOverlay, overlaySymbol)
-	}
-
-	return map[string]any{
-		"status":                    "INSTANT_CLONE_FROM_GOLDEN_SNAPSHOT",
-		"golden_heap_fingerprint":   e.GoldenHeapFingerprint,
-		"cold_boot_duration_ms":     e.ColdBootDuration.Milliseconds(),
-		"cold_boot_completed_at":    e.ColdBootCompletedAt.Format(time.RFC3339Nano),
-		"served_at":                 time.Now().UTC().Format(time.RFC3339Nano),
-		"time_since_golden_boot_s":  fmt.Sprintf("%.1fs", time.Since(e.ColdBootCompletedAt).Seconds()),
-		"precomputed_primes_limit":  e.PrimesUpToN,
-		"precomputed_prime_count":   e.PrimeCount,
-		"precomputed_largest_prime": e.LargestPrime,
-		"actor_query_count":         e.QueryCount,
-		"actor_custom_overlay":      e.CustomOverlay,
-		"current_pod_ip":            podIP,
-	}
-}
-
-func newMux(engine *WarmHeapEngine) *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
-		if !engine.ready.Load() {
-			http.Error(w, "still running expensive cold-start initialization...\n", http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok\n"))
-	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if !engine.ready.Load() {
-			http.Error(w, "not ready", http.StatusServiceUnavailable)
-			return
-		}
-		symbol := r.URL.Query().Get("add_symbol")
-		resp := engine.HandleQuery(symbol, currentPodIP())
-		w.Header().Set("Content-Type", "application/json")
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(resp)
-	})
-	return mux
-}
-
-func currentPodIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "unknown"
-	}
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
-			return ipnet.IP.String()
-		}
-	}
-	return "127.0.0.1"
-}
-
 func main() {
 	addr := flag.String("addr", ":80", "HTTP listen address")
-	initDelay := flag.Duration("init-delay", 12*time.Second, "Simulated heavy cold-start initialization time before /readyz reports 200 OK")
-	sieveLimit := flag.Int("sieve-limit", 1000000, "Upper bound for prime sieve precomputed in Golden Snapshot RAM")
+	mode := flag.String("mode", "worker", "Operating mode: worker | gateway | local")
+	initDelay := flag.Duration("init-delay", 12*time.Second, "Heavy cold-start index build duration before /readyz reports 200 OK")
+	sieveLimit := flag.Int("sieve-limit", 1000000, "Upper bound for prime lookup sieve precomputed in Golden Snapshot RAM")
+	corpusDocs := flag.Int("corpus-docs", 50000, "Number of package & symbol documents indexed in RAM during cold boot")
+	maxConcurrent := flag.Int("max-concurrent", 4, "Maximum concurrent search queries per replica before shedding load with 429")
+	minQueryDuration := flag.Duration("min-query-duration", 200*time.Millisecond, "Minimum per-query execution time (4 concurrent / 200ms = 20 QPS ceiling per replica)")
+
+	// Gateway / HPA flags
+	metricsAddr := flag.String("metrics-addr", ":6443", "HTTPS listen address for Kubernetes external.metrics.k8s.io/v1beta1 (empty to disable)")
+	namespace := flag.String("namespace", "anything-but-agents", "Kubernetes namespace for HPA and Deployment resources")
+	atespace := flag.String("atespace", "anything-but-agents", "Agent Substrate atespace")
+	template := flag.String("template", "coldstart", "Agent Substrate ActorTemplate name")
+	targetService := flag.String("target-service", "coldstart-k8s", "Kubernetes Service name whose Ready Endpoints are load-balanced in --mode=k8s-router")
+	k8sServiceURL := flag.String("k8s-service-url", "http://coldstart-k8s-router.anything-but-agents.svc.cluster.local:80", "In-cluster L7 router Service URL for coldstart-k8s")
+	routerURL := flag.String("router-url", "http://atenet-router.ate-system.svc.cluster.local:80", "Agent Substrate atenet-router HTTP URL")
+	ateEndpoint := flag.String("ate-endpoint", "", "Optional ate-api-server gRPC endpoint override for kubectl-ate")
+	kubectlAteBin := flag.String("kubectl-ate-bin", "kubectl-ate", "Path to kubectl-ate binary")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-	engine := newWarmHeapEngine(*sieveLimit)
 
-	go func() {
-		slog.Info("Starting HTTP listener (returning 503 on /readyz until heavy init finishes)", slog.String("addr", *addr))
-		if err := http.ListenAndServe(*addr, newMux(engine)); err != nil {
-			slog.Error("Server exited", slog.Any("err", err))
+	switch *mode {
+	case "worker", "actor":
+		engine := NewWarmHeapEngineWithConfig(WorkerConfig{
+			SieveLimit:       *sieveLimit,
+			CorpusDocs:       *corpusDocs,
+			MaxConcurrent:    *maxConcurrent,
+			MinQueryDuration: *minQueryDuration,
+		})
+
+		go func() {
+			slog.Info("Starting coldstart worker HTTP listener (returning 503 on /readyz until 50,000-doc search index finishes building)",
+				slog.String("addr", *addr),
+				slog.Int("corpus_docs", *corpusDocs),
+				slog.Int("max_concurrent", *maxConcurrent),
+				slog.Duration("min_query_duration", *minQueryDuration),
+			)
+			if err := http.ListenAndServe(*addr, newMux(engine)); err != nil {
+				slog.Error("Worker server exited", slog.Any("err", err))
+				os.Exit(1)
+			}
+		}()
+
+		engine.RunExpensiveInitialization(*initDelay)
+		select {}
+
+	case "k8s-router":
+		rtr := NewK8sRouterServer(*namespace, *targetService, "")
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		rtr.StartEndpointSyncLoop(ctx)
+
+		slog.Info("Starting coldstart Kubernetes L7 endpoint router",
+			slog.String("addr", *addr),
+			slog.String("namespace", *namespace),
+			slog.String("target_service", *targetService),
+		)
+		if err := http.ListenAndServe(*addr, rtr.Mux()); err != nil {
+			slog.Error("K8s router HTTP server exited", slog.Any("err", err))
 			os.Exit(1)
 		}
-	}()
 
-	engine.RunExpensiveInitialization(*initDelay)
-	select {}
+	case "gateway", "local":
+		gw := NewGatewayServer(GatewayConfig{
+			Mode:                   *mode,
+			Namespace:              *namespace,
+			Atespace:               *atespace,
+			Template:               *template,
+			K8sServiceURL:          *k8sServiceURL,
+			RouterURL:              *routerURL,
+			AteEndpoint:            *ateEndpoint,
+			KubectlAteBin:          *kubectlAteBin,
+			K8sColdBootDelay:       *initDelay,
+			SubstrateWakeDelay:     95 * time.Millisecond,
+			WorkerMinQueryDuration: *minQueryDuration,
+			WorkerMaxConcurrent:    *maxConcurrent,
+			CorpusDocs:             *corpusDocs,
+			SieveLimit:             *sieveLimit,
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		gw.StartBackgroundLoops(ctx)
+
+		if *mode == "gateway" && *metricsAddr != "" {
+			go func() {
+				cert, err := generateSelfSignedCert()
+				if err != nil {
+					slog.Error("Failed to generate self-signed TLS cert for external metrics server", slog.Any("err", err))
+					return
+				}
+				srv := &http.Server{
+					Addr:    *metricsAddr,
+					Handler: gw.NewExternalMetricsMux(),
+					TLSConfig: &tls.Config{
+						Certificates: []tls.Certificate{cert},
+					},
+				}
+				slog.Info("Starting Kubernetes external.metrics.k8s.io/v1beta1 HTTPS server", slog.String("metrics_addr", *metricsAddr))
+				if err := srv.ListenAndServeTLS("", ""); err != nil {
+					slog.Error("External metrics HTTPS server exited", slog.Any("err", err))
+				}
+			}()
+		}
+
+		slog.Info("Starting coldstart HPA & QPS Comparison Gateway",
+			slog.String("mode", *mode),
+			slog.String("addr", *addr),
+			slog.String("namespace", *namespace),
+			slog.String("atespace", *atespace),
+		)
+		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
+			slog.Error("Gateway HTTP server exited", slog.Any("err", err))
+			os.Exit(1)
+		}
+
+	default:
+		slog.Error("Unknown --mode (expected worker, k8s-router, gateway, or local)", slog.String("mode", *mode))
+		os.Exit(1)
+	}
 }

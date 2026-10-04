@@ -346,9 +346,15 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 				t.Fatalf("found prohibited emoji character %U in %s", r, path)
 			}
 		}
+		if !bytes.Contains(raw.Bytes(), []byte("stone-slab")) || !bytes.Contains(raw.Bytes(), []byte("parchment-scroll")) {
+			t.Fatalf("expected 2004 Stone & Parchment Scroll classes (stone-slab, parchment-scroll) in %s", path)
+		}
 		if path == "/play" {
 			if !bytes.Contains(raw.Bytes(), []byte("helpModal")) || !bytes.Contains(raw.Bytes(), []byte("preview-paladin")) {
 				t.Fatalf("expected How-to-Play modal and pixel-art class previews in /play")
+			}
+			if !bytes.Contains(raw.Bytes(), []byte("drawStarburstSplat")) {
+				t.Fatalf("expected 2004 starburst combat hit-splat renderer in /play")
 			}
 			if bytes.Contains(raw.Bytes(), []byte("/dashboard")) {
 				t.Fatalf("expected /play to have no link back to /dashboard")
