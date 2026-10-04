@@ -33,12 +33,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ATESPACE="anything-but-agents"
 ROUTER_URL="${ROUTER_URL:-http://localhost:8000}"
 PAUSE_BETWEEN_STEPS="${PAUSE_BETWEEN_STEPS:-1}"
+export PATH="/usr/bin/go/bin:${PATH}"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
-# Load local .env if present; fall back to parent .ate-dev-env.sh if present.
+# Load local .env if present; fall back to worktree parent .env or parent .ate-dev-env.sh if present.
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   # shellcheck disable=SC1091
   source "${REPO_ROOT}/.env"
+elif [[ -f "${REPO_ROOT}/../../.env" ]]; then
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/../../.env"
 elif [[ -f "${REPO_ROOT}/../.ate-dev-env.sh" ]]; then
   # shellcheck disable=SC1091
   source "${REPO_ROOT}/../.ate-dev-env.sh"
@@ -70,7 +74,9 @@ apply_env_defaults() {
     for candidate in \
       "${REPO_ROOT}/.." \
       "${REPO_ROOT}/../../agent-substrate/substrate" \
-      "${REPO_ROOT}/../../agent-substrate/b-substrate"; do
+      "${REPO_ROOT}/../../agent-substrate/b-substrate" \
+      "${REPO_ROOT}/../../../../agent-substrate/substrate" \
+      "${REPO_ROOT}/../../../../agent-substrate/b-substrate"; do
       if [[ -d "${candidate}/tools/setup-gcp" ]]; then
         SUBSTRATE_ROOT="$(cd "${candidate}" && pwd)"
         break
@@ -78,7 +84,22 @@ apply_env_defaults() {
     done
     export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
   fi
+
+  # Isolate KUBECONFIG so concurrent kubectl sessions on the same machine cannot
+  # switch current-context away from the target GKE cluster mid-demo.
+  local src_kubeconfig="${KUBECONFIG:-${HOME}/.kube/config}"
+  local isolated_kubeconfig="/tmp/kubeconfig-${CLUSTER_NAME}"
+  if [[ -f "${src_kubeconfig}" && "${src_kubeconfig}" != "${isolated_kubeconfig}" ]]; then
+    cp "${src_kubeconfig}" "${isolated_kubeconfig}"
+    export KUBECONFIG="${isolated_kubeconfig}"
+  fi
+  local target_ctx="${KUBE_CONTEXT:-gke_${PROJECT_ID}_${CLUSTER_LOCATION}_${CLUSTER_NAME}}"
+  kubectl config use-context "${target_ctx}" >/dev/null 2>&1 || true
 }
+
+if [[ -n "${PROJECT_ID:-}" ]]; then
+  apply_env_defaults
+fi
 
 banner() {
   echo ""
@@ -493,6 +514,7 @@ deploy_coldstart_hpa() {
   banner "Deploying Cold-Start HPA vs. Substrate Golden Snapshot HPA Comparison Stack"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  free_workers
 
   # Ensure ActorTemplate coldstart is up to date
   kubectl ate delete actor-template coldstart -a "${ATESPACE}" 2>/dev/null || true
@@ -522,6 +544,9 @@ deploy_coldstart_hpa() {
     fi
   done
 
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
   if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
     if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
       echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
@@ -595,29 +620,37 @@ act2_coldstart() {
 
   local cs_port="${COLDSTART_PORT:-8091}"
   local cs_url="http://localhost:${cs_port}"
-  echo "Starting Cold-Start HPA & Production QPS Comparison Gateway on ${cs_url}..."
-  (
-    cd "${REPO_ROOT}"
-    go run ./cmd/coldstart \
-      --mode=gateway \
-      --addr=":${cs_port}" \
-      --metrics-addr="" \
-      --atespace="${ATESPACE}" \
-      --template=coldstart \
-      --router-url="${ROUTER_URL}" \
-      --init-delay=12s \
-      --min-query-duration=200ms \
-      --max-concurrent=4 >/dev/null 2>&1
-  ) &
-  GATEWAY_PID=$!
-  trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
+  local cluster_lb_ip=""
+  cluster_lb_ip="$(kubectl get svc coldstart-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
 
-  for _ in {1..40}; do
-    if curl -s -o /dev/null --connect-timeout 1 "${cs_url}/readyz" 2>/dev/null; then
-      break
-    fi
-    sleep 0.3
-  done
+  if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
+    cs_url="http://${cluster_lb_ip}"
+    echo "Using in-cluster Cold-Start HPA & Production QPS Comparison Gateway at ${cs_url}..."
+  else
+    echo "Starting Cold-Start HPA & Production QPS Comparison Gateway on ${cs_url}..."
+    (
+      cd "${REPO_ROOT}"
+      go run ./cmd/coldstart \
+        --mode=gateway \
+        --addr=":${cs_port}" \
+        --metrics-addr="" \
+        --atespace="${ATESPACE}" \
+        --template=coldstart \
+        --router-url="${ROUTER_URL}" \
+        --init-delay=12s \
+        --min-query-duration=200ms \
+        --max-concurrent=4 >/dev/null 2>&1
+    ) &
+    GATEWAY_PID=$!
+    trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
+
+    for _ in {1..40}; do
+      if curl -s -o /dev/null --connect-timeout 1 "${cs_url}/readyz" 2>/dev/null; then
+        break
+      fi
+      sleep 0.3
+    done
+  fi
 
   echo ""
   echo "  Live HPA & Production QPS Dashboard : ${cs_url}/dashboard"
@@ -636,15 +669,15 @@ act2_coldstart() {
     snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
     if [[ -n "${snap}" ]]; then
       local phase k8s_des k8s_rdy k8s_good k8s_shed sub_des sub_rdy sub_good sub_shed
-      phase="$(echo "${snap}" | awk -F'"' '/"scenario_phase":/ {print $4; exit}')"
-      k8s_des="$(echo "${snap}" | awk '/"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
-      k8s_rdy="$(echo "${snap}" | awk '/"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
-      k8s_good="$(echo "${snap}" | awk '/"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
-      k8s_shed="$(echo "${snap}" | awk '/"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
-      sub_des="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
-      sub_rdy="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}')"
-      sub_good="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
-      sub_shed="$(echo "${snap}" | awk '/"substrate":/,0' | awk '/"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}')"
+      phase="$(awk -F'"' '/"scenario_phase":/ {print $4; exit}' <<< "${snap}")"
+      k8s_des="$(awk '/"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      k8s_rdy="$(awk '/"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      k8s_good="$(awk '/"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      k8s_shed="$(awk '/"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      sub_des="$(awk '/"substrate":/ {in_sub=1} in_sub && /"hpa_desired_replicas":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      sub_rdy="$(awk '/"substrate":/ {in_sub=1} in_sub && /"ready_replicas":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      sub_good="$(awk '/"substrate":/ {in_sub=1} in_sub && /"goodput_qps":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
+      sub_shed="$(awk '/"substrate":/ {in_sub=1} in_sub && /"shed_qps":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${snap}")"
       printf "  %2ds  | %-22s | %s/%s Ready (%2d QPS) | %5s OK / %5s 429 | %s/%s Ready (%2d QPS) | %5s OK / %5s 429\n" \
         "${sec}" "${phase}" \
         "${k8s_rdy:-1}" "${k8s_des:-1}" "$(( ${k8s_rdy:-1} * 20 ))" "${k8s_good:-0}" "${k8s_shed:-0}" \
@@ -655,12 +688,12 @@ act2_coldstart() {
   echo ""
   local final_snap k8s_tot sub_tot k8s_drop sub_drop mult extra
   final_snap="$(curl -fsS "${cs_url}/api/state" 2>/dev/null || true)"
-  k8s_tot="$(echo "${final_snap}" | awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}')"
-  k8s_drop="$(echo "${final_snap}" | awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}')"
-  sub_tot="$(echo "${final_snap}" | awk '/"substrate":/,0' | awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}')"
-  sub_drop="$(echo "${final_snap}" | awk '/"substrate":/,0' | awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}')"
-  mult="$(echo "${final_snap}" | awk '/"goodput_multiplier":/ {gsub(/,/,"",$2); print $2; exit}')"
-  extra="$(echo "${final_snap}" | awk '/"extra_queries_served":/ {gsub(/,/,"",$2); print $2; exit}')"
+  k8s_tot="$(awk '/"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
+  k8s_drop="$(awk '/"total_shed":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
+  sub_tot="$(awk '/"substrate":/ {in_sub=1} in_sub && /"total_goodput":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
+  sub_drop="$(awk '/"substrate":/ {in_sub=1} in_sub && /"total_shed":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
+  mult="$(awk '/"goodput_multiplier":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
+  extra="$(awk '/"extra_queries_served":/ {gsub(/,/,"",$2); print $2; exit}' <<< "${final_snap}")"
 
   echo "  ================================================================================"
   echo "  PRODUCTION HPA + COLD-START SCORECARD (minReplicas: 1 -> maxReplicas: 3)"

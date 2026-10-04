@@ -606,8 +606,10 @@ func (g *GatewayServer) reconcileReplicasLocked(desired int) {
 				slot.engine.ColdBootStartedAt = now
 				slot.engine.initStep.Store(1)
 				slot.engine.initStage.Store("Stage 1/6: Generating cloud-native package & symbol corpus")
-				bootDelay := g.cfg.K8sColdBootDelay
-				go g.simulateK8sPodColdBoot(slot, bootDelay)
+				if g.k8sToken == "" {
+					bootDelay := g.cfg.K8sColdBootDelay
+					go g.simulateK8sPodColdBoot(slot, bootDelay)
+				}
 			}
 		} else if i > 0 {
 			slot.state = "OFFLINE"
@@ -1193,6 +1195,17 @@ func (g *GatewayServer) Reset() {
 		g.scenarioCancel()
 		g.scenarioCancel = nil
 	}
+	var prevK8sName, prevK8sIP, prevK8sFP string
+	if len(g.localK8sSlots) > 0 {
+		prevK8sName = g.localK8sSlots[0].name
+		prevK8sIP = g.localK8sSlots[0].podIP
+		prevK8sFP = g.localK8sSlots[0].engine.GoldenHeapFingerprint
+	}
+	var prevSubIP, prevSubFP string
+	if len(g.localSubSlots) > 0 {
+		prevSubIP = g.localSubSlots[0].podIP
+		prevSubFP = g.localSubSlots[0].engine.GoldenHeapFingerprint
+	}
 	g.scenarioRunning = false
 	g.scenarioPhase = "IDLE"
 	g.scenarioElapsedSec = 0
@@ -1206,8 +1219,30 @@ func (g *GatewayServer) Reset() {
 	g.history = nil
 	g.recentSearches = nil
 	g.resetLocalSlotsLocked()
+	if prevK8sIP != "" && !strings.HasPrefix(prevK8sIP, "10.244.") {
+		g.localK8sSlots[0].name = prevK8sName
+		g.localK8sSlots[0].podIP = prevK8sIP
+		if prevK8sFP != "" {
+			g.localK8sSlots[0].engine.GoldenHeapFingerprint = prevK8sFP
+		}
+	}
+	if prevSubIP != "" && !strings.HasPrefix(prevSubIP, "10.244.") {
+		g.localSubSlots[0].podIP = prevSubIP
+		if prevSubFP != "" {
+			for _, s := range g.localSubSlots {
+				s.engine.GoldenHeapFingerprint = prevSubFP
+			}
+		}
+	}
 	if g.cfg.Mode == "gateway" {
 		go g.syncClusterScales(defaultMinReplicas)
+		go g.refreshClusterReplicaStatuses(context.Background())
+		for i := 2; i <= defaultMaxReplicas; i++ {
+			actorIdx := i
+			go func() {
+				_ = g.runKubectlAte(context.Background(), "suspend", "actor", fmt.Sprintf("coldstart-%d", actorIdx), "-a", g.cfg.Atespace)
+			}()
+		}
 	}
 	g.mu.Unlock()
 

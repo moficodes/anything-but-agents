@@ -689,27 +689,34 @@ func newMux(engine *WarmHeapEngine) *http.ServeMux {
 			return
 		}
 
-		// Enforce per-replica concurrency ceiling; shed excess load with 429 Too Many Requests.
+		// Enforce per-replica concurrency ceiling; allow a tiny 25ms buffer to absorb
+		// network tick jitter at 100% capacity, then shed excess load with 429 Too Many Requests.
 		select {
 		case engine.sem <- struct{}{}:
-			engine.inFlight.Add(1)
-			defer func() {
-				engine.inFlight.Add(-1)
-				<-engine.sem
-			}()
 		default:
-			engine.totalShed.Add(1)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status":         "OVERLOADED_SHED_LOAD",
-				"reason":         fmt.Sprintf("replica saturated at max_concurrent=%d in-flight search workers", engine.MaxConcurrent),
-				"in_flight":      engine.inFlight.Load(),
-				"max_concurrent": engine.MaxConcurrent,
-				"current_pod_ip": currentPodIP(),
-			})
-			return
+			jitterTimer := time.NewTimer(25 * time.Millisecond)
+			select {
+			case engine.sem <- struct{}{}:
+				jitterTimer.Stop()
+			case <-jitterTimer.C:
+				engine.totalShed.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"status":         "OVERLOADED_SHED_LOAD",
+					"reason":         fmt.Sprintf("replica saturated at max_concurrent=%d in-flight search workers", engine.MaxConcurrent),
+					"in_flight":      engine.inFlight.Load(),
+					"max_concurrent": engine.MaxConcurrent,
+					"current_pod_ip": currentPodIP(),
+				})
+				return
+			}
 		}
+		engine.inFlight.Add(1)
+		defer func() {
+			engine.inFlight.Add(-1)
+			<-engine.sem
+		}()
 
 		reqStart := time.Now()
 		query := r.URL.Query().Get("q")
@@ -717,7 +724,13 @@ func newMux(engine *WarmHeapEngine) *http.ServeMux {
 		resp := engine.HandleSearchQuery(query, symbol, currentPodIP())
 
 		if engine.MinQueryDuration > 0 {
-			if rem := engine.MinQueryDuration - time.Since(reqStart); rem > 0 {
+			targetDur := engine.MinQueryDuration
+			if targetDur >= 180*time.Millisecond {
+				// Leave 20ms headroom for HTTP/network round-trip so 4 concurrent slots
+				// achieve a clean 20 QPS per Ready replica over cluster networking.
+				targetDur -= 20 * time.Millisecond
+			}
+			if rem := targetDur - time.Since(reqStart); rem > 0 {
 				time.Sleep(rem)
 			}
 		}
