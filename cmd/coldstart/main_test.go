@@ -192,3 +192,54 @@ func TestHPAColdStartQPSAdvantage(t *testing.T) {
 		}
 	}
 }
+
+func TestK8sRouterL7RoundRobinAndServiceProxy(t *testing.T) {
+	// Spin up two mock K8s worker pods returning distinct current_pod_ip values.
+	eng1 := NewWarmHeapEngineWithConfig(WorkerConfig{SieveLimit: 100, CorpusDocs: 100, MaxConcurrent: 2, MinQueryDuration: 10 * time.Millisecond})
+	eng1.RunExpensiveInitialization(0)
+	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(eng1.HandleSearchQuery(r.URL.Query().Get("q"), "fn_test", "10.244.0.11"))
+	}))
+	defer srv1.Close()
+
+	eng2 := NewWarmHeapEngineWithConfig(WorkerConfig{SieveLimit: 100, CorpusDocs: 100, MaxConcurrent: 2, MinQueryDuration: 10 * time.Millisecond})
+	eng2.RunExpensiveInitialization(0)
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(eng2.HandleSearchQuery(r.URL.Query().Get("q"), "fn_test", "10.244.0.12"))
+	}))
+	defer srv2.Close()
+
+	router := NewK8sRouterServer("anything-but-agents", "coldstart-k8s", "")
+	router.mu.Lock()
+	router.endpoints = []string{srv1.URL, srv2.URL}
+	router.mu.Unlock()
+
+	routerSrv := httptest.NewServer(router.Mux())
+	defer routerSrv.Close()
+
+	gw := NewGatewayServer(GatewayConfig{
+		Mode:          "gateway",
+		K8sServiceURL: routerSrv.URL,
+		CorpusDocs:    100,
+		SieveLimit:    100,
+	})
+	gw.mu.Lock()
+	gw.localK8sSlots[0].podIP = "10.244.0.11"
+	gw.localK8sSlots[0].state = "READY"
+	gw.localK8sSlots[1].podIP = "10.244.0.12"
+	gw.localK8sSlots[1].state = "READY"
+	gw.mu.Unlock()
+
+	for i := 0; i < 4; i++ {
+		gw.sendOneK8sRequest("kubernetes autoscaler")
+	}
+
+	st := gw.StateSnapshot()
+	if st.K8s.Replicas[0].ServedCount != 2 || st.K8s.Replicas[1].ServedCount != 2 {
+		t.Fatalf("expected 2 requests attributed to each K8s pod via coldstart-k8s-router, got pod1=%d pod2=%d",
+			st.K8s.Replicas[0].ServedCount, st.K8s.Replicas[1].ServedCount)
+	}
+}
+

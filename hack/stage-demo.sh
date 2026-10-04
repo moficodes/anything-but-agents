@@ -568,6 +568,7 @@ deploy_coldstart_hpa() {
       | kubectl apply -f -
   )
   kubectl rollout status deployment/coldstart-k8s -n anything-but-agents --timeout=120s
+  kubectl rollout status deployment/coldstart-k8s-router -n anything-but-agents --timeout=120s
   kubectl rollout status deployment/coldstart-gateway -n anything-but-agents --timeout=120s
 
   local lb_ip=""
@@ -591,7 +592,7 @@ cleanup_coldstart_hpa() {
     kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl delete hpa coldstart-k8s coldstart-substrate -n anything-but-agents --ignore-not-found
-  kubectl delete deployment,service coldstart-k8s coldstart-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete deployment,service coldstart-k8s coldstart-k8s-router coldstart-gateway -n anything-but-agents --ignore-not-found
   kubectl delete deployment coldstart-substrate-pool -n anything-but-agents --ignore-not-found
   kubectl delete serviceaccount,role,rolebinding coldstart-gateway coldstart-gateway-ns -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding coldstart-gateway-token-minter -n ate-system --ignore-not-found

@@ -48,7 +48,8 @@ func main() {
 	namespace := flag.String("namespace", "anything-but-agents", "Kubernetes namespace for HPA and Deployment resources")
 	atespace := flag.String("atespace", "anything-but-agents", "Agent Substrate atespace")
 	template := flag.String("template", "coldstart", "Agent Substrate ActorTemplate name")
-	k8sServiceURL := flag.String("k8s-service-url", "http://coldstart-k8s.anything-but-agents.svc.cluster.local:80", "Standard K8s Service URL for coldstart-k8s")
+	targetService := flag.String("target-service", "coldstart-k8s", "Kubernetes Service name whose Ready Endpoints are load-balanced in --mode=k8s-router")
+	k8sServiceURL := flag.String("k8s-service-url", "http://coldstart-k8s-router.anything-but-agents.svc.cluster.local:80", "In-cluster L7 router Service URL for coldstart-k8s")
 	routerURL := flag.String("router-url", "http://atenet-router.ate-system.svc.cluster.local:80", "Agent Substrate atenet-router HTTP URL")
 	ateEndpoint := flag.String("ate-endpoint", "", "Optional ate-api-server gRPC endpoint override for kubectl-ate")
 	kubectlAteBin := flag.String("kubectl-ate-bin", "kubectl-ate", "Path to kubectl-ate binary")
@@ -80,6 +81,22 @@ func main() {
 
 		engine.RunExpensiveInitialization(*initDelay)
 		select {}
+
+	case "k8s-router":
+		rtr := NewK8sRouterServer(*namespace, *targetService, "")
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		rtr.StartEndpointSyncLoop(ctx)
+
+		slog.Info("Starting coldstart Kubernetes L7 endpoint router",
+			slog.String("addr", *addr),
+			slog.String("namespace", *namespace),
+			slog.String("target_service", *targetService),
+		)
+		if err := http.ListenAndServe(*addr, rtr.Mux()); err != nil {
+			slog.Error("K8s router HTTP server exited", slog.Any("err", err))
+			os.Exit(1)
+		}
 
 	case "gateway", "local":
 		gw := NewGatewayServer(GatewayConfig{
@@ -136,7 +153,7 @@ func main() {
 		}
 
 	default:
-		slog.Error("Unknown --mode (expected worker, gateway, or local)", slog.String("mode", *mode))
+		slog.Error("Unknown --mode (expected worker, k8s-router, gateway, or local)", slog.String("mode", *mode))
 		os.Exit(1)
 	}
 }

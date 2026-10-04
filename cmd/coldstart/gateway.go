@@ -979,13 +979,8 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 	}
 	slot := readySlots[int(g.rrK8s.Add(1))%len(readySlots)]
 
-	if g.cfg.Mode == "gateway" && g.k8sToken != "" {
+	if g.cfg.Mode == "gateway" && (g.k8sToken != "" || strings.HasPrefix(g.cfg.K8sServiceURL, "http://127.0.0.1") || strings.HasPrefix(g.cfg.K8sServiceURL, "http://localhost")) {
 		baseURL := strings.TrimRight(g.cfg.K8sServiceURL, "/")
-		// Route directly to the selected Ready Pod's IP on port 8080 when discovered,
-		// avoiding kube-proxy HTTP/1.1 keep-alive connection pinning to Pod 1.
-		if slot.podIP != "" && !strings.HasPrefix(slot.podIP, "10.244.") {
-			baseURL = fmt.Sprintf("http://%s:8080", slot.podIP)
-		}
 		reqURL := fmt.Sprintf("%s/search?q=%s", baseURL, url.QueryEscape(query))
 		resp, err := g.httpClient.Get(reqURL)
 		latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
@@ -997,11 +992,19 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 		defer resp.Body.Close()
 		var body map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&body)
+		if ip, ok := body["current_pod_ip"].(string); ok && ip != "" {
+			g.mu.Lock()
+			for _, candidate := range g.localK8sSlots {
+				if candidate.podIP == ip {
+					slot = candidate
+					break
+				}
+			}
+			slot.podIP = ip
+			g.mu.Unlock()
+		}
 		if fp, ok := body["golden_heap_fingerprint"].(string); ok && fp != "" {
 			slot.engine.GoldenHeapFingerprint = fp
-		}
-		if ip, ok := body["current_pod_ip"].(string); ok && ip != "" {
-			slot.podIP = ip
 		}
 		if resp.StatusCode == http.StatusOK {
 			slot.servedTotal.Add(1)
@@ -1428,7 +1431,7 @@ func (g *GatewayServer) StateSnapshot() GatewayStateSnapshot {
 		K8s: BackendTelemetry{
 			Backend:            "k8s",
 			Title:              "Standard Kubernetes HPA + Deployment",
-			Subtitle:           "12s Cold-Start Index Build on Scale-Out (/readyz == 503)",
+			Subtitle:           "via svc/coldstart-k8s-router → Service/coldstart-k8s (12s Cold-Start on Scale-Out)",
 			HPAName:            "coldstart-k8s",
 			ScaleTarget:        "Deployment/" + g.cfg.K8sDeploymentName,
 			HPAMinReplicas:     defaultMinReplicas,
@@ -1451,7 +1454,7 @@ func (g *GatewayServer) StateSnapshot() GatewayStateSnapshot {
 		Substrate: BackendTelemetry{
 			Backend:            "substrate",
 			Title:              "Agent Substrate HPA + Golden Snapshot Actors",
-			Subtitle:           "~100ms Memory Restore from Post-Init Golden Snapshot",
+			Subtitle:           "via svc/atenet-router → WorkerPool (~100ms Restore from Post-Init Golden Snapshot)",
 			HPAName:            "coldstart-substrate",
 			ScaleTarget:        "ActorPool/coldstart-1..3",
 			HPAMinReplicas:     defaultMinReplicas,
@@ -1574,3 +1577,176 @@ func parseFloatDefault(s string, def float64) float64 {
 	}
 	return cmp.Or(v, def)
 }
+
+// K8sRouterServer is an in-cluster L7 HTTP reverse proxy (--mode=k8s-router)
+// that sits in front of Service/coldstart-k8s endpoints so Standard Kubernetes
+// (Track A) traverses the exact same 2-hop L7 proxy path (`coldstart-gateway ->
+// svc/coldstart-k8s-router -> coldstart-k8s pod`) as Agent Substrate (`coldstart-gateway
+// -> svc/atenet-router -> WorkerPool pod`).
+type K8sRouterServer struct {
+	namespace   string
+	serviceName string
+	fallbackURL string
+	httpClient  *http.Client
+	k8sClient   *http.Client
+	k8sToken    string
+
+	mu        sync.RWMutex
+	endpoints []string
+	rr        atomic.Uint64
+}
+
+func NewK8sRouterServer(namespace, serviceName, fallbackURL string) *K8sRouterServer {
+	if namespace == "" {
+		namespace = "anything-but-agents"
+	}
+	if serviceName == "" {
+		serviceName = "coldstart-k8s"
+	}
+	if fallbackURL == "" {
+		fallbackURL = fmt.Sprintf("http://%s.%s.svc.cluster.local:80", serviceName, namespace)
+	}
+	r := &K8sRouterServer{
+		namespace:   namespace,
+		serviceName: serviceName,
+		fallbackURL: strings.TrimRight(fallbackURL, "/"),
+		httpClient: &http.Client{
+			Timeout: 4 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        256,
+				MaxIdleConnsPerHost: 64,
+				MaxConnsPerHost:     128,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
+	}
+
+	tokenBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err == nil {
+		r.k8sToken = strings.TrimSpace(string(tokenBytes))
+	}
+	caBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	pool := x509.NewCertPool()
+	if err == nil {
+		pool.AppendCertsFromPEM(caBytes)
+	}
+	r.k8sClient = &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:            pool,
+				InsecureSkipVerify: len(caBytes) == 0,
+			},
+		},
+	}
+	return r
+}
+
+func (r *K8sRouterServer) StartEndpointSyncLoop(ctx context.Context) {
+	r.refreshEndpoints(ctx)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				r.refreshEndpoints(ctx)
+			}
+		}
+	}()
+}
+
+func (r *K8sRouterServer) refreshEndpoints(ctx context.Context) {
+	if r.k8sToken == "" {
+		return
+	}
+	epURL := fmt.Sprintf("https://kubernetes.default.svc/api/v1/namespaces/%s/endpoints/%s", r.namespace, r.serviceName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, epURL, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+r.k8sToken)
+	resp, err := r.k8sClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	var epObj struct {
+		Subsets []struct {
+			Addresses []struct {
+				IP string `json:"ip"`
+			} `json:"addresses"`
+			Ports []struct {
+				Port int `json:"port"`
+			} `json:"ports"`
+		} `json:"subsets"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&epObj) != nil {
+		return
+	}
+
+	var readyAddrs []string
+	for _, sub := range epObj.Subsets {
+		port := 8080
+		if len(sub.Ports) > 0 && sub.Ports[0].Port > 0 {
+			port = sub.Ports[0].Port
+		}
+		for _, addr := range sub.Addresses {
+			if addr.IP != "" {
+				readyAddrs = append(readyAddrs, fmt.Sprintf("http://%s:%d", addr.IP, port))
+			}
+		}
+	}
+	slices.Sort(readyAddrs)
+
+	r.mu.Lock()
+	r.endpoints = readyAddrs
+	r.mu.Unlock()
+}
+
+func (r *K8sRouterServer) Mux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	proxySearch := func(w http.ResponseWriter, req *http.Request) {
+		r.mu.RLock()
+		eps := r.endpoints
+		r.mu.RUnlock()
+
+		targetBase := r.fallbackURL
+		if len(eps) > 0 {
+			targetBase = eps[int(r.rr.Add(1))%len(eps)]
+		}
+
+		upstreamURL := targetBase + req.URL.Path
+		if req.URL.RawQuery != "" {
+			upstreamURL += "?" + req.URL.RawQuery
+		}
+		upReq, err := http.NewRequestWithContext(req.Context(), req.Method, upstreamURL, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		resp, err := r.httpClient.Do(upReq)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}
+	mux.HandleFunc("/search", proxySearch)
+	mux.HandleFunc("/", proxySearch)
+	return mux
+}
+
