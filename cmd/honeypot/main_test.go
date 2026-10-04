@@ -185,5 +185,16 @@ func TestHoneypotBackendLifecycleRevertAndClone(t *testing.T) {
 	if _, ok := revertedForensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
 		t.Fatalf("expected rootkit.sh to be restored after RevertActor, got %v", revertedForensics.FilesInRootfsTmp)
 	}
-}
 
+	// Suspend actorA and wake it up via ExecShell -> verify worker pod IP migration
+	if err := backend.SuspendActor(ctx, actorA); err != nil {
+		t.Fatalf("SuspendActor: %v", err)
+	}
+	_, migratedForensics, err := backend.ExecShell(ctx, actorA, "ls -la", "", "")
+	if err != nil {
+		t.Fatalf("ExecShell after suspend: %v", err)
+	}
+	if len(migratedForensics.PodIPHistory) < 2 {
+		t.Fatalf("expected PodIPHistory length >= 2 after suspend + wakeup migration, got %v", migratedForensics.PodIPHistory)
+	}
+}

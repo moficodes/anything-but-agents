@@ -168,9 +168,7 @@ func (b *LocalSimulatorBackend) restoreSnapshotLocked(sim *localSimulatedActor, 
 
 	entries, _ := os.ReadDir(sim.hp.ScratchDir)
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			_ = os.Remove(filepath.Join(sim.hp.ScratchDir, entry.Name()))
-		}
+		_ = os.RemoveAll(filepath.Join(sim.hp.ScratchDir, entry.Name()))
 	}
 	for name, data := range snap.filesOnDisk {
 		mode := snap.modesOnDisk[name]
@@ -365,7 +363,9 @@ func (b *LocalSimulatorBackend) ListActors(_ context.Context) ([]ActorTrackerSta
 	out := make([]ActorTrackerState, 0, len(b.order))
 	for _, name := range b.order {
 		if sim, ok := b.actors[name]; ok {
-			out = append(out, sim.tracker)
+			trCopy := sim.tracker
+			trCopy.Snapshots = slices.Clone(trCopy.Snapshots)
+			out = append(out, trCopy)
 		}
 	}
 	return out, nil
@@ -382,6 +382,7 @@ type ClusterAteBackend struct {
 	kubectlAteBin string
 	httpClient    *http.Client
 	trackers      map[string]*ActorTrackerState
+	created       map[string]bool
 	order         []string
 }
 
@@ -396,6 +397,7 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 			Timeout: 15 * time.Second,
 		},
 		trackers: make(map[string]*ActorTrackerState),
+		created:  make(map[string]bool),
 	}
 	for _, name := range []string{"honeypot-203-0-113-5", "honeypot-198-51-100-9"} {
 		ip, label, isClone := defaultActorMetadata(name)
@@ -457,13 +459,20 @@ func (b *ClusterAteBackend) ensureTrackerLocked(actorName string) *ActorTrackerS
 func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) error {
 	b.mu.Lock()
 	b.ensureTrackerLocked(actorName)
+	alreadyCreated := b.created[actorName]
 	b.mu.Unlock()
+	if alreadyCreated {
+		return nil
+	}
 
 	_, err := b.runKubectlAte(ctx, "create", "actor", actorName, "-a", b.atespace, "--template", b.template)
 	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
-		// Actor may already exist; ignore benign creation errors if routable
-		_ = err
+		return err
 	}
+
+	b.mu.Lock()
+	b.created[actorName] = true
+	b.mu.Unlock()
 	return nil
 }
 
@@ -581,6 +590,12 @@ func (b *ClusterAteBackend) RevertActor(ctx context.Context, actorName string, t
 	if _, err := b.runKubectlAte(ctx, args...); err != nil {
 		return nil, err
 	}
+	if targetVersion > 0 {
+		b.mu.Lock()
+		tr := b.ensureTrackerLocked(actorName)
+		tr.SnapshotVersion = targetVersion
+		b.mu.Unlock()
+	}
 	return b.GetForensics(ctx, actorName)
 }
 
@@ -595,6 +610,7 @@ func (b *ClusterAteBackend) CloneActor(ctx context.Context, sourceActor, newActo
 		return nil, err
 	}
 	b.mu.Lock()
+	b.created[newActor] = true
 	tr := b.ensureTrackerLocked(newActor)
 	tr.IsClone = true
 	tr.ClonedFrom = sourceActor
@@ -609,7 +625,9 @@ func (b *ClusterAteBackend) ListActors(_ context.Context) ([]ActorTrackerState, 
 	out := make([]ActorTrackerState, 0, len(b.order))
 	for _, name := range b.order {
 		if tr, ok := b.trackers[name]; ok {
-			out = append(out, *tr)
+			trCopy := *tr
+			trCopy.Snapshots = slices.Clone(trCopy.Snapshots)
+			out = append(out, trCopy)
 		}
 	}
 	return out, nil
