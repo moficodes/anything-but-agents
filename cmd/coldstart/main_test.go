@@ -163,12 +163,35 @@ func TestHPAColdStartQPSAdvantage(t *testing.T) {
 	defer cancel()
 	gw.StartBackgroundLoops(ctx)
 
-	// Verify dashboard HTML serves cleanly
+	// Verify dashboard HTML serves cleanly with Hardware Telemetry Rack markers & security headers
 	dashReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	dashRec := httptest.NewRecorder()
 	gw.Mux().ServeHTTP(dashRec, dashReq)
-	if dashRec.Code != http.StatusOK || !strings.Contains(dashRec.Body.String(), "Production HPA + Cold-Start QPS Benchmark") {
+	bodyStr := dashRec.Body.String()
+	if dashRec.Code != http.StatusOK || !strings.Contains(bodyStr, "Production HPA + Cold-Start QPS Benchmark") {
 		t.Fatalf("expected dashboard HTML, got status=%d", dashRec.Code)
+	}
+	for _, marker := range []string{
+		"GOLDEN HEAP FINGERPRINT PROOF",
+		"6-STAGE INDEX BUILD",
+		"heapProofBadge",
+		"k8sChart",
+		"subChart",
+	} {
+		if !strings.Contains(bodyStr, marker) {
+			t.Fatalf("expected redesigned dashboard HTML to contain %q", marker)
+		}
+	}
+	if dashRec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("expected X-Content-Type-Options=nosniff header on /dashboard")
+	}
+
+	// Verify /api/probe dispatches a synchronized dual-backend search probe
+	probeReq := httptest.NewRequest(http.MethodPost, "/api/probe?q=gvisor+snapshot", nil)
+	probeRec := httptest.NewRecorder()
+	gw.Mux().ServeHTTP(probeRec, probeReq)
+	if probeRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /api/probe, got %d", probeRec.Code)
 	}
 
 	// Run a 350ms spike at 60 QPS: K8s pods 2 & 3 are still in their 500ms cold-boot window,

@@ -1014,6 +1014,9 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 		} else {
 			slot.shedTotal.Add(1)
 			g.k8sStats.record(false, latMs)
+			g.recordSearchSample("k8s", slot.name, query, resp.StatusCode, latMs, map[string]any{
+				"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+			})
 		}
 		return
 	}
@@ -1034,6 +1037,9 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 	} else {
 		slot.shedTotal.Add(1)
 		g.k8sStats.record(false, latMs)
+		g.recordSearchSample("k8s", slot.name, query, rec.Code, latMs, map[string]any{
+			"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+		})
 	}
 }
 
@@ -1088,6 +1094,9 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 		} else {
 			slot.shedTotal.Add(1)
 			g.subStats.record(false, latMs)
+			g.recordSearchSample("substrate", slot.name, query, resp.StatusCode, latMs, map[string]any{
+				"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+			})
 		}
 		return
 	}
@@ -1107,6 +1116,9 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 	} else {
 		slot.shedTotal.Add(1)
 		g.subStats.record(false, latMs)
+		g.recordSearchSample("substrate", slot.name, query, rec.Code, latMs, map[string]any{
+			"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+		})
 	}
 }
 
@@ -1120,6 +1132,8 @@ func (g *GatewayServer) recordSearchSample(backend, replica, query string, statu
 			sym, _ := first["symbol"].(string)
 			topSym = pkg + "." + sym
 		}
+	} else if status != http.StatusOK {
+		topSym = "429 LOAD SHED (REPLICA SATURATED)"
 	}
 
 	g.mu.Lock()
@@ -1552,6 +1566,36 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		_ = enc.Encode(g.StateSnapshot())
 	})
 
+	mux.HandleFunc("/api/probe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		q := strings.TrimSpace(r.URL.Query().Get("q"))
+		if q == "" {
+			q = "kubernetes autoscaler"
+		}
+		if len(q) > 120 {
+			q = q[:120]
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			g.sendOneSubstrateRequest(q)
+		}()
+		go func() {
+			defer wg.Done()
+			g.sendOneK8sRequest(q)
+		}()
+		wg.Wait()
+
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(g.StateSnapshot())
+	})
+
 	serveDashboard := func(w http.ResponseWriter, _ *http.Request) {
 		data, err := webFS.ReadFile("web/dashboard.html")
 		if err != nil {
@@ -1559,6 +1603,8 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		_, _ = io.Copy(w, bytes.NewReader(data))
 	}
 	mux.HandleFunc("/dashboard", serveDashboard)

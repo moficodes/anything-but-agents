@@ -3,628 +3,1271 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cold-Start HPA & Production QPS Race — Agent Substrate</title>
+  <meta name="description" content="Hardware Telemetry & Oscilloscope Benchmark comparing Standard Kubernetes HPA Cold-Start vs Agent Substrate Golden Snapshot Actor HPA across a 50,000-document in-memory search engine." />
+  <title>Production HPA + Cold-Start QPS Benchmark — Agent Substrate Telemetry Rack</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg-0: #080b11;
-      --bg-1: #0f1520;
-      --bg-2: #161f30;
-      --border: #25324a;
-      --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --accent-cyan: #38bdf8;
-      --accent-emerald: #10b981;
-      --accent-amber: #f59e0b;
-      --accent-red: #ef4444;
-      --accent-purple: #a855f7;
+      --chassis: #05070a;
+      --panel: #090d13;
+      --panel-alt: #0d121a;
+      --bay: #101722;
+      --hairline: #1e293b;
+      --hairline-strong: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+
+      /* Intentional hardware signal tokens (zero purple-on-dark) */
+      --sig-emerald: #10b981;
+      --sig-emerald-bright: #34d399;
+      --sig-emerald-dim: rgba(16, 185, 129, 0.14);
+      --sig-amber: #f59e0b;
+      --sig-amber-bright: #fbbf24;
+      --sig-amber-dim: rgba(245, 158, 11, 0.14);
+      --sig-crimson: #ef4444;
+      --sig-crimson-bright: #f87171;
+      --sig-crimson-dim: rgba(239, 68, 68, 0.16);
+      --sig-ice: #38bdf8;
+      --sig-ice-bright: #7dd3fc;
+      --sig-ice-dim: rgba(56, 189, 248, 0.14);
+
+      --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
-    * { box-sizing: border-box; }
-    body {
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
       margin: 0;
-      background: radial-gradient(circle at 50% 0%, #131c2e 0%, var(--bg-0) 75%);
-      color: var(--text-main);
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 0;
+      background-color: var(--chassis);
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      font-size: 16px;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
       min-height: 100vh;
-      padding: 16px 20px 28px;
+      padding: 14px 18px 28px;
+      background-image:
+        radial-gradient(circle at 18% 0%, rgba(245, 158, 11, 0.05) 0%, transparent 42%),
+        radial-gradient(circle at 82% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 42%);
     }
+
     .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
-    header {
+
+    .rack-shell {
+      max-width: 1640px;
+      margin: 0 auto;
+      border: 1px solid var(--hairline-strong);
+      background: var(--panel);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      position: relative;
+    }
+
+    /* Hardware rack top faceplate */
+    .faceplate {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      padding: 14px 18px;
-      background: rgba(15, 21, 32, 0.92);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      margin-bottom: 14px;
+      gap: 16px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--hairline-strong);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 100%),
+        var(--panel-alt);
     }
-    .brand {
+
+    .instrument-id {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
-    .brand-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 9px;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.4);
+
+    .rack-ears {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 12px;
+      height: 42px;
+      border-right: 1px solid var(--hairline-strong);
+      padding-right: 8px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      line-height: 1;
+      user-select: none;
+    }
+
+    .brand-badge {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--sig-emerald);
+      background: var(--sig-emerald-dim);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--accent-cyan);
-    }
-    .brand h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-    }
-    .brand p {
-      margin: 2px 0 0;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-    }
-    button {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 13px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg-2);
-      color: var(--text-main);
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-    button:hover {
-      border-color: var(--accent-cyan);
-      background: #1d2940;
-    }
-    button.primary {
-      background: linear-gradient(135deg, #0284c7, #0ea5e9);
-      border-color: #38bdf8;
-      color: #fff;
-      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.3);
-    }
-    button.primary:hover {
-      background: linear-gradient(135deg, #0369a1, #0284c7);
-    }
-    button.spike-btn {
-      border-color: rgba(245, 158, 11, 0.5);
-      color: #fcd34d;
-    }
-    button svg {
-      width: 15px;
-      height: 15px;
+      color: var(--sig-emerald-bright);
       flex-shrink: 0;
     }
 
-    .kpi-strip {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .kpi-card {
-      background: rgba(15, 21, 32, 0.9);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .kpi-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .kpi-value {
-      font-size: 22px;
-      font-weight: 800;
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .kpi-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .phase-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 800;
-      background: rgba(56, 189, 248, 0.15);
-      color: var(--accent-cyan);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-    }
-    .phase-pill.spike {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fde68a;
-      border-color: rgba(245, 158, 11, 0.5);
-    }
-
-    .arena {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-    .lane {
-      background: rgba(15, 21, 32, 0.94);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .lane.k8s-lane {
-      border-top: 3px solid var(--accent-amber);
-    }
-    .lane.sub-lane {
-      border-top: 3px solid var(--accent-emerald);
-    }
-    .lane-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .lane-title {
-      font-size: 15px;
-      font-weight: 800;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .lane-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 3px;
-    }
-    .hpa-badge {
-      padding: 4px 9px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      background: var(--bg-2);
-      border: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    .metrics-row {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      background: rgba(8, 11, 17, 0.65);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-    }
-    .metric-box {
+    .title-block {
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
-    .metric-box .lbl {
-      font-size: 10px;
-      color: var(--text-muted);
+
+    .title-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
+      color: var(--sig-ice-bright);
+    }
+
+    .title-eyebrow .divider {
+      color: var(--hairline-strong);
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .title-block p {
+      margin: 0;
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+    }
+
+    /* Hardware trigger switches */
+    .control-deck {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button.hw-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 13px;
+      border: 1px solid var(--hairline-strong);
+      border-radius: 3px;
+      background: var(--bay);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    button.hw-btn:hover {
+      border-color: var(--sig-ice);
+      background: #162030;
+    }
+
+    button.hw-btn:active {
+      transform: translateY(1px);
+    }
+
+    button.hw-btn:focus-visible {
+      outline: 2px solid var(--sig-ice-bright);
+      outline-offset: 2px;
+    }
+
+    button.hw-btn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    button.hw-btn.primary-run {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--sig-emerald);
+      color: #ecfdf5;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    button.hw-btn.primary-run:hover {
+      background: rgba(16, 185, 129, 0.28);
+      border-color: var(--sig-emerald-bright);
+    }
+
+    button.hw-btn.spike-trigger {
+      background: var(--sig-amber-dim);
+      border-color: var(--sig-amber);
+      color: #fef3c7;
+    }
+
+    button.hw-btn.spike-trigger:hover {
+      background: rgba(245, 158, 11, 0.24);
+      border-color: var(--sig-amber-bright);
+    }
+
+    /* 4-Bay Top Readout Strip (Open Hairline Grid) */
+    .readout-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-bottom: 1px solid var(--hairline-strong);
+      background: var(--panel);
+    }
+
+    .readout-bay {
+      padding: 14px 18px;
+      border-right: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+      position: relative;
+    }
+
+    .readout-bay:last-child {
+      border-right: none;
+    }
+
+    .bay-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+
+    .bay-index {
+      color: var(--sig-ice);
       font-weight: 700;
     }
-    .metric-box .val {
-      font-size: 16px;
-      font-weight: 800;
-    }
-    .val.good { color: var(--accent-emerald); }
-    .val.shed { color: var(--accent-red); }
-    .val.cyan { color: var(--accent-cyan); }
 
-    .chart-wrap {
-      background: #070a10;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px 8px;
-    }
-    .chart-legend {
+    .bay-main {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 11px;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .bay-num {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.75rem;
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .bay-unit {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .bay-foot {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
       color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-    .legend-items {
-      display: flex;
-      gap: 12px;
-    }
-    .legend-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 4px;
-    }
-    canvas.qps-chart {
-      width: 100%;
-      height: 135px;
-      display: block;
-    }
-
-    .replicas-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .replica-card {
-      background: var(--bg-2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      transition: border-color 0.2s ease;
-    }
-    .replica-card.ready {
-      border-color: rgba(16, 185, 129, 0.45);
-    }
-    .replica-card.booting {
-      border-color: rgba(245, 158, 11, 0.65);
-      background: rgba(245, 158, 11, 0.06);
-    }
-    .replica-card.suspended {
-      border-color: rgba(56, 189, 248, 0.3);
-      opacity: 0.82;
-    }
-    .replica-card.offline {
-      opacity: 0.55;
-    }
-    .rep-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
     }
-    .rep-name {
-      font-size: 12px;
-      font-weight: 800;
+
+    /* Status beacon pill */
+    .phase-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 2px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      background: var(--sig-ice-dim);
+      color: var(--sig-ice-bright);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+
+    .phase-pill::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .phase-pill.spike {
+      background: var(--sig-crimson-dim);
+      color: var(--sig-crimson-bright);
+      border-color: var(--sig-crimson);
+      animation: pulseBorder 1.1s infinite ease-in-out;
+    }
+
+    @keyframes pulseBorder {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+
+    /* Golden Heap Fingerprint Proof Strip inside Bay 04 */
+    .fp-proof-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .fp-proof-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 7px;
+      background: var(--chassis);
+      border: 1px solid var(--hairline);
+    }
+
+    .fp-proof-row.sub-proof {
+      border-left: 2px solid var(--sig-emerald);
+    }
+
+    .fp-proof-row.k8s-proof {
+      border-left: 2px solid var(--sig-amber);
+    }
+
+    .proof-tag {
+      padding: 1px 6px;
+      font-family: var(--font-mono);
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border: 1px solid var(--sig-emerald);
+      color: var(--sig-emerald-bright);
+      background: var(--sig-emerald-dim);
+    }
+
+    /* Dual-Channel Comparison Arena */
+    .dual-rack {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      border-bottom: 1px solid var(--hairline-strong);
+    }
+
+    .rack-channel {
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      min-width: 0;
+    }
+
+    .rack-channel.k8s-channel {
+      border-right: 1px solid var(--hairline-strong);
+    }
+
+    .channel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--hairline);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--panel-alt);
+    }
+
+    .k8s-channel .channel-header {
+      border-top: 2px solid var(--sig-amber);
+    }
+
+    .sub-channel .channel-header {
+      border-top: 2px solid var(--sig-emerald);
+    }
+
+    .ch-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .ch-tag-row {
       display: flex;
       align-items: center;
       gap: 8px;
-    }
-    .state-tag {
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 800;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
       text-transform: uppercase;
     }
+
+    .ch-designator {
+      padding: 1px 6px;
+      border: 1px solid currentColor;
+    }
+
+    .k8s-channel .ch-tag-row {
+      color: var(--sig-amber-bright);
+    }
+
+    .sub-channel .ch-tag-row {
+      color: var(--sig-emerald-bright);
+    }
+
+    .channel-title {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .channel-sub {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    .hpa-module {
+      padding: 5px 10px;
+      background: var(--chassis);
+      border: 1px solid var(--hairline-strong);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* 4-Cell Open Hairline Telemetry Row */
+    .telemetry-cells {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-bottom: 1px solid var(--hairline);
+      background: var(--chassis);
+    }
+
+    .t-cell {
+      padding: 10px 14px;
+      border-right: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .t-cell:last-child {
+      border-right: none;
+    }
+
+    .t-cell .lbl {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .t-cell .val {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .t-cell .val.good { color: var(--sig-emerald-bright); }
+    .t-cell .val.shed { color: var(--sig-crimson-bright); }
+    .t-cell .val.ice  { color: var(--sig-ice-bright); }
+    .t-cell .val.amber { color: var(--sig-amber-bright); }
+
+    /* Oscilloscope Display Panel */
+    .scope-panel {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--hairline);
+      background: #040609;
+      position: relative;
+    }
+
+    .scope-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+    }
+
+    .scope-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .scope-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.675rem;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 3px;
+    }
+
+    .swatch.hatch {
+      height: 8px;
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(239, 68, 68, 0.75),
+        rgba(239, 68, 68, 0.75) 2px,
+        rgba(239, 68, 68, 0.15) 2px,
+        rgba(239, 68, 68, 0.15) 4px
+      );
+      border: 1px solid var(--sig-crimson);
+    }
+
+    .scope-canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 176px;
+      border: 1px solid #162032;
+      background: #030508;
+    }
+
+    canvas.qps-chart {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    /* Replica Bays Section */
+    .bays-header {
+      padding: 8px 18px;
+      background: var(--panel-alt);
+      border-bottom: 1px solid var(--hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .replicas-rack {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .replica-bay {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: background-color 0.2s ease;
+    }
+
+    .replica-bay:last-child {
+      border-bottom: none;
+    }
+
+    .replica-bay.ready {
+      border-left: 3px solid var(--sig-emerald);
+    }
+
+    .replica-bay.booting {
+      border-left: 3px solid var(--sig-amber);
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    .replica-bay.suspended {
+      border-left: 3px solid var(--sig-ice);
+      background: rgba(56, 189, 248, 0.025);
+    }
+
+    .replica-bay.offline {
+      border-left: 3px solid var(--hairline-strong);
+      opacity: 0.62;
+    }
+
+    .bay-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .bay-id-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+    }
+
+    .slot-num {
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 1px 5px;
+      background: var(--chassis);
+      border: 1px solid var(--hairline-strong);
+      color: var(--text-secondary);
+    }
+
+    .rep-name {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Heap fingerprint pill (no purple!) */
+    .fp-pill {
+      padding: 1px 7px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      border: 1px solid var(--hairline-strong);
+      background: var(--chassis);
+      color: var(--sig-ice-bright);
+    }
+
+    .fp-pill.golden-match {
+      border-color: rgba(16, 185, 129, 0.55);
+      background: var(--sig-emerald-dim);
+      color: var(--sig-emerald-bright);
+    }
+
+    .fp-pill.k8s-rebuild {
+      border-color: rgba(245, 158, 11, 0.5);
+      background: var(--sig-amber-dim);
+      color: var(--sig-amber-bright);
+    }
+
+    .state-tag {
+      padding: 2px 8px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border: 1px solid var(--hairline-strong);
+    }
+
     .state-tag.ready {
-      background: rgba(16, 185, 129, 0.18);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
+      background: var(--sig-emerald-dim);
+      color: var(--sig-emerald-bright);
+      border-color: var(--sig-emerald);
     }
+
     .state-tag.booting {
-      background: rgba(245, 158, 11, 0.2);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: var(--sig-amber-dim);
+      color: var(--sig-amber-bright);
+      border-color: var(--sig-amber);
     }
+
     .state-tag.suspended {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: var(--sig-ice-dim);
+      color: var(--sig-ice-bright);
+      border-color: var(--sig-ice);
     }
+
     .state-tag.offline {
-      background: rgba(148, 163, 184, 0.12);
-      color: #94a3b8;
+      background: rgba(100, 116, 139, 0.12);
+      color: var(--text-muted);
+      border-color: var(--hairline);
     }
-    .rep-meta {
+
+    /* 6-Stage Hardware LED Progress Matrix */
+    .led-matrix {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    .led-seg {
+      padding: 4px 6px;
+      background: var(--chassis);
+      border: 1px solid var(--hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.625rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .led-seg .led-bulb {
+      width: 6px;
+      height: 6px;
+      border-radius: 1px;
+      background: #1e293b;
+      flex-shrink: 0;
+    }
+
+    /* Active/completed LED segment states */
+    .led-seg.seg-ready {
+      border-color: rgba(16, 185, 129, 0.45);
+      background: rgba(16, 185, 129, 0.08);
+      color: var(--text-secondary);
+    }
+
+    .led-seg.seg-ready .led-bulb {
+      background: var(--sig-emerald-bright);
+      box-shadow: 0 0 6px var(--sig-emerald);
+    }
+
+    .led-seg.seg-boot-done {
+      border-color: rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--sig-amber-bright);
+    }
+
+    .led-seg.seg-boot-done .led-bulb {
+      background: var(--sig-amber-bright);
+    }
+
+    .led-seg.seg-boot-active {
+      border-color: var(--sig-amber-bright);
+      background: rgba(245, 158, 11, 0.22);
+      color: #fffbeb;
+      animation: pulseLed 0.8s infinite ease-in-out;
+    }
+
+    .led-seg.seg-boot-active .led-bulb {
+      background: #fffbeb;
+      box-shadow: 0 0 8px var(--sig-amber-bright);
+    }
+
+    .led-seg.seg-standby {
+      border-color: rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.07);
+      color: var(--sig-ice-bright);
+    }
+
+    .led-seg.seg-standby .led-bulb {
+      background: var(--sig-ice);
+    }
+
+    @keyframes pulseLed {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+
+    .bay-telemetry-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      font-size: 11px;
+      font-family: var(--font-mono);
+      font-size: 0.71rem;
+      color: var(--text-secondary);
+    }
+
+    .bay-stage-text {
       color: var(--text-muted);
     }
-    .fp-pill {
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(168, 85, 247, 0.16);
-      border: 1px solid rgba(168, 85, 247, 0.4);
-      color: #d8b4fe;
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .progress-track {
-      width: 100%;
-      height: 5px;
-      background: #090d14;
-      border-radius: 999px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      border-radius: 999px;
-      transition: width 0.25s ease;
-    }
-    .progress-fill.ready { background: var(--accent-emerald); }
-    .progress-fill.booting { background: var(--accent-amber); }
-    .progress-fill.suspended { background: var(--accent-cyan); }
 
-    .inspector {
-      background: rgba(15, 21, 32, 0.94);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 16px;
-    }
-    .inspector-head {
+    .bay-counters {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cnt-ok { color: var(--sig-emerald-bright); font-weight: 700; }
+    .cnt-shed { color: var(--sig-crimson-bright); font-weight: 700; }
+
+    /* Bottom Live Search Query Stream & Probe Console */
+    .stream-console {
+      background: var(--panel);
+    }
+
+    .console-bar {
+      padding: 12px 18px;
+      background: var(--panel-alt);
+      border-bottom: 1px solid var(--hairline);
+      display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px;
+      gap: 12px;
     }
-    .inspector-head h3 {
-      margin: 0;
-      font-size: 13px;
-      font-weight: 800;
+
+    .console-title {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 9px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 0;
     }
+
+    .probe-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .probe-label {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 4px;
+    }
+
+    button.probe-chip {
+      padding: 4px 9px;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      background: var(--chassis);
+      border: 1px solid var(--hairline-strong);
+      color: var(--sig-ice-bright);
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    button.probe-chip:hover {
+      border-color: var(--sig-ice-bright);
+      background: var(--sig-ice-dim);
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
     table.query-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.75rem;
     }
+
     table.query-table th,
     table.query-table td {
       text-align: left;
-      padding: 6px 8px;
-      border-bottom: 1px solid rgba(37, 50, 74, 0.6);
-    }
-    table.query-table th {
-      color: var(--text-muted);
-      font-weight: 700;
-      text-transform: uppercase;
-      font-size: 10px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--hairline);
+      white-space: nowrap;
     }
 
-    @media (max-width: 1080px) {
-      .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .arena { grid-template-columns: 1fr; }
+    table.query-table th {
+      background: var(--chassis);
+      color: var(--text-muted);
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    table.query-table tbody tr:hover {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      border: 1px solid currentColor;
+    }
+
+    .status-pill.ok {
+      color: var(--sig-emerald-bright);
+      background: var(--sig-emerald-dim);
+    }
+
+    .status-pill.shed {
+      color: var(--sig-crimson-bright);
+      background: var(--sig-crimson-dim);
+    }
+
+    @media (max-width: 1180px) {
+      .readout-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .readout-bay:nth-child(2) {
+        border-right: none;
+      }
+      .readout-bay:nth-child(1),
+      .readout-bay:nth-child(2) {
+        border-bottom: 1px solid var(--hairline);
+      }
+      .dual-rack {
+        grid-template-columns: 1fr;
+      }
+      .rack-channel.k8s-channel {
+        border-right: none;
+        border-bottom: 1px solid var(--hairline-strong);
+      }
+    }
+
+    @media (max-width: 680px) {
+      .readout-strip {
+        grid-template-columns: 1fr;
+      }
+      .telemetry-cells {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .led-matrix {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-        </svg>
-      </div>
-      <div>
-        <h1>Production HPA + Cold-Start QPS Benchmark</h1>
-        <p>50,000-Doc In-Memory Trigram Search Engine (20 QPS/Replica Cap, 12s Index Build) — Standard K8s HPA vs. Agent Substrate Golden Snapshot HPA</p>
-      </div>
-    </div>
-    <div class="controls">
-      <button class="primary" onclick="triggerSpikeScenario()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        Run 24s Production Spike (15 → 60 → 15 QPS)
-      </button>
-      <button onclick="setQPS(15)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        Baseline (15 QPS)
-      </button>
-      <button class="spike-btn" onclick="setQPS(60)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-        Spike (60 QPS)
-      </button>
-      <button onclick="setQPS(0)">Idle (0 QPS)</button>
-      <button onclick="resetAll()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-        Reset
-      </button>
-    </div>
-  </header>
-
-  <section class="kpi-strip">
-    <div class="kpi-card">
-      <div class="kpi-label">
-        <span>Load Balancer Demand</span>
-        <span id="phasePill" class="phase-pill mono">IDLE</span>
-      </div>
-      <div class="kpi-value mono">
-        <span id="targetQPSVal">0</span>
-        <span style="font-size:13px;color:var(--text-muted)">QPS per backend</span>
-      </div>
-      <div class="kpi-sub mono">HPA Metric: coldstart_lb_qps (AvgVal = 20 QPS/replica)</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-label">
-        <span>Total Goodput (200 OK Searches)</span>
-      </div>
-      <div class="kpi-value mono">
-        <span id="subTotalGood" style="color:var(--accent-emerald)">0</span>
-        <span style="font-size:13px;color:var(--text-muted)">vs K8s</span>
-        <span id="k8sTotalGood" style="color:var(--accent-amber)">0</span>
-      </div>
-      <div class="kpi-sub mono" id="extraServedSub">+0 extra production queries served on Substrate</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-label">
-        <span>Production QPS Multiplier</span>
-      </div>
-      <div class="kpi-value mono" style="color:var(--accent-cyan)">
-        <span id="multiplierVal">1.00x</span>
-        <span style="font-size:13px;color:var(--text-muted)">effective goodput</span>
-      </div>
-      <div class="kpi-sub mono" id="scaleReadySub">Scale-Out to 3/3 Ready: Sub ~100ms vs K8s ~12,000ms</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="kpi-label">
-        <span>Resident Heap Search Index</span>
-      </div>
-      <div class="kpi-value mono">
-        <span id="heapMBVal">64.2 MB</span>
-        <span style="font-size:13px;color:var(--text-muted)">50,000 docs</span>
-      </div>
-      <div class="kpi-sub mono">Inverted Token + 3-Gram Index + 78,498 Primes</div>
-    </div>
-  </section>
-
-  <section class="arena">
-    <!-- Left Column: Standard Kubernetes HPA -->
-    <div class="lane k8s-lane">
-      <div class="lane-header">
-        <div>
-          <h2 class="lane-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            Standard Kubernetes HPA + Deployment
-          </h2>
-          <div class="lane-sub">Every scaled Pod runs the 12s 50,000-doc index build before <code>/readyz</code> turns 200 OK</div>
+  <div class="rack-shell">
+    <!-- Top Rack Control Faceplate -->
+    <header class="faceplate">
+      <div class="instrument-id">
+        <div class="rack-ears" aria-hidden="true">
+          <span>+</span>
+          <span>+</span>
         </div>
-        <div class="hpa-badge mono" id="k8sHpaBadge">HPA: 1/3 Desired | 1/3 Ready</div>
-      </div>
-
-      <div class="metrics-row mono">
-        <div class="metric-box">
-          <span class="lbl">Goodput QPS (200)</span>
-          <span class="val good" id="k8sGoodQPS">0.0</span>
+        <div class="brand-badge" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
         </div>
-        <div class="metric-box">
-          <span class="lbl">Shed QPS (429/503)</span>
-          <span class="val shed" id="k8sShedQPS">0.0</span>
-        </div>
-        <div class="metric-box">
-          <span class="lbl">Ready Capacity</span>
-          <span class="val" id="k8sCapQPS">20 QPS</span>
-        </div>
-        <div class="metric-box">
-          <span class="lbl">Success / Shed</span>
-          <span class="val" id="k8sRateVal">100% (0 shed)</span>
+        <div class="title-block">
+          <div class="title-eyebrow">
+            <span>ATE-SCOPE // MODEL CS-50K</span>
+            <span class="divider">|</span>
+            <span>SYMMETRICAL 2-HOP L7 BENCHMARK</span>
+          </div>
+          <h1>Production HPA + Cold-Start QPS Benchmark</h1>
+          <p>50,000-Doc In-Memory Trigram Search Engine (20 QPS/Replica Cap, 12s Index Build) — Standard K8s HPA vs. Agent Substrate Golden Snapshot HPA</p>
         </div>
       </div>
 
-      <div class="chart-wrap">
-        <div class="chart-legend">
-          <span>Real-Time Throughput (QPS)</span>
-          <div class="legend-items">
-            <span><i class="legend-dot" style="background:#10b981"></i>Goodput (200 OK)</span>
-            <span><i class="legend-dot" style="background:#ef4444"></i>Shed Load (429)</span>
-            <span><i class="legend-dot" style="background:#94a3b8"></i>Demand QPS</span>
+      <div class="control-deck">
+        <button id="btnRunSpike" class="hw-btn primary-run" onclick="triggerSpikeScenario()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Run 24s Production Spike (15 → 60 → 15 QPS)
+        </button>
+        <button id="btnBaseline" class="hw-btn" onclick="setQPS(15)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          Baseline (15 QPS)
+        </button>
+        <button id="btnSpike60" class="hw-btn spike-trigger" onclick="setQPS(60)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+          Spike (60 QPS)
+        </button>
+        <button id="btnIdle" class="hw-btn" onclick="setQPS(0)">Idle (0 QPS)</button>
+        <button id="btnReset" class="hw-btn" onclick="resetAll()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+          Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- 4-Bay Hairline Telemetry Readout Strip -->
+    <section class="readout-strip" aria-label="Primary Telemetry Readout">
+      <!-- Bay 01 -->
+      <div class="readout-bay">
+        <div class="bay-head">
+          <span><span class="bay-index">01 //</span> Load Balancer Demand</span>
+          <span id="phasePill" class="phase-pill">IDLE</span>
+        </div>
+        <div class="bay-main">
+          <span id="targetQPSVal" class="bay-num">0</span>
+          <span class="bay-unit">QPS / backend</span>
+        </div>
+        <div class="bay-foot">
+          <span>external.metrics.k8s.io/v1beta1: <code>coldstart_lb_qps</code></span>
+          <span id="hpaFormulaSub">desired = ceil(0 / 20) = 1</span>
+        </div>
+      </div>
+
+      <!-- Bay 02 -->
+      <div class="readout-bay">
+        <div class="bay-head">
+          <span><span class="bay-index">02 //</span> Cumulative Goodput (200 OK)</span>
+          <span class="mono" style="color:var(--sig-emerald-bright)">SUB vs K8S</span>
+        </div>
+        <div class="bay-main">
+          <span id="subTotalGood" class="bay-num" style="color:var(--sig-emerald-bright)">0</span>
+          <span class="bay-unit">vs K8s</span>
+          <span id="k8sTotalGood" class="bay-num" style="color:var(--sig-amber-bright)">0</span>
+        </div>
+        <div class="bay-foot">
+          <span id="extraServedSub" style="color:var(--sig-emerald-bright)">+0 extra production queries served on Substrate</span>
+        </div>
+      </div>
+
+      <!-- Bay 03 -->
+      <div class="readout-bay">
+        <div class="bay-head">
+          <span><span class="bay-index">03 //</span> Goodput Advantage &amp; Scale-Out</span>
+          <span class="mono">3/3 READY RACE</span>
+        </div>
+        <div class="bay-main">
+          <span id="multiplierVal" class="bay-num" style="color:var(--sig-ice-bright)">1.00x</span>
+          <span class="bay-unit">effective goodput</span>
+        </div>
+        <div class="bay-foot">
+          <span id="scaleReadySub">Scale-Out to 3/3 Ready: Sub ~95ms vs K8s ~12,000ms</span>
+        </div>
+      </div>
+
+      <!-- Bay 04: Golden Heap Fingerprint Proof Strip -->
+      <div class="readout-bay">
+        <div class="bay-head">
+          <span><span class="bay-index">04 //</span> GOLDEN HEAP FINGERPRINT PROOF</span>
+          <span id="heapProofBadge" class="proof-tag">3/3 CLONE MATCH</span>
+        </div>
+        <div class="fp-proof-grid">
+          <div class="fp-proof-row sub-proof">
+            <span style="color:var(--sig-emerald-bright);font-weight:700">SUB 1..3</span>
+            <span id="subFpReadout" style="color:var(--text-primary)">identical SHA-256 clone heap</span>
+          </div>
+          <div class="fp-proof-row k8s-proof">
+            <span style="color:var(--sig-amber-bright);font-weight:700">K8S 1..3</span>
+            <span id="k8sFpReadout" style="color:var(--text-secondary)">independent 12s cold-boot heaps</span>
           </div>
         </div>
-        <canvas id="k8sChart" class="qps-chart" width="600" height="135"></canvas>
-      </div>
-
-      <div class="replicas-grid" id="k8sReplicas"></div>
-    </div>
-
-    <!-- Right Column: Agent Substrate Golden Snapshot HPA -->
-    <div class="lane sub-lane">
-      <div class="lane-header">
-        <div>
-          <h2 class="lane-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            Agent Substrate HPA + Golden Snapshot Actors
-          </h2>
-          <div class="lane-sub">12s index build captured ONCE in Golden Snapshot; actors restore in ~100ms on scale-out</div>
-        </div>
-        <div class="hpa-badge mono" id="subHpaBadge">HPA: 1/3 Desired | 1/3 Active</div>
-      </div>
-
-      <div class="metrics-row mono">
-        <div class="metric-box">
-          <span class="lbl">Goodput QPS (200)</span>
-          <span class="val good" id="subGoodQPS">0.0</span>
-        </div>
-        <div class="metric-box">
-          <span class="lbl">Shed QPS (429/503)</span>
-          <span class="val shed" id="subShedQPS">0.0</span>
-        </div>
-        <div class="metric-box">
-          <span class="lbl">Ready Capacity</span>
-          <span class="val cyan" id="subCapQPS">20 QPS</span>
-        </div>
-        <div class="metric-box">
-          <span class="lbl">Success / Shed</span>
-          <span class="val" id="subRateVal">100% (0 shed)</span>
+        <div class="bay-foot">
+          <span>Resident Index: <strong id="heapMBVal" style="color:var(--text-primary)">64.2 MB</strong> (50,000 docs · 78,498 primes)</span>
         </div>
       </div>
+    </section>
 
-      <div class="chart-wrap">
-        <div class="chart-legend">
-          <span>Real-Time Throughput (QPS)</span>
-          <div class="legend-items">
-            <span><i class="legend-dot" style="background:#10b981"></i>Goodput (200 OK)</span>
-            <span><i class="legend-dot" style="background:#ef4444"></i>Shed Load (429)</span>
-            <span><i class="legend-dot" style="background:#94a3b8"></i>Demand QPS</span>
+    <!-- Dual-Channel Rack Units -->
+    <section class="dual-rack" aria-label="Dual Backend HPA Comparison">
+      <!-- CH-A: Standard Kubernetes HPA + Deployment -->
+      <div class="rack-channel k8s-channel">
+        <div class="channel-header">
+          <div class="ch-title-group">
+            <div class="ch-tag-row">
+              <span class="ch-designator">CH-A // TRACK 01</span>
+              <span>COLD-BOOT REBUILD ON SCALE-OUT (12.0s)</span>
+            </div>
+            <h2 class="channel-title">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Standard Kubernetes HPA + Deployment
+            </h2>
+            <div class="channel-sub">Path: <code>svc/coldstart-k8s-router → Pod</code> · Every scaled Pod runs the 6-stage 50k-doc index build before <code>/readyz</code> flips 200 OK</div>
+          </div>
+          <div class="hpa-module" id="k8sHpaBadge">HPA: 1/3 Desired | 1/3 Ready</div>
+        </div>
+
+        <div class="telemetry-cells">
+          <div class="t-cell">
+            <span class="lbl">Goodput QPS (200)</span>
+            <span class="val good" id="k8sGoodQPS">0.0</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Shed QPS (429/503)</span>
+            <span class="val shed" id="k8sShedQPS">0.0</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Ready Capacity</span>
+            <span class="val amber" id="k8sCapQPS">20 QPS</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Success / Shed</span>
+            <span class="val" id="k8sRateVal">100% (0 shed)</span>
           </div>
         </div>
-        <canvas id="subChart" class="qps-chart" width="600" height="135"></canvas>
+
+        <div class="scope-panel">
+          <div class="scope-toolbar">
+            <div class="scope-title">
+              <span>CH-A OSCILLOSCOPE // QPS TRACE (30s WINDOW)</span>
+              <span id="k8sHoverReadout" style="color:var(--sig-amber-bright)"></span>
+            </div>
+            <div class="scope-legend">
+              <span class="legend-item"><i class="swatch" style="background:#10b981"></i>Goodput (200)</span>
+              <span class="legend-item"><i class="swatch hatch"></i>429 Shed Zone</span>
+              <span class="legend-item"><i class="swatch" style="background:#f59e0b"></i>Ready Cap</span>
+              <span class="legend-item"><i class="swatch" style="background:#94a3b8"></i>Demand QPS</span>
+            </div>
+          </div>
+          <div class="scope-canvas-wrap">
+            <canvas id="k8sChart" class="qps-chart" width="680" height="176"></canvas>
+          </div>
+        </div>
+
+        <div class="bays-header">
+          <span>REPLICA SLOTS (1..3) // 6-STAGE INDEX BUILD TELEMETRY</span>
+          <span id="k8sLatencyBadge">P50: 0.0ms | P99: 0.0ms</span>
+        </div>
+        <div class="replicas-rack" id="k8sReplicas"></div>
       </div>
 
-      <div class="replicas-grid" id="subReplicas"></div>
-    </div>
-  </section>
+      <!-- CH-B: Agent Substrate Golden Snapshot HPA -->
+      <div class="rack-channel sub-channel">
+        <div class="channel-header">
+          <div class="ch-title-group">
+            <div class="ch-tag-row">
+              <span class="ch-designator">CH-B // TRACK 02</span>
+              <span>GOLDEN SNAPSHOT MEMORY CLONE (~95ms WAKE)</span>
+            </div>
+            <h2 class="channel-title">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Agent Substrate HPA + Golden Snapshot Actors
+            </h2>
+            <div class="channel-sub">Path: <code>svc/atenet-router → WorkerPool</code> · 12s index build captured ONCE in Golden Snapshot; actors restore in ~100ms</div>
+          </div>
+          <div class="hpa-module" id="subHpaBadge">HPA: 1/3 Desired | 1/3 Active</div>
+        </div>
 
-  <section class="inspector">
-    <div class="inspector-head">
-      <h3>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        Live In-Memory Search Query Stream (50,000 Indexed Packages & Symbols)
-      </h3>
-      <span class="mono" style="font-size:11px;color:var(--text-muted)">Notice all Substrate clones share the exact same Golden Heap Fingerprint</span>
-    </div>
-    <table class="query-table mono">
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Backend</th>
-          <th>Replica</th>
-          <th>Search Query</th>
-          <th>Docs Scanned</th>
-          <th>Top Ranked Symbol</th>
-          <th>Golden Heap Fingerprint</th>
-          <th>Latency</th>
-        </tr>
-      </thead>
-      <tbody id="searchLogBody"></tbody>
-    </table>
-  </section>
+        <div class="telemetry-cells">
+          <div class="t-cell">
+            <span class="lbl">Goodput QPS (200)</span>
+            <span class="val good" id="subGoodQPS">0.0</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Shed QPS (429/503)</span>
+            <span class="val shed" id="subShedQPS">0.0</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Ready Capacity</span>
+            <span class="val ice" id="subCapQPS">20 QPS</span>
+          </div>
+          <div class="t-cell">
+            <span class="lbl">Success / Shed</span>
+            <span class="val" id="subRateVal">100% (0 shed)</span>
+          </div>
+        </div>
+
+        <div class="scope-panel">
+          <div class="scope-toolbar">
+            <div class="scope-title">
+              <span>CH-B OSCILLOSCOPE // QPS TRACE (30s WINDOW)</span>
+              <span id="subHoverReadout" style="color:var(--sig-emerald-bright)"></span>
+            </div>
+            <div class="scope-legend">
+              <span class="legend-item"><i class="swatch" style="background:#10b981"></i>Goodput (200)</span>
+              <span class="legend-item"><i class="swatch hatch"></i>429 Shed Zone</span>
+              <span class="legend-item"><i class="swatch" style="background:#38bdf8"></i>Ready Cap</span>
+              <span class="legend-item"><i class="swatch" style="background:#94a3b8"></i>Demand QPS</span>
+            </div>
+          </div>
+          <div class="scope-canvas-wrap">
+            <canvas id="subChart" class="qps-chart" width="680" height="176"></canvas>
+          </div>
+        </div>
+
+        <div class="bays-header">
+          <span>ACTOR CLONE SLOTS (1..3) // GOLDEN SNAPSHOT RESTORE</span>
+          <span id="subLatencyBadge">P50: 0.0ms | P99: 0.0ms</span>
+        </div>
+        <div class="replicas-rack" id="subReplicas"></div>
+      </div>
+    </section>
+
+    <!-- Live In-Memory Search Query Stream & Interactive Probe Bar -->
+    <section class="stream-console" aria-label="Live Search Query Stream">
+      <div class="console-bar">
+        <h3 class="console-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Live In-Memory Search Query Stream (50,000 Indexed Packages &amp; Symbols)
+        </h3>
+        <div class="probe-controls">
+          <span class="probe-label">Manual Dual Probe:</span>
+          <button class="probe-chip" onclick="probeSearch('kubernetes autoscaler')">kubernetes autoscaler</button>
+          <button class="probe-chip" onclick="probeSearch('gvisor snapshot')">gvisor snapshot</button>
+          <button class="probe-chip" onclick="probeSearch('raft consensus')">raft consensus</button>
+          <button class="probe-chip" onclick="probeSearch('trigram index')">trigram index</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="query-table">
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Backend</th>
+              <th>Replica Slot</th>
+              <th>Status</th>
+              <th>Search Query</th>
+              <th>Docs Scanned</th>
+              <th>Top Ranked Symbol / Outcome</th>
+              <th>Golden Heap Fingerprint</th>
+              <th>Latency</th>
+            </tr>
+          </thead>
+          <tbody id="searchLogBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <script>
+    const STAGE_LABELS = [
+      'S1 CORPUS',
+      'S2 TOKENS',
+      'S3 3-GRAMS',
+      'S4 BM25 IDF',
+      'S5 PRIMES',
+      'S6 READY'
+    ];
+
+    let latestState = null;
+    let hoverIndex = -1;
+
     async function triggerSpikeScenario() {
       await fetch('/api/spike?baseline_qps=15&spike_qps=60&baseline_sec=3&spike_sec=18&cooldown_sec=3', { method: 'POST' });
       fetchState();
@@ -640,80 +1283,222 @@
       fetchState();
     }
 
+    async function probeSearch(query) {
+      await fetch('/api/probe?q=' + encodeURIComponent(query), { method: 'POST' });
+      fetchState();
+    }
+
+    function createEl(tag, className, text) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (text !== undefined && text !== null) el.textContent = String(text);
+      return el;
+    }
+
+    function classifyReplicaState(state) {
+      const s = (state || '').toUpperCase();
+      if (s === 'READY') return 'ready';
+      if (s.includes('BOOT') || s === 'WAKING') return 'booting';
+      if (s === 'SUSPENDED') return 'suspended';
+      return 'offline';
+    }
+
+    function buildLedMatrix(replica, isSubstrate) {
+      const matrix = createEl('div', 'led-matrix');
+      const state = (replica.state || '').toUpperCase();
+      const step = Number(replica.init_step || 0);
+
+      for (let i = 0; i < STAGE_LABELS.length; i++) {
+        const idx = i + 1;
+        let segClass = 'led-seg';
+
+        if (state === 'READY') {
+          segClass += ' seg-ready';
+        } else if (isSubstrate && state === 'SUSPENDED') {
+          segClass += ' seg-standby';
+        } else if (state === 'COLD_BOOTING' || state === 'WAKING') {
+          if (idx < step) {
+            segClass += ' seg-boot-done';
+          } else if (idx === step || (state === 'WAKING' && idx === 6)) {
+            segClass += ' seg-boot-active';
+          }
+        }
+
+        const seg = createEl('div', segClass);
+        const labelSpan = createEl('span', '', STAGE_LABELS[i]);
+        const bulb = createEl('span', 'led-bulb');
+        seg.appendChild(labelSpan);
+        seg.appendChild(bulb);
+        matrix.appendChild(seg);
+      }
+      return matrix;
+    }
+
     function renderReplicas(containerId, replicas, isSubstrate) {
-      const el = document.getElementById(containerId);
-      el.innerHTML = replicas.map(r => {
-        const stLower = r.state.toLowerCase().includes('boot') ? 'booting'
-          : r.state === 'READY' ? 'ready'
-          : r.state === 'SUSPENDED' ? 'suspended' : 'offline';
+      const container = document.getElementById(containerId);
+      if (!container) return;
 
-        let pct = 0;
-        if (r.state === 'READY') pct = 100;
-        else if (r.state === 'COLD_BOOTING' && r.boot_target_ms > 0) {
-          pct = Math.min(98, Math.round((r.boot_elapsed_ms / r.boot_target_ms) * 100));
-        } else if (r.state === 'SUSPENDED') pct = 100;
+      const nodes = (replicas || []).map(r => {
+        const stClass = classifyReplicaState(r.state);
+        const bay = createEl('div', 'replica-bay ' + stClass);
 
-        const bootInfo = isSubstrate
-          ? (r.state === 'READY' ? `Golden Wake: ${r.wake_latency_ms || 95}ms` : `GCS Snapshot Ready ($0 idle)`)
-          : (r.state === 'COLD_BOOTING' ? `Cold Boot: ${(r.boot_elapsed_ms/1000).toFixed(1)}s / ${(r.boot_target_ms/1000).toFixed(1)}s` : (r.state === 'READY' ? `Ready (20 QPS cap)` : `Scaled down`));
+        // Top row: slot ID + replica name + fingerprint pill + state badge
+        const topRow = createEl('div', 'bay-top-row');
+        const idGroup = createEl('div', 'bay-id-group');
 
-        return `
-          <div class="replica-card ${stLower}">
-            <div class="rep-top">
-              <div class="rep-name mono">
-                <span>#${r.index} ${r.name}</span>
-                <span class="fp-pill">heap:${r.golden_heap_fingerprint || 'pending'}</span>
-              </div>
-              <span class="state-tag ${stLower} mono">${r.state}</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill ${stLower}" style="width:${pct}%"></div>
-            </div>
-            <div class="rep-meta mono">
-              <span>${r.init_stage}</span>
-              <span>${bootInfo} | IP: ${r.pod_ip} | Heap: ${r.heap_alloc_mb.toFixed(1)}MB | 200 OK: ${r.served_count} | 429 Shed: ${r.shed_count}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
+        const slotNum = createEl('span', 'slot-num', 'SLOT 0' + r.index);
+        const repName = createEl('span', 'rep-name', r.name);
+        const fpClass = 'fp-pill ' + (isSubstrate ? 'golden-match' : 'k8s-rebuild');
+        const fpText = 'heap:' + (r.golden_heap_fingerprint || 'pending');
+        const fpPill = createEl('span', fpClass, fpText);
+
+        idGroup.appendChild(slotNum);
+        idGroup.appendChild(repName);
+        idGroup.appendChild(fpPill);
+
+        const stateLabel = isSubstrate && r.state === 'READY'
+          ? 'READY · GOLDEN CLONE'
+          : (isSubstrate && r.state === 'SUSPENDED' ? 'SUSPENDED IN GCS ($0)' : r.state);
+        const stateTag = createEl('span', 'state-tag ' + stClass, stateLabel);
+
+        topRow.appendChild(idGroup);
+        topRow.appendChild(stateTag);
+        bay.appendChild(topRow);
+
+        // Middle row: 6-Stage Hardware LED Matrix
+        bay.appendChild(buildLedMatrix(r, isSubstrate));
+
+        // Bottom row: stage description + counters
+        const bottomRow = createEl('div', 'bay-telemetry-row');
+        const stageText = createEl('span', 'bay-stage-text', r.init_stage || '');
+
+        const counters = createEl('div', 'bay-counters');
+        const bootMetric = isSubstrate
+          ? (r.state === 'READY' ? 'Wake: ' + (r.wake_latency_ms || 95) + 'ms' : 'Snapshot: Ready in GCS')
+          : (r.state === 'COLD_BOOTING'
+              ? 'Cold Boot: ' + (r.boot_elapsed_ms / 1000).toFixed(1) + 's / ' + (r.boot_target_ms / 1000).toFixed(1) + 's'
+              : (r.state === 'READY' ? 'Cap: 20 QPS' : 'Scaled Down'));
+
+        counters.appendChild(createEl('span', '', bootMetric));
+        counters.appendChild(createEl('span', '', 'IP: ' + (r.pod_ip || '-')));
+        counters.appendChild(createEl('span', '', 'Heap: ' + Number(r.heap_alloc_mb || 0).toFixed(1) + 'MB'));
+        counters.appendChild(createEl('span', 'cnt-ok', '200 OK: ' + (r.served_count || 0)));
+        counters.appendChild(createEl('span', 'cnt-shed', '429 SHED: ' + (r.shed_count || 0)));
+
+        bottomRow.appendChild(stageText);
+        bottomRow.appendChild(counters);
+        bay.appendChild(bottomRow);
+
+        return bay;
+      });
+
+      container.replaceChildren(...nodes);
+    }
+
+    function createDiagonalHatchPattern(ctx) {
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = 10;
+      pCanvas.height = 10;
+      const pCtx = pCanvas.getContext('2d');
+      pCtx.fillStyle = 'rgba(239, 68, 68, 0.14)';
+      pCtx.fillRect(0, 0, 10, 10);
+      pCtx.strokeStyle = 'rgba(248, 113, 113, 0.55)';
+      pCtx.lineWidth = 1.5;
+      pCtx.beginPath();
+      pCtx.moveTo(0, 10);
+      pCtx.lineTo(10, 0);
+      pCtx.stroke();
+      return ctx.createPattern(pCanvas, 'repeat');
     }
 
     function drawChart(canvasId, history, isSubstrate) {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = Math.max(320, Math.floor(rect.width));
+      const cssH = Math.max(150, Math.floor(rect.height));
+
+      if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
+        canvas.width = Math.floor(cssW * dpr);
+        canvas.height = Math.floor(cssH * dpr);
+      }
+
       const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, cssW, cssH);
 
       const maxQPS = 70;
-      const padL = 32, padR = 10, padT = 10, padB = 18;
-      const plotW = w - padL - padR;
-      const plotH = h - padT - padB;
+      const padL = 36, padR = 14, padT = 14, padB = 22;
+      const plotW = cssW - padL - padR;
+      const plotH = cssH - padT - padB;
 
-      // Grid lines
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+      // Oscilloscope graticule horizontal lines
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
       ctx.lineWidth = 1;
       ctx.fillStyle = '#64748b';
-      ctx.font = '10px ui-monospace, monospace';
+      ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
       [0, 20, 40, 60].forEach(val => {
-        const y = padT + plotH - (val / maxQPS) * plotH;
+        const y = Math.round(padT + plotH - (val / maxQPS) * plotH) + 0.5;
         ctx.beginPath();
         ctx.moveTo(padL, y);
-        ctx.lineTo(w - padR, y);
+        ctx.lineTo(cssW - padR, y);
         ctx.stroke();
-        ctx.fillText(String(val), 4, y + 3);
+        ctx.fillText(String(val), 6, y + 3);
       });
 
-      if (!history || history.length === 0) return;
+      // Vertical time graticules
       const maxPts = 30;
-      const pts = history.slice(-maxPts);
       const stepX = plotW / Math.max(1, maxPts - 1);
+      for (let i = 0; i < maxPts; i += 5) {
+        const x = Math.round(padL + i * stepX) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.55)';
+        ctx.stroke();
+      }
 
+      if (!history || history.length === 0) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '500 11px "JetBrains Mono", monospace';
+        ctx.fillText('AWAITING TELEMETRY STREAM // CLICK "RUN 24s PRODUCTION SPIKE"', padL + 16, padT + plotH / 2);
+        ctx.restore();
+        return;
+      }
+
+      const pts = history.slice(-maxPts);
       const xAt = i => padL + i * stepX;
       const yAt = v => padT + plotH - (Math.min(maxQPS, Math.max(0, v)) / maxQPS) * plotH;
 
-      // Goodput filled area
+      // 1. Cold-Boot Shed Zone Crosshatch (area between Target Demand and Goodput whenever shed > 0)
+      const hatchPattern = createDiagonalHatchPattern(ctx);
+      let shedPointsCount = 0;
+      let shedPeakX = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i];
+        const p1 = pts[i + 1];
+        const shed0 = isSubstrate ? p0.sub_shed_qps : p0.k8s_shed_qps;
+        const shed1 = isSubstrate ? p1.sub_shed_qps : p1.k8s_shed_qps;
+        const good0 = isSubstrate ? p0.sub_goodput_qps : p0.k8s_goodput_qps;
+        const good1 = isSubstrate ? p1.sub_goodput_qps : p1.k8s_goodput_qps;
+
+        if (shed0 > 0.5 || shed1 > 0.5) {
+          shedPointsCount++;
+          shedPeakX = xAt(i);
+          ctx.beginPath();
+          ctx.moveTo(xAt(i), yAt(Math.max(good0, p0.target_qps)));
+          ctx.lineTo(xAt(i + 1), yAt(Math.max(good1, p1.target_qps)));
+          ctx.lineTo(xAt(i + 1), yAt(good1));
+          ctx.lineTo(xAt(i), yAt(good0));
+          ctx.closePath();
+          ctx.fillStyle = hatchPattern;
+          ctx.fill();
+        }
+      }
+
+      // 2. Goodput Phosphor Emerald filled area
       ctx.beginPath();
       ctx.moveTo(xAt(0), yAt(0));
       pts.forEach((p, i) => {
@@ -722,21 +1507,38 @@
       });
       ctx.lineTo(xAt(pts.length - 1), yAt(0));
       ctx.closePath();
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+      const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      grad.addColorStop(0, 'rgba(16, 185, 129, 0.30)');
+      grad.addColorStop(1, 'rgba(16, 185, 129, 0.03)');
+      ctx.fillStyle = grad;
       ctx.fill();
 
-      // Goodput line
+      // 3. Active Ready Capacity Step Line (readyReplicas * 20 QPS)
       ctx.beginPath();
+      ctx.setLineDash([2, 3]);
       pts.forEach((p, i) => {
-        const val = isSubstrate ? p.sub_goodput_qps : p.k8s_goodput_qps;
-        if (i === 0) ctx.moveTo(xAt(i), yAt(val));
-        else ctx.lineTo(xAt(i), yAt(val));
+        const readyCap = (isSubstrate ? p.sub_ready : p.k8s_ready) * 20;
+        if (i === 0) ctx.moveTo(xAt(i), yAt(readyCap));
+        else ctx.lineTo(xAt(i), yAt(readyCap));
       });
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = isSubstrate ? 'rgba(56, 189, 248, 0.7)' : 'rgba(245, 158, 11, 0.7)';
+      ctx.lineWidth = 1.4;
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      // Shed line
+      // 4. Target Demand dashed line
+      ctx.beginPath();
+      ctx.setLineDash([5, 4]);
+      pts.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(xAt(i), yAt(p.target_qps));
+        else ctx.lineTo(xAt(i), yAt(p.target_qps));
+      });
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 5. Shed Load Crimson trace
       ctx.beginPath();
       pts.forEach((p, i) => {
         const val = isSubstrate ? p.sub_shed_qps : p.k8s_shed_qps;
@@ -744,81 +1546,226 @@
         else ctx.lineTo(xAt(i), yAt(val));
       });
       ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 2.0;
       ctx.stroke();
 
-      // Target Demand dashed line
+      // 6. Goodput Phosphor Emerald trace
       ctx.beginPath();
-      ctx.setLineDash([4, 4]);
       pts.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(xAt(i), yAt(p.target_qps));
-        else ctx.lineTo(xAt(i), yAt(p.target_qps));
+        const val = isSubstrate ? p.sub_goodput_qps : p.k8s_goodput_qps;
+        if (i === 0) ctx.moveTo(xAt(i), yAt(val));
+        else ctx.lineTo(xAt(i), yAt(val));
       });
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.4;
       ctx.stroke();
-      ctx.setLineDash([]);
+
+      // Callout badge if Cold-Boot Shed Zone is present
+      if (!isSubstrate && shedPointsCount >= 2) {
+        const badgeX = Math.min(cssW - 210, Math.max(padL + 8, shedPeakX - 90));
+        const badgeY = padT + 8;
+        ctx.fillStyle = 'rgba(15, 10, 14, 0.92)';
+        ctx.fillRect(badgeX, badgeY, 194, 20);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(badgeX, badgeY, 194, 20);
+        ctx.fillStyle = '#f87171';
+        ctx.font = '700 10px "JetBrains Mono", monospace';
+        ctx.fillText('! 12s COLD-BOOT 429 SHED ZONE', badgeX + 7, badgeY + 13);
+      }
+
+      // Hover crosshair
+      if (hoverIndex >= 0 && hoverIndex < pts.length) {
+        const hp = pts[hoverIndex];
+        const hx = xAt(hoverIndex);
+        ctx.beginPath();
+        ctx.moveTo(hx, padT);
+        ctx.lineTo(hx, padT + plotH);
+        ctx.strokeStyle = 'rgba(248, 250, 252, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const goodV = isSubstrate ? hp.sub_goodput_qps : hp.k8s_goodput_qps;
+        const shedV = isSubstrate ? hp.sub_shed_qps : hp.k8s_shed_qps;
+        const readyV = isSubstrate ? hp.sub_ready : hp.k8s_ready;
+        const readoutEl = document.getElementById(isSubstrate ? 'subHoverReadout' : 'k8sHoverReadout');
+        if (readoutEl) {
+          readoutEl.textContent = `[t=${hp.elapsed_sec}s | Demand:${hp.target_qps} | 200:${goodV.toFixed(1)} | 429:${shedV.toFixed(1)} | Ready:${readyV}/3]`;
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function attachScopeHover(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      canvas.addEventListener('mousemove', ev => {
+        if (!latestState || !latestState.history || latestState.history.length === 0) return;
+        const rect = canvas.getBoundingClientRect();
+        const padL = 36, padR = 14;
+        const plotW = rect.width - padL - padR;
+        const relX = ev.clientX - rect.left - padL;
+        const maxPts = 30;
+        const pts = latestState.history.slice(-maxPts);
+        const stepX = plotW / Math.max(1, maxPts - 1);
+        const idx = Math.round(relX / stepX);
+        if (idx >= 0 && idx < pts.length) {
+          hoverIndex = idx;
+          drawChart('k8sChart', latestState.history, false);
+          drawChart('subChart', latestState.history, true);
+        }
+      });
+      canvas.addEventListener('mouseleave', () => {
+        hoverIndex = -1;
+        const k8sR = document.getElementById('k8sHoverReadout');
+        const subR = document.getElementById('subHoverReadout');
+        if (k8sR) k8sR.textContent = '';
+        if (subR) subR.textContent = '';
+        if (latestState) {
+          drawChart('k8sChart', latestState.history || [], false);
+          drawChart('subChart', latestState.history || [], true);
+        }
+      });
+    }
+
+    function updateGoldenFingerprintProof(st) {
+      const subReps = (st.substrate && st.substrate.replicas) || [];
+      const k8sReps = (st.k8s && st.k8s.replicas) || [];
+
+      const subFps = subReps.map(r => r.golden_heap_fingerprint).filter(Boolean);
+      const uniqueSub = Array.from(new Set(subFps));
+      const subFpEl = document.getElementById('subFpReadout');
+      const badgeEl = document.getElementById('heapProofBadge');
+
+      if (subFpEl) {
+        if (uniqueSub.length === 1) {
+          subFpEl.textContent = `heap:${uniqueSub[0]} (all ${subReps.length}/3 identical)`;
+        } else if (uniqueSub.length > 1) {
+          subFpEl.textContent = uniqueSub.join(' | ');
+        } else {
+          subFpEl.textContent = 'awaiting Golden Snapshot fingerprint';
+        }
+      }
+
+      if (badgeEl) {
+        const allMatch = uniqueSub.length === 1 && subReps.length >= 3;
+        badgeEl.textContent = allMatch ? '3/3 CLONE MATCH' : 'GOLDEN SNAPSHOT';
+      }
+
+      const k8sFpEl = document.getElementById('k8sFpReadout');
+      if (k8sFpEl) {
+        const k8sFps = k8sReps.map(r => `#${r.index}:${(r.golden_heap_fingerprint || 'boot').slice(0, 12)}`);
+        k8sFpEl.textContent = k8sFps.join(' · ');
+      }
+    }
+
+    function renderSearchStream(samples) {
+      const tbody = document.getElementById('searchLogBody');
+      if (!tbody) return;
+
+      const rows = (samples || []).slice(0, 10).map(s => {
+        const tr = document.createElement('tr');
+        const isSub = s.backend === 'substrate';
+        const isOk = !s.status || s.status === 200;
+
+        tr.appendChild(createEl('td', '', s.timestamp || '-'));
+
+        const tdBack = createEl('td', '', (s.backend || '').toUpperCase());
+        tdBack.style.color = isSub ? 'var(--sig-emerald-bright)' : 'var(--sig-amber-bright)';
+        tdBack.style.fontWeight = '700';
+        tr.appendChild(tdBack);
+
+        tr.appendChild(createEl('td', '', s.replica || '-'));
+
+        const tdStatus = document.createElement('td');
+        const statusBadge = createEl('span', 'status-pill ' + (isOk ? 'ok' : 'shed'), isOk ? '200 OK' : (s.status + ' SHED'));
+        tdStatus.appendChild(statusBadge);
+        tr.appendChild(tdStatus);
+
+        tr.appendChild(createEl('td', '', s.query || '-'));
+        tr.appendChild(createEl('td', '', isOk ? ((s.docs_scanned || 0) + ' docs') : '0 docs (shed)'));
+
+        const tdSym = createEl('td', '', s.top_symbol || '-');
+        tdSym.style.color = isOk ? 'var(--sig-ice-bright)' : 'var(--sig-crimson-bright)';
+        tr.appendChild(tdSym);
+
+        const tdFp = document.createElement('td');
+        const fpSpan = createEl('span', 'fp-pill ' + (isSub ? 'golden-match' : 'k8s-rebuild'), s.golden_fingerprint || '-');
+        tdFp.appendChild(fpSpan);
+        tr.appendChild(tdFp);
+
+        tr.appendChild(createEl('td', '', Number(s.latency_ms || 0).toFixed(1) + 'ms'));
+        return tr;
+      });
+
+      tbody.replaceChildren(...rows);
     }
 
     async function fetchState() {
       try {
         const res = await fetch('/api/state');
         const st = await res.json();
+        latestState = st;
 
-        document.getElementById('targetQPSVal').textContent = st.target_qps.toFixed(0);
+        const qps = Number(st.target_qps || 0);
+        document.getElementById('targetQPSVal').textContent = qps.toFixed(0);
+        const desiredCalc = Math.max(1, Math.min(3, Math.ceil(qps / 20)));
+        document.getElementById('hpaFormulaSub').textContent = `desired = ceil(${qps.toFixed(0)} / 20) = ${qps > 0 ? desiredCalc : 1}`;
+
         const pill = document.getElementById('phasePill');
         pill.textContent = st.scenario_phase || 'IDLE';
-        pill.className = 'phase-pill mono' + (st.target_qps >= 40 ? ' spike' : '');
+        pill.className = 'phase-pill' + (qps >= 40 ? ' spike' : '');
 
         document.getElementById('subTotalGood').textContent = st.substrate.total_goodput;
         document.getElementById('k8sTotalGood').textContent = st.k8s.total_goodput;
         document.getElementById('extraServedSub').textContent = `+${st.extra_queries_served} extra production queries served on Substrate`;
-        document.getElementById('multiplierVal').textContent = st.goodput_multiplier.toFixed(2) + 'x';
+        document.getElementById('multiplierVal').textContent = Number(st.goodput_multiplier || 1).toFixed(2) + 'x';
 
-        const subReadyStr = st.substrate.scale_out_ready_ms > 0 ? `${st.substrate.scale_out_ready_ms}ms` : '~100ms';
+        const subReadyStr = st.substrate.scale_out_ready_ms > 0 ? `${st.substrate.scale_out_ready_ms}ms` : '~95ms';
         const k8sReadyStr = st.k8s.scale_out_ready_ms > 0 ? `${st.k8s.scale_out_ready_ms}ms` : '~12,000ms';
         document.getElementById('scaleReadySub').textContent = `Scale-Out to 3/3 Ready: Sub ${subReadyStr} vs K8s ${k8sReadyStr}`;
 
         if (st.substrate.replicas && st.substrate.replicas.length > 0) {
-          document.getElementById('heapMBVal').textContent = st.substrate.replicas[0].heap_alloc_mb.toFixed(1) + ' MB';
+          document.getElementById('heapMBVal').textContent = Number(st.substrate.replicas[0].heap_alloc_mb || 64.2).toFixed(1) + ' MB';
         }
+        updateGoldenFingerprintProof(st);
 
-        // K8s lane
+        // CH-A: K8s lane
         document.getElementById('k8sHpaBadge').textContent = `HPA: ${st.k8s.hpa_desired_replicas}/3 Desired | ${st.k8s.ready_replicas}/3 Ready`;
-        document.getElementById('k8sGoodQPS').textContent = st.k8s.goodput_qps.toFixed(1);
-        document.getElementById('k8sShedQPS').textContent = st.k8s.shed_qps.toFixed(1);
-        document.getElementById('k8sCapQPS').textContent = `${st.k8s.active_capacity_qps.toFixed(0)} QPS`;
-        document.getElementById('k8sRateVal').textContent = `${st.k8s.success_rate_pct.toFixed(1)}% (${st.k8s.total_shed} shed)`;
+        document.getElementById('k8sGoodQPS').textContent = Number(st.k8s.goodput_qps || 0).toFixed(1);
+        document.getElementById('k8sShedQPS').textContent = Number(st.k8s.shed_qps || 0).toFixed(1);
+        document.getElementById('k8sCapQPS').textContent = `${Number(st.k8s.active_capacity_qps || 20).toFixed(0)} QPS`;
+        document.getElementById('k8sRateVal').textContent = `${Number(st.k8s.success_rate_pct || 100).toFixed(1)}% (${st.k8s.total_shed} shed)`;
+        document.getElementById('k8sLatencyBadge').textContent = `P50: ${Number(st.k8s.p50_latency_ms || 0).toFixed(1)}ms | P99: ${Number(st.k8s.p99_latency_ms || 0).toFixed(1)}ms`;
         renderReplicas('k8sReplicas', st.k8s.replicas || [], false);
         drawChart('k8sChart', st.history || [], false);
 
-        // Substrate lane
+        // CH-B: Substrate lane
         document.getElementById('subHpaBadge').textContent = `HPA: ${st.substrate.hpa_desired_replicas}/3 Desired | ${st.substrate.ready_replicas}/3 Active`;
-        document.getElementById('subGoodQPS').textContent = st.substrate.goodput_qps.toFixed(1);
-        document.getElementById('subShedQPS').textContent = st.substrate.shed_qps.toFixed(1);
-        document.getElementById('subCapQPS').textContent = `${st.substrate.active_capacity_qps.toFixed(0)} QPS`;
-        document.getElementById('subRateVal').textContent = `${st.substrate.success_rate_pct.toFixed(1)}% (${st.substrate.total_shed} shed)`;
+        document.getElementById('subGoodQPS').textContent = Number(st.substrate.goodput_qps || 0).toFixed(1);
+        document.getElementById('subShedQPS').textContent = Number(st.substrate.shed_qps || 0).toFixed(1);
+        document.getElementById('subCapQPS').textContent = `${Number(st.substrate.active_capacity_qps || 20).toFixed(0)} QPS`;
+        document.getElementById('subRateVal').textContent = `${Number(st.substrate.success_rate_pct || 100).toFixed(1)}% (${st.substrate.total_shed} shed)`;
+        document.getElementById('subLatencyBadge').textContent = `P50: ${Number(st.substrate.p50_latency_ms || 0).toFixed(1)}ms | P99: ${Number(st.substrate.p99_latency_ms || 0).toFixed(1)}ms`;
         renderReplicas('subReplicas', st.substrate.replicas || [], true);
         drawChart('subChart', st.history || [], true);
 
-        // Search stream
-        const tbody = document.getElementById('searchLogBody');
-        tbody.innerHTML = (st.recent_searches || []).slice(0, 8).map(s => `
-          <tr>
-            <td>${s.timestamp}</td>
-            <td style="color:${s.backend === 'substrate' ? '#10b981' : '#f59e0b'};font-weight:700">${s.backend.toUpperCase()}</td>
-            <td>${s.replica}</td>
-            <td>${s.query}</td>
-            <td>${s.docs_scanned} docs</td>
-            <td style="color:#38bdf8">${s.top_symbol || '-'}</td>
-            <td><span class="fp-pill">${s.golden_fingerprint || '-'}</span></td>
-            <td>${s.latency_ms.toFixed(1)}ms</td>
-          </tr>
-        `).join('');
-      } catch (e) {
-        console.error(e);
+        // Live query stream
+        renderSearchStream(st.recent_searches || []);
+      } catch (err) {
+        console.error('Telemetry fetch failed', err);
       }
     }
+
+    attachScopeHover('k8sChart');
+    attachScopeHover('subChart');
+    window.addEventListener('resize', () => {
+      if (latestState) {
+        drawChart('k8sChart', latestState.history || [], false);
+        drawChart('subChart', latestState.history || [], true);
+      }
+    });
 
     fetchState();
     setInterval(fetchState, 600);
