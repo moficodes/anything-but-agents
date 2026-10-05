@@ -3,60 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Substrate TenantDB // Storage &amp; Memory Tiering Console</title>
+  <title>Substrate TenantDB // Storage &amp; Memory Tiering X-Ray</title>
   <style>
-    :root {
-      --bg-base: #070b12;
-      --bg-panel: #0d1421;
-      --bg-panel-elevated: #121c2e;
-      --bg-slot: #090f1a;
-      --border-subtle: #1e2d47;
-      --border-strong: #2d446b;
-      --text-primary: #f1f5f9;
+    :root,
+    [data-theme="dark"] {
+      --bg-canvas: #090d16;
+      --bg-panel: #111827;
+      --bg-panel-elevated: #172033;
+      --bg-slot: #0d1322;
+      --border-subtle: #1e293b;
+      --border-strong: #334155;
+      --text-primary: #f8fafc;
       --text-secondary: #94a3b8;
       --text-muted: #64748b;
+
       --accent-ram: #06b6d4;
-      --accent-ram-bg: rgba(6, 182, 212, 0.13);
+      --accent-ram-bg: rgba(6, 182, 212, 0.12);
       --accent-ram-border: rgba(6, 182, 212, 0.45);
+
       --accent-wal: #f59e0b;
-      --accent-wal-bg: rgba(245, 158, 11, 0.13);
+      --accent-wal-bg: rgba(245, 158, 11, 0.12);
       --accent-wal-border: rgba(245, 158, 11, 0.45);
+
       --accent-ok: #10b981;
-      --accent-ok-bg: rgba(16, 185, 129, 0.14);
+      --accent-ok-bg: rgba(16, 185, 129, 0.12);
       --accent-ok-border: rgba(16, 185, 129, 0.45);
+
       --accent-gdpr: #ef4444;
-      --accent-gdpr-bg: rgba(239, 68, 68, 0.13);
+      --accent-gdpr-bg: rgba(239, 68, 68, 0.12);
       --accent-gdpr-border: rgba(239, 68, 68, 0.45);
-      --accent-purple: #8b5cf6;
-      --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.45);
-      --font-mono: "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, monospace;
-      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+      --shadow-panel: 0 10px 25px -5px rgba(0, 0, 0, 0.45);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
     }
 
-    html[data-theme="light"] {
-      --bg-base: #f1f5f9;
+    [data-theme="light"] {
+      --bg-canvas: #f1f5f9;
       --bg-panel: #ffffff;
       --bg-panel-elevated: #f8fafc;
-      --bg-slot: #e2e8f0;
+      --bg-slot: #f1f5f9;
       --border-subtle: #cbd5e1;
       --border-strong: #94a3b8;
       --text-primary: #0f172a;
       --text-secondary: #334155;
-      --text-muted: #475569;
+      --text-muted: #64748b;
+
       --accent-ram: #0284c7;
-      --accent-ram-bg: rgba(2, 132, 199, 0.12);
+      --accent-ram-bg: rgba(2, 132, 199, 0.10);
       --accent-ram-border: rgba(2, 132, 199, 0.55);
+
       --accent-wal: #d97706;
-      --accent-wal-bg: rgba(217, 119, 6, 0.12);
+      --accent-wal-bg: rgba(217, 119, 6, 0.10);
       --accent-wal-border: rgba(217, 119, 6, 0.55);
+
       --accent-ok: #059669;
-      --accent-ok-bg: rgba(5, 150, 105, 0.12);
+      --accent-ok-bg: rgba(5, 150, 105, 0.10);
       --accent-ok-border: rgba(5, 150, 105, 0.55);
+
       --accent-gdpr: #dc2626;
       --accent-gdpr-bg: rgba(220, 38, 38, 0.10);
       --accent-gdpr-border: rgba(220, 38, 38, 0.55);
-      --accent-purple: #6d28d9;
-      --shadow-panel: 0 6px 18px rgba(15, 23, 42, 0.08);
+
+      --shadow-panel: 0 6px 18px -4px rgba(15, 23, 42, 0.08);
     }
 
     * {
@@ -66,12 +75,12 @@
     }
 
     body {
-      background: var(--bg-base);
+      background: var(--bg-canvas);
       color: var(--text-primary);
       font-family: var(--font-sans);
+      line-height: 1.45;
       min-height: 100vh;
       padding: 16px 20px 28px;
-      line-height: 1.45;
     }
 
     .shell {
@@ -87,7 +96,7 @@
       background: var(--bg-panel);
       border: 1px solid var(--border-subtle);
       border-radius: 10px;
-      padding: 12px 16px;
+      padding: 12px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -108,21 +117,17 @@
       border-radius: 8px;
       background: var(--accent-ram-bg);
       border: 1px solid var(--accent-ram-border);
-      color: var(--accent-ram);
       display: flex;
       align-items: center;
       justify-content: center;
+      color: var(--accent-ram);
       flex-shrink: 0;
     }
 
     .brand-title {
-      font-family: var(--font-mono);
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 800;
-      letter-spacing: 0.04em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      letter-spacing: -0.01em;
     }
 
     .brand-sub {
@@ -139,29 +144,30 @@
     }
 
     .metric-pill {
-      background: var(--bg-panel-elevated);
+      background: var(--bg-slot);
       border: 1px solid var(--border-subtle);
       border-radius: 7px;
       padding: 6px 11px;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
       display: flex;
       align-items: center;
       gap: 7px;
+      font-family: var(--font-mono);
+      font-size: 12px;
     }
 
     .metric-pill .label {
       color: var(--text-secondary);
+      font-weight: 600;
     }
 
     .metric-pill .val-ram {
       color: var(--accent-ram);
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .metric-pill .val-wal {
       color: var(--accent-wal);
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .metric-pill .val-ok {
@@ -169,23 +175,45 @@
       font-weight: 800;
     }
 
-    /* Segmented icon-only theme toggle */
+    .reset-btn {
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      border-radius: 7px;
+      padding: 6px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .reset-btn:hover {
+      border-color: var(--accent-ram);
+      background: var(--accent-ram-bg);
+    }
+
+    /* Icon-only segmented theme toggle (zero layout shift) */
     .theme-toggle {
       display: inline-flex;
-      background: var(--bg-panel-elevated);
-      border: 1px solid var(--border-subtle);
+      align-items: center;
+      background: var(--bg-slot);
+      border: 1px solid var(--border-strong);
       border-radius: 7px;
       padding: 2px;
       gap: 2px;
+      height: 34px;
     }
 
     .theme-btn {
-      width: 30px;
+      width: 28px;
       height: 28px;
       border: none;
+      border-radius: 5px;
       background: transparent;
       color: var(--text-secondary);
-      border-radius: 5px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -193,81 +221,12 @@
     }
 
     .theme-btn.active {
-      background: var(--accent-ram-bg);
-      color: var(--accent-ram);
-      border: 1px solid var(--accent-ram-border);
-    }
-
-    /* Guided Stage Playbook Bar */
-    .playbook-bar {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      padding: 10px 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .playbook-steps {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      flex: 1;
-    }
-
-    .step-btn {
       background: var(--bg-panel-elevated);
-      border: 1px solid var(--border-strong);
       color: var(--text-primary);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      padding: 8px 12px;
-      border-radius: 7px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: background 0.15s, border-color 0.15s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
-    .step-btn:hover {
-      border-color: var(--accent-ram);
-      background: var(--accent-ram-bg);
-    }
-
-    .step-btn.step-wal:hover {
-      border-color: var(--accent-wal);
-      background: var(--accent-wal-bg);
-    }
-
-    .step-btn.step-gdpr {
-      border-color: var(--accent-gdpr-border);
-      color: var(--accent-gdpr);
-      background: var(--accent-gdpr-bg);
-    }
-
-    .step-btn.step-gdpr:hover {
-      background: rgba(239, 68, 68, 0.22);
-    }
-
-    .step-num {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 20px;
-      height: 20px;
-      border-radius: 4px;
-      background: var(--bg-slot);
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    /* Multiplexer + Fleet Grid */
+    /* Top Rack: Multiplexer + 4 Tenant Cards */
     .fleet-rack {
       display: grid;
       grid-template-columns: 360px 1fr;
@@ -424,9 +383,8 @@
     }
 
     .tenant-company {
-      font-size: 12.5px;
-      font-weight: 600;
-      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 700;
     }
 
     .tenant-meta {
@@ -435,12 +393,13 @@
       color: var(--text-secondary);
       display: flex;
       justify-content: space-between;
+      gap: 4px;
     }
 
-    /* Main Workspace: Left X-Ray + Right Controls */
+    /* Main Split-Screen: Left Two-Tier X-Ray + Right 4-Step Controls */
     .main-grid {
       display: grid;
-      grid-template-columns: 1.55fr 1fr;
+      grid-template-columns: 1.35fr 0.95fr;
       gap: 14px;
     }
 
@@ -460,13 +419,12 @@
     .recovery-banner {
       border-radius: 8px;
       padding: 11px 14px;
-      font-family: var(--font-mono);
+      border: 1px solid var(--border-strong);
+      background: var(--bg-slot);
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
-      border: 1px solid var(--border-strong);
-      background: var(--bg-panel-elevated);
     }
 
     .recovery-banner.mode-hot {
@@ -485,21 +443,22 @@
     }
 
     .recovery-title {
+      font-family: var(--font-mono);
       font-size: 13px;
       font-weight: 800;
-      margin-bottom: 3px;
     }
 
     .recovery-desc {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-secondary);
+      margin-top: 2px;
     }
 
-    /* Tier 1 RAM Buffer Pool Deck */
+    /* Tier Boxes */
     .tier-box {
-      border: 1px solid var(--border-subtle);
       border-radius: 9px;
-      padding: 12px 14px;
+      padding: 13px 15px;
+      border: 1.5px solid var(--border-subtle);
       background: var(--bg-panel-elevated);
       display: flex;
       flex-direction: column;
@@ -507,24 +466,24 @@
     }
 
     .tier-box.tier-ram {
-      border-left: 4px solid var(--accent-ram);
+      border-color: var(--accent-ram-border);
     }
 
     .tier-box.tier-wal {
-      border-left: 4px solid var(--accent-wal);
+      border-color: var(--accent-wal-border);
     }
 
     .tier-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .tier-name {
       font-family: var(--font-mono);
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 800;
       display: flex;
       align-items: center;
@@ -533,10 +492,10 @@
 
     .scope-tag {
       font-family: var(--font-mono);
-      font-size: 10.5px;
-      padding: 2px 8px;
-      border-radius: 4px;
+      font-size: 11px;
       font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 5px;
     }
 
     .scope-full {
@@ -551,6 +510,7 @@
       border: 1px solid var(--accent-wal-border);
     }
 
+    /* 16-Page Buffer Pool Slab Grid */
     .slab-grid {
       display: grid;
       grid-template-columns: repeat(8, 1fr);
@@ -558,7 +518,7 @@
     }
 
     .slab-page {
-      height: 34px;
+      height: 32px;
       border-radius: 5px;
       font-family: var(--font-mono);
       font-size: 10px;
@@ -573,8 +533,8 @@
     }
 
     .slab-page.discarded {
-      border: 1px dashed var(--border-strong);
-      background: transparent;
+      border-color: var(--border-subtle);
+      background: var(--bg-slot);
       color: var(--text-muted);
     }
 
@@ -605,16 +565,17 @@
     }
 
     .stat-cell .v {
-      font-size: 13.5px;
+      font-size: 13px;
       font-weight: 800;
       margin-top: 2px;
     }
 
     /* WAL Table */
     .wal-table-wrap {
-      overflow-x: auto;
+      max-height: 190px;
+      overflow-y: auto;
       border: 1px solid var(--border-subtle);
-      border-radius: 6px;
+      border-radius: 7px;
       background: var(--bg-slot);
     }
 
@@ -625,18 +586,20 @@
       font-size: 11.5px;
     }
 
-    table.wal-table th,
-    table.wal-table td {
+    .wal-table th,
+    .wal-table td {
       padding: 7px 9px;
       text-align: left;
       border-bottom: 1px solid var(--border-subtle);
     }
 
-    table.wal-table th {
-      color: var(--text-secondary);
-      font-size: 10.5px;
+    .wal-table th {
+      font-size: 10px;
       text-transform: uppercase;
+      color: var(--text-secondary);
       background: var(--bg-panel);
+      position: sticky;
+      top: 0;
     }
 
     .pod-trail {
@@ -646,6 +609,7 @@
       flex-wrap: wrap;
       font-family: var(--font-mono);
       font-size: 11px;
+      color: var(--text-secondary);
     }
 
     .pod-chip {
@@ -656,27 +620,84 @@
       color: var(--text-primary);
     }
 
-    /* Right column controls */
-    .action-row {
+    /* Streamlined 4-Step Stage Controls */
+    .stage-steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stage-card {
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stage-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .stage-card-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      background: var(--bg-slot);
+      border: 1px solid var(--border-strong);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .stage-card-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .btn-pair {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
 
     .action-btn {
-      padding: 9px 10px;
+      width: 100%;
+      padding: 9px 12px;
       border-radius: 7px;
       border: 1px solid var(--border-strong);
-      background: var(--bg-panel-elevated);
+      background: var(--bg-slot);
       color: var(--text-primary);
       font-family: var(--font-mono);
-      font-size: 11.5px;
-      font-weight: 700;
+      font-size: 12px;
+      font-weight: 800;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 7px;
+    }
+
+    .action-btn.btn-ok {
+      border-color: var(--accent-ok-border);
+      color: var(--accent-ok);
+      background: var(--accent-ok-bg);
     }
 
     .action-btn.btn-ram {
@@ -691,82 +712,36 @@
       background: var(--accent-wal-bg);
     }
 
-    .action-btn.btn-ok {
-      border-color: var(--accent-ok-border);
-      color: var(--accent-ok);
-      background: var(--accent-ok-bg);
+    .action-btn.btn-gdpr {
+      border-color: var(--accent-gdpr);
+      background: var(--accent-gdpr);
+      color: #ffffff;
     }
 
     .sql-proof-box {
       background: var(--bg-slot);
       border: 1px solid var(--border-subtle);
-      border-radius: 7px;
-      padding: 9px 11px;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
-      color: var(--accent-ok);
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .form-input,
-    .form-select {
-      width: 100%;
-      padding: 7px 9px;
       border-radius: 6px;
-      border: 1px solid var(--border-strong);
-      background: var(--bg-slot);
-      color: var(--text-primary);
+      padding: 7px 10px;
       font-family: var(--font-mono);
-      font-size: 12px;
-    }
-
-    .gdpr-card {
-      border: 1.5px solid var(--accent-gdpr-border);
-      background: var(--accent-gdpr-bg);
-      border-radius: 9px;
-      padding: 12px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 9px;
-    }
-
-    .gdpr-btn {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 7px;
-      border: 1px solid var(--accent-gdpr);
-      background: var(--accent-gdpr);
-      color: #ffffff;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 800;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
+      font-size: 11px;
+      color: var(--accent-ok);
     }
 
     .receipt-box {
       background: var(--bg-slot);
       border: 1px solid var(--accent-gdpr-border);
       border-radius: 6px;
-      padding: 9px 11px;
+      padding: 8px 10px;
       font-family: var(--font-mono);
       font-size: 11px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .audit-list {
-      max-height: 195px;
+      max-height: 155px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -818,10 +793,13 @@
           <span class="label">GCS BANDWIDTH SAVED:</span>
           <span class="val-ok" id="hdr-savings-pct">99.997%</span>
         </div>
-        <div class="metric-pill">
-          <span class="label">MODE:</span>
-          <span id="hdr-mode">LOCAL</span>
-        </div>
+        <button type="button" class="reset-btn" onclick="resetFleet()" title="Re-seed all 4 customer databases">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+          <span>Reset 4 Customer DBs</span>
+        </button>
         <!-- Segmented icon-only Moon/Sun Projector Light Mode Toggle -->
         <div class="theme-toggle" role="group" aria-label="Theme Toggle">
           <button type="button" id="theme-toggle-dark" class="theme-btn active" title="Dark Mode" aria-label="Dark Mode">
@@ -846,35 +824,6 @@
       </div>
     </header>
 
-    <!-- Guided Stage Act III Playbook Bar -->
-    <section class="playbook-bar" aria-label="Stage Playbook">
-      <div class="playbook-steps">
-        <button type="button" class="step-btn" id="btn-step-1" onclick="runStageStep1()">
-          <span class="step-num">1</span>
-          <span>Seed 4 Customer DBs (3 Worker Pods)</span>
-        </button>
-        <button type="button" class="step-btn" id="btn-step-2" onclick="runStageStep2()">
-          <span class="step-num">2</span>
-          <span>Pause FULL &amp; Query (16MB Hot RAM Hit)</span>
-        </button>
-        <button type="button" class="step-btn step-wal" id="btn-step-3" onclick="runStageStep3()">
-          <span class="step-num">3</span>
-          <span>Suspend DATA &amp; Query (99.99% GCS Saved + WAL Replay)</span>
-        </button>
-        <button type="button" class="step-btn step-gdpr" id="btn-step-4" onclick="runStageStep4()">
-          <span class="step-num">4</span>
-          <span>GDPR Article 17 Shred (db-acme)</span>
-        </button>
-      </div>
-      <button type="button" class="step-btn" onclick="resetFleet()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="1 4 1 10 7 10"></polyline>
-          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-        </svg>
-        <span>Reset Fleet</span>
-      </button>
-    </section>
-
     <!-- Top Rack: 3-Worker Pool Multiplexer + 4-Tenant Fleet Cards -->
     <section class="fleet-rack">
       <div class="panel">
@@ -886,7 +835,7 @@
               <line x1="6" y1="6" x2="6.01" y2="6"></line>
               <line x1="6" y1="18" x2="6.01" y2="18"></line>
             </svg>
-            <span>3-Worker Pool Multiplexer (WorkerPool=3)</span>
+            <span>3-Worker Pool (WorkerPool=3)</span>
           </div>
         </div>
         <div class="worker-slots" id="worker-slots-container"></div>
@@ -901,14 +850,14 @@
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
-            <span>4 Isolated Customer Databases (Click Tenant to Inspect Storage vs. RAM Tiers)</span>
+            <span>4 Isolated Customer Databases (Click a Tenant Card to Inspect)</span>
           </div>
         </div>
         <div class="tenant-cards" id="tenant-cards-container"></div>
       </div>
     </section>
 
-    <!-- Main Centerpiece: Left Two-Tier X-Ray + Right Workbench & GDPR Shredder -->
+    <!-- Main Centerpiece: Left Two-Tier X-Ray + Right 4-Step Controls -->
     <section class="main-grid">
       <div class="xray-column">
         <div class="panel">
@@ -929,7 +878,7 @@
             <div>
               <div class="recovery-title" id="recovery-mode-title">HOT_RAM_RESUME (FULL Scope)</div>
               <div class="recovery-desc" id="recovery-mode-desc">
-                Select or seed a customer database to inspect its 16.0 MB Go Heap Buffer Pool vs. /data/wal.jsonl DurableDir.
+                Select a customer database to inspect its 16.0 MB Go Heap Buffer Pool vs. /data/wal.jsonl DurableDir.
               </div>
             </div>
           </div>
@@ -942,7 +891,7 @@
                   <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
                   <rect x="9" y="9" width="6" height="6"></rect>
                 </svg>
-                <span>TIER 1: GO HEAP RAM BUFFER POOL &amp; MATERIALIZED CACHE (16.0 MB)</span>
+                <span>TIER 1: GO HEAP RAM BUFFER POOL &amp; CACHE (16.0 MB)</span>
               </div>
               <span class="scope-tag scope-full">onPause: SNAPSHOT_CONTENT_SCOPE_FULL</span>
             </div>
@@ -1027,7 +976,7 @@
         </div>
       </div>
 
-      <!-- Right Column: Lifecycle Controls, Query Workbench & GDPR Shredder -->
+      <!-- Right Column: Clean 4-Step Controls & Audit Stream -->
       <div class="control-column">
         <div class="panel">
           <div class="panel-header">
@@ -1036,63 +985,81 @@
                 <polyline points="16 18 22 12 16 6"></polyline>
                 <polyline points="8 6 2 12 8 18"></polyline>
               </svg>
-              <span>TENANT LIFECYCLE &amp; ZERO-TENANT_ID WORKBENCH</span>
+              <span id="controls-header-title">STAGE CONTROLS // db-acme</span>
             </div>
           </div>
 
-          <div class="action-row" style="margin-bottom: 10px;">
-            <button type="button" class="action-btn btn-ok" onclick="querySelectedTenant()">
-              <span>SELECT * (Wake/Query)</span>
-            </button>
-            <button type="button" class="action-btn btn-ram" onclick="pauseSelectedTenant()">
-              <span>Pause (FULL Scope)</span>
-            </button>
-            <button type="button" class="action-btn btn-wal" onclick="suspendSelectedTenant()">
-              <span>Suspend (DATA Scope)</span>
-            </button>
-          </div>
+          <div class="stage-steps-list">
+            <!-- Step 1: Wake / Query / Write -->
+            <div class="stage-card">
+              <div class="stage-card-head">
+                <div class="stage-card-title">
+                  <span class="step-badge">1</span>
+                  <span>WAKE ON HTTP &amp; QUERY (ZERO TENANT_ID)</span>
+                </div>
+              </div>
+              <div class="sql-proof-box">
+                SELECT * FROM tenant_records; -- Zero WHERE tenant_id = ? needed
+              </div>
+              <div class="btn-pair">
+                <button type="button" class="action-btn btn-ok" onclick="querySelectedTenant()">
+                  <span>SELECT * (Wake / Read)</span>
+                </button>
+                <button type="button" class="action-btn btn-ram" onclick="insertRowSelectedTenant()">
+                  <span>+ Append Invoice ($42k)</span>
+                </button>
+              </div>
+            </div>
 
-          <div class="sql-proof-box" id="sql-isolation-proof">
-            SELECT * FROM tenant_records; -- Zero WHERE tenant_id = ? needed (Dedicated gVisor + DurableDir)
-          </div>
+            <!-- Step 2: Pause FULL -->
+            <div class="stage-card">
+              <div class="stage-card-head">
+                <div class="stage-card-title">
+                  <span class="step-badge">2</span>
+                  <span>SHORT IDLE: PAUSE IN RAM (FULL SCOPE)</span>
+                </div>
+              </div>
+              <div class="stage-card-desc">
+                Freezes <strong>both</strong> the 16.0 MB RAM Buffer Pool and <code>/data/wal.jsonl</code>. Next query resumes with <strong>0 WAL rows replayed</strong>.
+              </div>
+              <button type="button" class="action-btn btn-ram" onclick="pauseSelectedTenant()">
+                <span id="pause-btn-label">kubectl ate pause actor db-acme (FULL Scope)</span>
+              </button>
+            </div>
 
-          <div class="form-grid">
-            <select id="inp-table" class="form-select" aria-label="Table">
-              <option value="invoices">table: invoices</option>
-              <option value="subscriptions">table: subscriptions</option>
-              <option value="settings">table: settings</option>
-            </select>
-            <input id="inp-amount" class="form-input" type="number" placeholder="Amount USD (e.g. 42000)" value="42000" />
-            <input id="inp-key" class="form-input" type="text" placeholder="Key (e.g. inv-2026-09)" value="inv-2026-09" />
-            <input id="inp-val" class="form-input" type="text" placeholder="Value" value="Enterprise Expansion Pack" />
-          </div>
-          <button type="button" class="action-btn btn-ram" style="width: 100%; margin-top: 8px;" onclick="insertRowSelectedTenant()">
-            <span>INSERT INTO /data/wal.jsonl &amp; Update 16MB Buffer Pool</span>
-          </button>
-        </div>
+            <!-- Step 3: Suspend DATA -->
+            <div class="stage-card">
+              <div class="stage-card-head">
+                <div class="stage-card-title">
+                  <span class="step-badge">3</span>
+                  <span>LONG IDLE: SUSPEND TO GCS (DATA SCOPE)</span>
+                </div>
+              </div>
+              <div class="stage-card-desc">
+                Discards the 16.0 MB RAM cache, frees the Worker Pod, and uploads <strong>only</strong> <code>/data/wal.jsonl</code> (~560 B) to GCS (<strong>99.997% saved</strong>).
+              </div>
+              <button type="button" class="action-btn btn-wal" onclick="suspendSelectedTenant()">
+                <span id="suspend-btn-label">kubectl ate suspend actor db-acme (DATA Scope)</span>
+              </button>
+            </div>
 
-        <!-- GDPR Right-to-be-Forgotten Shredder -->
-        <div class="panel gdpr-card">
-          <div class="panel-header" style="margin-bottom: 2px;">
-            <div class="panel-title" style="color: var(--accent-gdpr);">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              <span>GDPR ARTICLE 17 // RIGHT-TO-BE-FORGOTTEN SHREDDER</span>
+            <!-- Step 4: GDPR Shred -->
+            <div class="stage-card" style="border-color: var(--accent-gdpr-border); background: var(--accent-gdpr-bg);">
+              <div class="stage-card-head">
+                <div class="stage-card-title" style="color: var(--accent-gdpr);">
+                  <span class="step-badge" style="color: var(--accent-gdpr); border-color: var(--accent-gdpr-border);">4</span>
+                  <span>GDPR ARTICLE 17 // RIGHT-TO-BE-FORGOTTEN SHRED</span>
+                </div>
+              </div>
+              <div class="stage-card-desc">
+                Physically destroys this customer's compute sandbox, RAM checkpoints, and <code>/data</code> volume in 1 command without touching sibling tenants:
+              </div>
+              <button type="button" class="action-btn btn-gdpr" onclick="gdprDeleteSelectedTenant()">
+                <span id="gdpr-btn-label">kubectl ate delete actor db-acme --any-state</span>
+              </button>
+              <div class="receipt-box" id="gdpr-receipt-box" style="display: none;"></div>
             </div>
           </div>
-          <div style="font-size: 12px; color: var(--text-secondary);">
-            Instead of fragile <code>DELETE FROM ... WHERE tenant_id = ?</code> across 50 shared tables, destroy the tenant's compute sandbox, RAM checkpoints, and <code>/data</code> DurableDir in one command:
-          </div>
-          <button type="button" class="gdpr-btn" onclick="gdprDeleteSelectedTenant()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18"></path>
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-            </svg>
-            <span id="gdpr-btn-label">kubectl ate delete actor db-acme --any-state</span>
-          </button>
-          <div class="receipt-box" id="gdpr-receipt-box" style="display: none;"></div>
         </div>
 
         <!-- Audit Log -->
@@ -1103,7 +1070,7 @@
                 <polyline points="4 17 10 11 4 5"></polyline>
                 <line x1="12" y1="19" x2="20" y2="19"></line>
               </svg>
-              <span>SUBSTRATE STORAGE &amp; LIFECYCLE AUDIT STREAM</span>
+              <span>LIVE SUBSTRATE COMMAND &amp; STORAGE AUDIT STREAM</span>
             </div>
           </div>
           <div class="audit-list" id="audit-log-list"></div>
@@ -1115,6 +1082,7 @@
   <script>
     let fleetState = null;
     let selectedActor = 'db-acme';
+    let autoSeedTriggered = false;
 
     // Theme toggle setup
     (function initTheme() {
@@ -1159,6 +1127,12 @@
     async function refreshState() {
       try {
         fleetState = await apiCall('/api/state');
+        const tenants = (fleetState && fleetState.tenants) || [];
+        const allUninit = tenants.length > 0 && tenants.every(t => t.status === 'UNINITIALIZED');
+        if (allUninit && !autoSeedTriggered) {
+          autoSeedTriggered = true;
+          fleetState = await apiCall('/api/tenant/seed?actor=all', 'POST');
+        }
         renderAll();
       } catch (err) {
         console.error('Failed to refresh state:', err);
@@ -1176,7 +1150,6 @@
       document.getElementById('hdr-raw-ram').textContent = formatBytes(sum.raw_full_snapshot_bytes || 0);
       document.getElementById('hdr-gcs-wal').textContent = formatBytes(sum.data_scope_committed_bytes || 0);
       document.getElementById('hdr-savings-pct').textContent = (sum.gcs_savings_pct || 99.997).toFixed(3) + '%';
-      document.getElementById('hdr-mode').textContent = (fleetState.mode || 'local').toUpperCase();
 
       // Render 3 WorkerPool slots
       const slotsEl = document.getElementById('worker-slots-container');
@@ -1187,7 +1160,7 @@
         div.className = 'worker-slot ' + cls;
         const occupant = slot.hosted_actor
           ? `${escapeHTML(slot.hosted_actor)} (${escapeHTML(slot.company_name)}) [${escapeHTML(slot.actor_state)}]`
-          : 'IDLE (Ready for &lt;100ms Actor Mount)';
+          : 'IDLE (Ready for <100ms Actor Mount)';
         div.innerHTML = `
           <span><strong>Worker-${escapeHTML(slot.slot)}</strong> <span style="color:var(--text-secondary)">(${escapeHTML(slot.pod_ip)})</span></span>
           <span>${occupant}</span>
@@ -1213,7 +1186,9 @@
         const snap = t.last_snapshot;
         const rowsCount = snap ? snap.rows_in_durable_dir : 0;
         const arr = snap && snap.materialized_stats ? '$' + snap.materialized_stats.total_revenue_usd.toLocaleString() : '$0';
-        const podInfo = t.worker_pod_ip ? `Pod ${escapeHTML(t.worker_pod_ip)}` : (isShredded ? 'SHREDDED (404)' : 'GCS / Unmounted');
+        const podInfo = (t.status === 'RUNNING' || t.status === 'PAUSED_FULL') && t.worker_pod_ip
+          ? `Pod ${escapeHTML(t.worker_pod_ip)}`
+          : (isShredded ? 'SHREDDED (404)' : 'GCS / Unmounted');
         card.innerHTML = `
           <div class="tenant-card-top">
             <span class="tenant-actor-id">${escapeHTML(t.actor_name)}</span>
@@ -1250,12 +1225,18 @@
     function renderXRay(tenant) {
       document.getElementById('xray-header-title').textContent =
         `TWO-TIER STORAGE VS. RAM X-RAY // ${tenant.actor_name} (${tenant.company_name})`;
+      document.getElementById('controls-header-title').textContent =
+        `STAGE CONTROLS // ${tenant.actor_name} (${tenant.company_name})`;
       const badge = document.getElementById('xray-status-badge');
       badge.className = 'status-badge status-' + tenant.status;
       badge.textContent = tenant.status;
 
+      document.getElementById('pause-btn-label').textContent =
+        `kubectl ate pause actor ${tenant.actor_name} (FULL Scope)`;
+      document.getElementById('suspend-btn-label').textContent =
+        `kubectl ate suspend actor ${tenant.actor_name} (DATA Scope)`;
       document.getElementById('gdpr-btn-label').textContent =
-        `kubectl ate delete actor ${tenant.actor_name} -a anything-but-agents --any-state`;
+        `kubectl ate delete actor ${tenant.actor_name} --any-state`;
 
       const snap = tenant.last_snapshot;
       const banner = document.getElementById('recovery-banner');
@@ -1290,7 +1271,7 @@
         receiptBox.style.display = 'none';
         banner.className = 'recovery-banner mode-cold';
         rTitle.textContent = 'SUSPENDED TO GCS (SNAPSHOT_CONTENT_SCOPE_DATA)';
-        rDesc.textContent = `16.0 MB dirty Go heap RAM was discarded (0 B uploaded); ONLY /data/wal.jsonl (${snap.durable_wal_bytes} B) was committed to GCS (${snap.gcs_snapshot_savings_pct.toFixed(3)}% bandwidth saved). Next HTTP query will cold-replay WAL in <1ms!`;
+        rDesc.textContent = `16.0 MB Go heap RAM cache was discarded (0 B uploaded); ONLY /data/wal.jsonl (${snap.durable_wal_bytes} B) was committed to GCS (${snap.gcs_snapshot_savings_pct.toFixed(3)}% saved). Click "SELECT *" in Step 1 to wake and cold-replay WAL in <1ms!`;
       } else if (snap) {
         receiptBox.style.display = 'none';
         const isCold = snap.recovery_mode === 'COLD_DATA_REPLAY';
@@ -1301,7 +1282,7 @@
         receiptBox.style.display = 'none';
         banner.className = 'recovery-banner';
         rTitle.textContent = 'UNINITIALIZED TENANT DATABASE';
-        rDesc.textContent = 'Click Step 1 ("Seed 4 Customer DBs") or run a query to initialize this tenant.';
+        rDesc.textContent = 'Click "Reset 4 Customer DBs" in the top bar or "SELECT *" to initialize this tenant.';
       }
 
       // Populate stats & WAL table
@@ -1351,35 +1332,23 @@
       }
     }
 
-    // Guided Stage Playbook Actions
-    async function runStageStep1() {
-      await apiCall('/api/tenant/seed?actor=all', 'POST');
-      selectedActor = 'db-acme';
-      await refreshState();
-    }
-
-    async function runStageStep2() {
-      await apiCall(`/api/tenant/pause?actor=${encodeURIComponent(selectedActor)}`, 'POST');
-      await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
-      await refreshState();
-    }
-
-    async function runStageStep3() {
-      await apiCall(`/api/tenant/suspend?actor=${encodeURIComponent(selectedActor)}`, 'POST');
-      await refreshState();
-      await new Promise(r => setTimeout(r, 450));
-      await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
-      await refreshState();
-    }
-
-    async function runStageStep4() {
-      selectedActor = 'db-acme';
-      await apiCall('/api/tenant/gdpr-delete?actor=db-acme', 'POST');
-      await refreshState();
-    }
-
     async function querySelectedTenant() {
       await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function insertRowSelectedTenant() {
+      const tenants = (fleetState && fleetState.tenants) || [];
+      const cur = tenants.find(t => t.actor_name === selectedActor);
+      const nextNum = ((cur && cur.last_snapshot && cur.last_snapshot.rows_in_durable_dir) || 3) + 1;
+      const qs = new URLSearchParams({
+        actor: selectedActor,
+        table: 'invoices',
+        key: `inv-2026-0${nextNum}`,
+        val: `Enterprise Seat Expansion #${nextNum}`,
+        amount: '42000'
+      });
+      await apiCall('/api/tenant/query?' + qs.toString(), 'POST');
       await refreshState();
     }
 
@@ -1390,17 +1359,6 @@
 
     async function suspendSelectedTenant() {
       await apiCall(`/api/tenant/suspend?actor=${encodeURIComponent(selectedActor)}`, 'POST');
-      await refreshState();
-    }
-
-    async function insertRowSelectedTenant() {
-      const table = document.getElementById('inp-table').value;
-      const key = document.getElementById('inp-key').value.trim();
-      const val = document.getElementById('inp-val').value.trim();
-      const amount = document.getElementById('inp-amount').value.trim();
-      if (!key) return;
-      const qs = new URLSearchParams({ actor: selectedActor, table, key, val, amount });
-      await apiCall('/api/tenant/query?' + qs.toString(), 'POST');
       await refreshState();
     }
 
