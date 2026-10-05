@@ -651,17 +651,48 @@ func (b *LocalSimulatorBackend) buildStateLocked() *FleetStateResponse {
 
 // --- ClusterAteBackend (--mode=gateway talking to atenet-router & kubectl-ate) ---
 
+type clusterActorInfo struct {
+	Name      string
+	Template  string
+	State     string
+	WorkerPod string
+	WorkerIP  string
+}
+
+func parseClusterActorsOutput(out string) []clusterActorInfo {
+	var res []clusterActorInfo
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || strings.EqualFold(fields[0], "ATESPACE") {
+			continue
+		}
+		info := clusterActorInfo{
+			Name:     fields[1],
+			Template: fields[2],
+			State:    strings.ToUpper(fields[3]),
+		}
+		if len(fields) >= 6 && fields[4] != "<none>" && strings.Contains(fields[5], ".") {
+			info.WorkerPod = fields[4]
+			info.WorkerIP = fields[5]
+		}
+		res = append(res, info)
+	}
+	return res
+}
+
 type ClusterAteBackend struct {
-	mu            sync.Mutex
-	atespace      string
-	template      string
-	routerURL     string
-	ateEndpoint   string
-	kubectlAteBin string
-	httpClient    *http.Client
-	trackers      map[string]*TenantTracker
-	order         []string
-	auditLog      []FleetAuditEvent
+	mu             sync.Mutex
+	atespace       string
+	template       string
+	routerURL      string
+	ateEndpoint    string
+	kubectlAteBin  string
+	httpClient     *http.Client
+	trackers       map[string]*TenantTracker
+	order          []string
+	podHistory     map[string][]string
+	knownWorkerIPs []string
+	auditLog       []FleetAuditEvent
 }
 
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
@@ -674,7 +705,8 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		trackers: make(map[string]*TenantTracker),
+		trackers:   make(map[string]*TenantTracker),
+		podHistory: make(map[string][]string),
 	}
 	b.initTrackersLocked()
 	return b
@@ -682,6 +714,7 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 
 func (b *ClusterAteBackend) initTrackersLocked() {
 	b.trackers = make(map[string]*TenantTracker)
+	b.podHistory = make(map[string][]string)
 	b.order = nil
 	for _, c := range defaultTenantCatalog {
 		b.trackers[c.ActorName] = &TenantTracker{
@@ -718,6 +751,15 @@ func (b *ClusterAteBackend) ensureTrackerLocked(actorName string) *TenantTracker
 	b.trackers[actorName] = tr
 	b.order = append(b.order, actorName)
 	return tr
+}
+
+func (b *ClusterAteBackend) recordWorkerIPLocked(ip string) {
+	if ip == "" || ip == "169.254.17.2" || ip == "unknown" {
+		return
+	}
+	if !slices.Contains(b.knownWorkerIPs, ip) && len(b.knownWorkerIPs) < 3 {
+		b.knownWorkerIPs = append(b.knownWorkerIPs, ip)
+	}
 }
 
 func (b *ClusterAteBackend) appendAuditLocked(actor, action, scope, detail string) {
@@ -759,7 +801,112 @@ func (b *ClusterAteBackend) ensureClusterActor(ctx context.Context, actorName st
 	return nil
 }
 
+// ensureWorkerSlotForActor ensures at least 1 worker pod in the 3-replica
+// WorkerPool is free if targetActor is not already occupying a worker slot.
+func (b *ClusterAteBackend) ensureWorkerSlotForActor(ctx context.Context, targetActor string) {
+	out, err := b.runKubectlAte(ctx, "get", "actors", "-a", b.atespace)
+	if err != nil || out == "" {
+		return
+	}
+	actors := parseClusterActorsOutput(out)
+
+	targetOnWorker := false
+	var activeDBActors []clusterActorInfo
+	for _, a := range actors {
+		if a.WorkerIP != "" {
+			b.mu.Lock()
+			b.recordWorkerIPLocked(a.WorkerIP)
+			b.mu.Unlock()
+		}
+		isActive := strings.Contains(a.State, "RUN") || strings.Contains(a.State, "PAUSE")
+		if !isActive {
+			continue
+		}
+		if !strings.HasPrefix(a.Name, "db-") {
+			// Suspend any active foreign demo actor so the shared 3-worker pool has capacity.
+			_, _ = b.runKubectlAte(ctx, "suspend", "actor", a.Name, "-a", b.atespace)
+			continue
+		}
+		if a.Name == targetActor {
+			targetOnWorker = true
+		} else {
+			activeDBActors = append(activeDBActors, a)
+		}
+	}
+
+	if !targetOnWorker && len(activeDBActors) >= 3 {
+		// Multiplex the 3-worker pool: suspend one active db-* tenant to free a worker slot for targetActor.
+		victim := activeDBActors[0]
+		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim.Name, "-a", b.atespace)
+		b.mu.Lock()
+		if tr, ok := b.trackers[victim.Name]; ok {
+			tr.Status = "SUSPENDED_DATA"
+			tr.WorkerSlot = 0
+			if tr.LastSnapshot != nil {
+				snapCopy := *tr.LastSnapshot
+				snapCopy.RAMBufferPoolStatus = "DISCARDED_ON_DATA_COMMIT"
+				snapCopy.RAMBufferPoolBytes = 0
+				snapCopy.RAMBufferPoolMB = 0
+				snapCopy.MaterializedStats.BufferPoolPagesWarm = 0
+				snapCopy.MaterializedStats.BufferPoolBytes = 0
+				tr.LastSnapshot = &snapCopy
+			}
+			tr.UpdatedAt = time.Now().UTC()
+		}
+		b.appendAuditLocked(victim.Name, "AUTO_MULTIPLEX_SUSPEND", "SNAPSHOT_CONTENT_SCOPE_DATA",
+			fmt.Sprintf("Worker pod (%s) multiplexed to %s; %s committed /data/wal.jsonl to GCS",
+				victim.WorkerIP, targetActor, victim.Name))
+		b.mu.Unlock()
+	}
+}
+
+func (b *ClusterAteBackend) enrichSnapshotWorkerIP(ctx context.Context, actorName string, snap *TenantSnapshot) {
+	if snap == nil {
+		return
+	}
+	out, err := b.runKubectlAte(ctx, "get", "actor", actorName, "-a", b.atespace)
+	if err != nil || out == "" {
+		return
+	}
+	var realIP string
+	for _, a := range parseClusterActorsOutput(out) {
+		if a.Name == actorName && a.WorkerIP != "" {
+			realIP = a.WorkerIP
+			break
+		}
+	}
+	if realIP == "" {
+		return
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.recordWorkerIPLocked(realIP)
+
+	hist := b.podHistory[actorName]
+	if len(hist) == 0 || hist[len(hist)-1] != realIP {
+		hist = append(hist, realIP)
+		b.podHistory[actorName] = hist
+	}
+
+	snap.CurrentPodIP = realIP
+	snap.PodIPHistory = append([]string(nil), hist...)
+	for k, r := range snap.Rows {
+		if r.PodIP == "" || r.PodIP == "169.254.17.2" {
+			r.PodIP = realIP
+			snap.Rows[k] = r
+		}
+	}
+	for i := range snap.WALEntries {
+		if snap.WALEntries[i].PodIP == "" || snap.WALEntries[i].PodIP == "169.254.17.2" {
+			snap.WALEntries[i].PodIP = realIP
+		}
+	}
+}
+
 func (b *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName, table, key, val string, amountUSD int, resumeHint string) (*TenantSnapshot, error) {
+	b.ensureWorkerSlotForActor(ctx, actorName)
+
 	u, err := url.Parse(b.routerURL + "/query")
 	if err != nil {
 		return nil, err
@@ -780,26 +927,38 @@ func (b *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName, table,
 	}
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", b.atespace, actorName))
+	var body []byte
+	var statusCode int
+	for attempt := 0; attempt < 2; attempt++ {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", b.atespace, actorName))
 
-	resp, err := b.httpClient.Do(req)
-	if err != nil {
-		return nil, err
+		resp, doErr := b.httpClient.Do(req)
+		if doErr != nil {
+			return nil, doErr
+		}
+		body, _ = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		statusCode = resp.StatusCode
+		if statusCode == http.StatusServiceUnavailable && attempt == 0 {
+			b.ensureWorkerSlotForActor(ctx, actorName)
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		break
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("actor %s HTTP %d: %s", actorName, resp.StatusCode, strings.TrimSpace(string(body)))
+	if statusCode >= 300 {
+		return nil, fmt.Errorf("actor %s HTTP %d: %s", actorName, statusCode, strings.TrimSpace(string(body)))
 	}
 
 	var snap TenantSnapshot
 	if err := json.Unmarshal(body, &snap); err != nil {
 		return nil, fmt.Errorf("decode actor %s snapshot: %w", actorName, err)
 	}
+	b.enrichSnapshotWorkerIP(ctx, actorName, &snap)
 	return &snap, nil
 }
 
@@ -826,7 +985,7 @@ func (b *ClusterAteBackend) SeedFleet(ctx context.Context, actorName string) (*F
 			lastSnap = snap
 		}
 		// If seeding all 4 tenants on a 3-worker pool, suspend completed tenants except the first two
-		// or let the cluster manage worker slots so the 3-worker pool is never deadlocked during batch seed.
+		// so 2 worker slots remain RUNNING and 1 slot remains IDLE for interactive exploration.
 		if len(targets) > 2 && name != "db-acme" && name != "db-globex" {
 			_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace)
 		}
@@ -952,6 +1111,7 @@ func (b *ClusterAteBackend) GDPRDeleteTenant(ctx context.Context, actorName stri
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	delete(b.podHistory, actorName)
 	tr := b.ensureTrackerLocked(actorName)
 	siblingStatus := "db-globex (ONLINE, 100% isolated)"
 	if globex, ok := b.trackers["db-globex"]; ok && actorName != "db-globex" && globex.LastSnapshot != nil {
@@ -1000,26 +1160,23 @@ func (b *ClusterAteBackend) GetFleetState(ctx context.Context) (*FleetStateRespo
 	defer b.mu.Unlock()
 
 	if err == nil && out != "" {
-		for _, line := range strings.Split(out, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) < 3 {
+		for _, a := range parseClusterActorsOutput(out) {
+			if a.WorkerIP != "" {
+				b.recordWorkerIPLocked(a.WorkerIP)
+			}
+			tr, ok := b.trackers[a.Name]
+			if !ok || tr.Status == "GDPR_SHREDDED" {
 				continue
 			}
-			name := fields[1]
-			stateUpper := strings.ToUpper(fields[2])
-			tr, ok := b.trackers[name]
-			if !ok {
-				continue
-			}
-			if tr.Status == "GDPR_SHREDDED" {
-				continue
+			if a.WorkerIP != "" {
+				tr.WorkerPodIP = a.WorkerIP
 			}
 			switch {
-			case strings.Contains(stateUpper, "RUN") || strings.Contains(stateUpper, "READY"):
+			case strings.Contains(a.State, "RUN") || strings.Contains(a.State, "READY"):
 				tr.Status = "RUNNING"
-			case strings.Contains(stateUpper, "PAUSE"):
+			case strings.Contains(a.State, "PAUSE"):
 				tr.Status = "PAUSED_FULL"
-			case strings.Contains(stateUpper, "SUSPEND"):
+			case strings.Contains(a.State, "SUSPEND"):
 				tr.Status = "SUSPENDED_DATA"
 			}
 		}
@@ -1028,30 +1185,55 @@ func (b *ClusterAteBackend) GetFleetState(ctx context.Context) (*FleetStateRespo
 	tenants := make([]TenantTracker, 0, len(b.order))
 	slots := make([]WorkerSlotStatus, 3)
 	for i := 0; i < 3; i++ {
+		defaultIP := fmt.Sprintf("worker-pod-%d", i+1)
+		if i < len(b.knownWorkerIPs) {
+			defaultIP = b.knownWorkerIPs[i]
+		}
 		slots[i] = WorkerSlotStatus{
 			Slot:       i + 1,
-			PodIP:      fmt.Sprintf("worker-pod-%d", i+1),
+			PodIP:      defaultIP,
 			ActorState: "IDLE",
 		}
 	}
 
-	slotIdx := 0
+	usedSlot := make([]bool, 3)
 	for _, name := range b.order {
 		tr := b.trackers[name]
-		if (tr.Status == "RUNNING" || tr.Status == "PAUSED_FULL") && slotIdx < 3 {
-			tr.WorkerSlot = slotIdx + 1
-			podIP := tr.WorkerPodIP
-			if podIP == "" {
-				podIP = fmt.Sprintf("worker-pod-%d", slotIdx+1)
+		if tr.Status == "RUNNING" || tr.Status == "PAUSED_FULL" {
+			assigned := -1
+			if tr.WorkerPodIP != "" {
+				for i := 0; i < 3; i++ {
+					if !usedSlot[i] && slots[i].PodIP == tr.WorkerPodIP {
+						assigned = i
+						break
+					}
+				}
 			}
-			slots[slotIdx] = WorkerSlotStatus{
-				Slot:        slotIdx + 1,
-				PodIP:       podIP,
-				HostedActor: tr.ActorName,
-				CompanyName: tr.CompanyName,
-				ActorState:  tr.Status,
+			if assigned == -1 {
+				for i := 0; i < 3; i++ {
+					if !usedSlot[i] {
+						assigned = i
+						break
+					}
+				}
 			}
-			slotIdx++
+			if assigned >= 0 {
+				usedSlot[assigned] = true
+				tr.WorkerSlot = assigned + 1
+				podIP := tr.WorkerPodIP
+				if podIP == "" {
+					podIP = slots[assigned].PodIP
+				}
+				slots[assigned] = WorkerSlotStatus{
+					Slot:        assigned + 1,
+					PodIP:       podIP,
+					HostedActor: tr.ActorName,
+					CompanyName: tr.CompanyName,
+					ActorState:  tr.Status,
+				}
+			} else {
+				tr.WorkerSlot = 0
+			}
 		} else {
 			tr.WorkerSlot = 0
 		}

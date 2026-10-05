@@ -258,3 +258,25 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 		t.Fatalf("expected index.html to include Projector Light Mode toggle")
 	}
 }
+
+func TestParseClusterActorsOutput(t *testing.T) {
+	raw := `ATESPACE              NAME                    TEMPLATE                        STATE                   WORKER POD                                                 WORKER IP     VERSION   AGE
+anything-but-agents   db-acme                 anything-but-agents/tenantdb    ACTOR_STATE_RUNNING     anything-but-agents/anything-but-agents-5699564879-gf8q9   10.120.0.11   1         3m10s
+anything-but-agents   db-globex               anything-but-agents/tenantdb    ACTOR_STATE_PAUSED      anything-but-agents/anything-but-agents-5699564879-fn4f8   10.120.1.22   2         2m00s
+anything-but-agents   db-initech              anything-but-agents/tenantdb    ACTOR_STATE_SUSPENDED   <none>                                                                   3         1m00s`
+
+	parsed := parseClusterActorsOutput(raw)
+	if len(parsed) != 3 {
+		t.Fatalf("expected 3 parsed actors, got %d", len(parsed))
+	}
+	if parsed[0].Name != "db-acme" || parsed[0].State != "ACTOR_STATE_RUNNING" || parsed[0].WorkerIP != "10.120.0.11" {
+		t.Fatalf("unexpected parsed[0]: %+v", parsed[0])
+	}
+	if parsed[1].Name != "db-globex" || parsed[1].State != "ACTOR_STATE_PAUSED" || parsed[1].WorkerIP != "10.120.1.22" {
+		t.Fatalf("unexpected parsed[1]: %+v", parsed[1])
+	}
+	if parsed[2].Name != "db-initech" || parsed[2].State != "ACTOR_STATE_SUSPENDED" || parsed[2].WorkerIP != "" {
+		t.Fatalf("unexpected parsed[2]: %+v", parsed[2])
+	}
+}
+
