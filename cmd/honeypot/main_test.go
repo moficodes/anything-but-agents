@@ -332,7 +332,12 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 		`id="actorTabs"`,
 		`id="attackerTargetLabel"`,
 		`id="terminalOutput"`,
+		`id="terminalHistory"`,
+		`id="terminalPromptLine"`,
 		`id="customCmdInput"`,
+		`class="terminal-inline-input"`,
+		`handleTermKeydown(event)`,
+		`focusTermInput(event)`,
 		`id="checkpointToast"`,
 		`id="socActorState"`,
 		`id="socKernelProof"`,
@@ -360,6 +365,10 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 		if !strings.Contains(html, marker) {
 			t.Errorf("GET / HTML missing required marker %q", marker)
 		}
+	}
+
+	if strings.Contains(html, `class="cmd-form"`) {
+		t.Errorf("GET / HTML must not contain separate bottom .cmd-form text box; commands should be edited inline in #terminalOutput")
 	}
 
 	if strings.Contains(html, "themeToggleLabel") {
