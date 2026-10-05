@@ -121,12 +121,23 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, st)
 	}))
 
+	actorParam := func(r *http.Request, fallback string) string {
+		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
+		if actor == "" {
+			actor = strings.TrimSpace(r.URL.Query().Get("tenant"))
+		}
+		if actor == "" {
+			return fallback
+		}
+		return actor
+	}
+
 	mux.HandleFunc("/api/tenant/seed", g.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
+		actor := actorParam(r, "")
 		st, err := g.backend.SeedFleet(r.Context(), actor)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -140,10 +151,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
-		if actor == "" {
-			actor = "db-acme"
-		}
+		actor := actorParam(r, "db-acme")
 		table := strings.TrimSpace(r.URL.Query().Get("table"))
 		key := strings.TrimSpace(r.URL.Query().Get("key"))
 		val := r.URL.Query().Get("val")
@@ -166,10 +174,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
-		if actor == "" {
-			actor = "db-acme"
-		}
+		actor := actorParam(r, "db-acme")
 		tr, err := g.backend.PauseTenant(r.Context(), actor)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -183,10 +188,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
-		if actor == "" {
-			actor = "db-acme"
-		}
+		actor := actorParam(r, "db-acme")
 		tr, err := g.backend.SuspendTenant(r.Context(), actor)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -200,10 +202,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
-		if actor == "" {
-			actor = "db-acme"
-		}
+		actor := actorParam(r, "db-acme")
 		receipt, err := g.backend.GDPRDeleteTenant(r.Context(), actor)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())

@@ -816,6 +816,7 @@ deploy_tenantdb_gateway() {
   banner "Deploying In-Cluster TenantDB Storage & Memory Tiering Gateway & LoadBalancer"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  reset_act_resources db-acme db-globex db-initech db-umbrella
   free_workers
 
   if ! kubectl get secret tenantdb-gateway -n anything-but-agents >/dev/null 2>&1; then

@@ -835,6 +835,13 @@ func (b *ClusterAteBackend) SeedFleet(ctx context.Context, actorName string) (*F
 		tr := b.ensureTrackerLocked(name)
 		if len(targets) > 2 && name != "db-acme" && name != "db-globex" {
 			tr.Status = "SUSPENDED_DATA"
+			if lastSnap != nil {
+				lastSnap.RAMBufferPoolStatus = "DISCARDED_ON_DATA_COMMIT"
+				lastSnap.RAMBufferPoolBytes = 0
+				lastSnap.RAMBufferPoolMB = 0
+				lastSnap.MaterializedStats.BufferPoolPagesWarm = 0
+				lastSnap.MaterializedStats.BufferPoolBytes = 0
+			}
 		} else {
 			tr.Status = "RUNNING"
 		}
