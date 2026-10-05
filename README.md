@@ -13,7 +13,7 @@ cmd/
   dungeon/     # Demo 1: "Look Ma, No Database" — Zork-style RPG in pure Go heap RAM (+ revert/tag save-scumming)
   dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — Mobile 2D 3-floor game + Live Mission-Control Dashboard
   coldstart/   # Demo 2: "The Instant Cloner & Production HPA QPS Race" — 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
-  tenantdb/    # Demo 3: "One DB Per User" — Per-tenant embedded DB with DurableDir + FULL Pause / DATA Commit
+  tenantdb/    # Demo 3: "One DB Per Customer" — Per-tenant embedded DB (DurableDir + 16MB Buffer Pool) + Storage X-Ray Console
   honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor sandbox + Split-Screen SOC Director's Booth UI
   timewarp/    # Demo 5: "Don't Try This at Home" — Wall-clock time-jump shock & Raft split-brain anti-pattern
 manifests/
@@ -24,6 +24,7 @@ manifests/
   coldstart-template.yaml.tmpl  # ActorTemplate (12s 50k-doc search index warmup -> Golden Snapshot)
   coldstart-hpa.yaml.tmpl       # K8s Deployment, L7 Router, HPAs, External Metrics APIService & coldstart-gateway
   tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
+  tenantdb-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Storage & Memory Tiering X-Ray UI
   honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
   honeypot-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Split-Screen Honeypot UI
   timewarp-template.yaml.tmpl   # ActorTemplate (heartbeat + lease loop for split-brain demo)
@@ -94,22 +95,22 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 * **Why this demo:**
   Multi-tenant SaaS databases are a constant source of engineering pain: a single runaway query from Tenant A degrades Tenant B (noisy neighbors), a missing `WHERE tenant_id = ?` clause causes a catastrophic data leak, and GDPR "Right to be Forgotten" deletion requires delicately purging foreign-key hierarchies across 50 shared tables. What if every customer literally had their own isolated database process (like SQLite, DuckDB, or an embedded KV store)?
 * **Why this demo specifically:**
-  `cmd/tenantdb` implements a lightweight embedded database with both an **on-disk Write-Ahead Log (`/data/wal.jsonl`)** on a `DurableDir` volume and an **in-memory buffer pool + session query counter** in RAM. Having both surfaces visible in the JSON output lets us visually prove the difference between `Pause` (`FULL` snapshot scope) and `Suspend` (`DATA` snapshot scope).
+  `cmd/tenantdb` is a multi-mode binary (`--mode=actor|gateway|local`) combining a **Two-Tier Per-Tenant Embedded Database** with a **Storage & Memory Tiering X-Ray Console** (`:8086` / `/dashboard`):
+  * **Tier 1 (Go Heap RAM Buffer Pool & Materialized View — `16.0 MB`):** Allocated lazily on first tenant query (`RAMBufferPoolSlab` + pre-computed revenue/invoice aggregations and session query counters).
+  * **Tier 2 (`DurableDir` Write-Ahead Log — `/data/wal.jsonl`, `~480 B`):** Append-only JSONL transaction log with SHA-256 integrity hashes and persisted worker pod IP history (`pod_ip_history`).
 * **What do we learn:**
-  You don't always want to upload a 4GB RAM heap to object storage when an actor goes to sleep for the weekend! Substrate separates **short-term node-local checkpointing (`onPause`)** from **long-term object-store persistence (`onCommit`)**:
-  * When `db-acme` is **Paused** (`onPause: SNAPSHOT_CONTENT_SCOPE_FULL`), both its `/data` WAL and its hot in-memory counters (`ram_queries_since_boot`) stay frozen on the node for instant hot resume.
-  * When `db-acme` is **Suspended** (`onCommit: SNAPSHOT_CONTENT_SCOPE_DATA`), Substrate discards the process memory and uploads *only* the compact `DurableDir` (`/data/wal.jsonl`) to GCS. On the next request, the binary cold-boots in milliseconds (`ram_queries_since_boot` resets to `1`) and replays `/data/wal.jsonl` (`wal_replayed_on_boot > 0`)!
+  You don't want to upload a 16 MB–4 GB RAM buffer pool to object storage for each of 10,000 customers when they go idle overnight! Substrate separates **short-term node-local checkpointing (`onPause`)** from **long-term object-store persistence (`onCommit`)**:
+  * When `db-acme` is **Paused** (`onPause: SNAPSHOT_CONTENT_SCOPE_FULL`), both its `/data` WAL and its **`16.0 MB` Hot RAM Buffer Pool** stay frozen on the node (`recovery_mode: "HOT_RAM_RESUME"`, `0` WAL entries replayed, `ram_queries_since_boot` keeps incrementing).
+  * When `db-acme` is **Suspended** (`onCommit: SNAPSHOT_CONTENT_SCOPE_DATA`), Substrate **discards the `16.0 MB` dirty RAM heap** and uploads *only* the compact `DurableDir` (`/data/wal.jsonl`, `~480 B`) to GCS—a **`99.997%` reduction in GCS snapshot bandwidth**! On the next HTTP request, `db-acme` wakes in ~100ms, replays `/data/wal.jsonl` in `<1ms` (`recovery_mode: "COLD_DATA_REPLAY"`, `wal_replayed_on_boot: N`), and rebuilds its `16.0 MB` Buffer Pool with zero data loss.
 * **Why is Substrate here:**
-  Kubernetes `PersistentVolumeClaims` (PVCs) are designed for tens of volumes per node with slow CSI attach/detach cycles (seconds to minutes)—not millions of micro-volumes attaching and detaching in 100ms as individual customers make sporadic API calls.
-* **What would be other ways to solve this:**
-  * *Shared Multi-Tenant RDS/Cloud SQL with Row-Level Security (RLS):* Always-on cost, noisy neighbors, complex per-tenant point-in-time recovery, and risky GDPR deletes.
-  * *Turso / libSQL / LiteFS / Neon:* Purpose-built serverless database platforms use similar storage-compute separation under the hood—Substrate gives you that exact architectural primitive for *any* arbitrary binary or embedded engine (`DuckDB`, `SQLite`, `RocksDB`, `LanceDB`) on your own Kubernetes cluster.
-* **Why is this cool:**
-  1. You see `Pause` vs `Suspend` (`FULL` vs `DATA` scope) in action in two `curl` commands.
-  2. **1-Command GDPR Compliance:** Deleting a customer's entire compute environment, memory state, and durable storage is literally `kubectl ate delete actor db-acme -a anything-but-agents --any-state`.
+  Kubernetes `PersistentVolumeClaims` (PVCs) are designed for tens of volumes per node with slow CSI attach/detach cycles (seconds to minutes)—not thousands of micro-volumes attaching and detaching in 100ms as individual customer databases multiplex across a 3-worker pool.
+* **Why is this cool (The Stage "Wow" Factors):**
+  1. **Two-Tier Storage vs. RAM X-Ray Inspector (`/dashboard`):** Watch 16 x `1 MB` RAM Buffer Pool pages stay hot on `Pause (FULL)`, visibly evaporate (`0 B uploaded`) on `Suspend (DATA)` with a live **`99.997%` GCS Snapshot Bandwidth Saved** meter, and auto-rehydrate from `/data/wal.jsonl` on the next query.
+  2. **4 Customer Databases on 3 Worker Pods (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`):** Every query executes `SELECT * FROM tenant_records` with **zero `WHERE tenant_id = ?` clauses** because each customer has a dedicated gVisor sandbox and `/data` volume.
+  3. **1-Command GDPR Article 17 Shredder:** Deleting a customer's entire compute environment, memory checkpoints, and durable storage is literally `kubectl ate delete actor db-acme -a anything-but-agents --any-state` (`404 TENANT_SHREDDED`), while sibling `db-globex` stays 100% online and intact.
 * **How does Substrate fit into this:**
   * **`DurableDir` volume (`volumes: [{name: data, durableDir: {}}]`)** provides a snapshot-backed per-actor filesystem directory (`/data`).
-  * **Split `snapshotConfig` (`onPause: FULL`, `onCommit: DATA`)** gives hot-RAM latency for bursty sessions and cheap data-only storage for long-term hibernation.
+  * **Split `snapshotConfig` (`onPause: FULL`, `onCommit: DATA`)** gives hot-RAM latency for bursty sessions and `99.997%` smaller data-only storage for long-term hibernation.
 
 ---
 
@@ -214,7 +215,9 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh act2-coldstart        # Act II: 12s Cold-Start Index -> 100ms Golden Snapshot Clones + HPA QPS Race
 ./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy in-cluster K8s vs Substrate HPA Stack + LoadBalancer + PRESENTER_TOKEN Secret
 ./hack/stage-demo.sh cleanup-coldstart-hpa # Clean up in-cluster Cold-Start HPA Stack & coldstart-* actors
-./hack/stage-demo.sh act3-tenantdb         # Act III: Per-Tenant DB (DurableDir + FULL Pause vs DATA Commit)
+./hack/stage-demo.sh act3-tenantdb         # Act III: Per-Tenant DB (DurableDir + 16MB Hot RAM vs DATA Commit + X-Ray UI)
+./hack/stage-demo.sh deploy-tenantdb       # Deploy in-cluster TenantDB Storage & Memory Tiering Gateway + LoadBalancer
+./hack/stage-demo.sh cleanup-tenantdb      # Clean up in-cluster TenantDB Gateway & db-* actors
 ./hack/stage-demo.sh act4-honeypot         # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
 ./hack/stage-demo.sh deploy-honeypot       # Deploy in-cluster Honeypot Split-Screen Gateway + LoadBalancer
 ./hack/stage-demo.sh cleanup-honeypot      # Clean up in-cluster Honeypot Gateway & honeypot-* actors

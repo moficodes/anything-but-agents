@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Substrate TenantDB // Storage &amp; Memory Tiering Console</title>
+  <style>
+    :root {
+      --bg-base: #070b12;
+      --bg-panel: #0d1421;
+      --bg-panel-elevated: #121c2e;
+      --bg-slot: #090f1a;
+      --border-subtle: #1e2d47;
+      --border-strong: #2d446b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-ram: #06b6d4;
+      --accent-ram-bg: rgba(6, 182, 212, 0.13);
+      --accent-ram-border: rgba(6, 182, 212, 0.45);
+      --accent-wal: #f59e0b;
+      --accent-wal-bg: rgba(245, 158, 11, 0.13);
+      --accent-wal-border: rgba(245, 158, 11, 0.45);
+      --accent-ok: #10b981;
+      --accent-ok-bg: rgba(16, 185, 129, 0.14);
+      --accent-ok-border: rgba(16, 185, 129, 0.45);
+      --accent-gdpr: #ef4444;
+      --accent-gdpr-bg: rgba(239, 68, 68, 0.13);
+      --accent-gdpr-border: rgba(239, 68, 68, 0.45);
+      --accent-purple: #8b5cf6;
+      --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.45);
+      --font-mono: "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, monospace;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    html[data-theme="light"] {
+      --bg-base: #f1f5f9;
+      --bg-panel: #ffffff;
+      --bg-panel-elevated: #f8fafc;
+      --bg-slot: #e2e8f0;
+      --border-subtle: #cbd5e1;
+      --border-strong: #94a3b8;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #475569;
+      --accent-ram: #0284c7;
+      --accent-ram-bg: rgba(2, 132, 199, 0.12);
+      --accent-ram-border: rgba(2, 132, 199, 0.55);
+      --accent-wal: #d97706;
+      --accent-wal-bg: rgba(217, 119, 6, 0.12);
+      --accent-wal-border: rgba(217, 119, 6, 0.55);
+      --accent-ok: #059669;
+      --accent-ok-bg: rgba(5, 150, 105, 0.12);
+      --accent-ok-border: rgba(5, 150, 105, 0.55);
+      --accent-gdpr: #dc2626;
+      --accent-gdpr-bg: rgba(220, 38, 38, 0.10);
+      --accent-gdpr-border: rgba(220, 38, 38, 0.55);
+      --accent-purple: #6d28d9;
+      --shadow-panel: 0 6px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      padding: 16px 20px 28px;
+      line-height: 1.45;
+    }
+
+    .shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Top Header */
+    .topbar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: var(--shadow-panel);
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: var(--accent-ram-bg);
+      border: 1px solid var(--accent-ram-border);
+      color: var(--accent-ram);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .metric-pill {
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 6px 11px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .metric-pill .label {
+      color: var(--text-secondary);
+    }
+
+    .metric-pill .val-ram {
+      color: var(--accent-ram);
+      font-weight: 700;
+    }
+
+    .metric-pill .val-wal {
+      color: var(--accent-wal);
+      font-weight: 700;
+    }
+
+    .metric-pill .val-ok {
+      color: var(--accent-ok);
+      font-weight: 800;
+    }
+
+    /* Segmented icon-only theme toggle */
+    .theme-toggle {
+      display: inline-flex;
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .theme-btn {
+      width: 30px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .theme-btn.active {
+      background: var(--accent-ram-bg);
+      color: var(--accent-ram);
+      border: 1px solid var(--accent-ram-border);
+    }
+
+    /* Guided Stage Playbook Bar */
+    .playbook-bar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .playbook-steps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .step-btn {
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .step-btn:hover {
+      border-color: var(--accent-ram);
+      background: var(--accent-ram-bg);
+    }
+
+    .step-btn.step-wal:hover {
+      border-color: var(--accent-wal);
+      background: var(--accent-wal-bg);
+    }
+
+    .step-btn.step-gdpr {
+      border-color: var(--accent-gdpr-border);
+      color: var(--accent-gdpr);
+      background: var(--accent-gdpr-bg);
+    }
+
+    .step-btn.step-gdpr:hover {
+      background: rgba(239, 68, 68, 0.22);
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: var(--bg-slot);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    /* Multiplexer + Fleet Grid */
+    .fleet-rack {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 1180px) {
+      .fleet-rack {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow-panel);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .panel-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .worker-slots {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .worker-slot {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 8px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .worker-slot.occupied {
+      border-color: var(--accent-ok-border);
+      background: var(--accent-ok-bg);
+    }
+
+    .worker-slot.paused {
+      border-color: var(--accent-ram-border);
+      background: var(--accent-ram-bg);
+    }
+
+    .tenant-cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 960px) {
+      .tenant-cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .tenant-card {
+      background: var(--bg-panel-elevated);
+      border: 1.5px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 11px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: border-color 0.15s;
+    }
+
+    .tenant-card.selected {
+      border-color: var(--accent-ram);
+      box-shadow: 0 0 0 1px var(--accent-ram);
+    }
+
+    .tenant-card.shredded {
+      border-color: var(--accent-gdpr-border);
+      background: var(--accent-gdpr-bg);
+      opacity: 0.88;
+    }
+
+    .tenant-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .tenant-actor-id {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .status-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+
+    .status-RUNNING {
+      background: var(--accent-ok-bg);
+      color: var(--accent-ok);
+      border: 1px solid var(--accent-ok-border);
+    }
+
+    .status-PAUSED_FULL {
+      background: var(--accent-ram-bg);
+      color: var(--accent-ram);
+      border: 1px solid var(--accent-ram-border);
+    }
+
+    .status-SUSPENDED_DATA {
+      background: var(--accent-wal-bg);
+      color: var(--accent-wal);
+      border: 1px solid var(--accent-wal-border);
+    }
+
+    .status-GDPR_SHREDDED {
+      background: var(--accent-gdpr-bg);
+      color: var(--accent-gdpr);
+      border: 1px solid var(--accent-gdpr-border);
+    }
+
+    .status-UNINITIALIZED {
+      background: var(--bg-slot);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .tenant-company {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .tenant-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Main Workspace: Left X-Ray + Right Controls */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.55fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 1180px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .xray-column,
+    .control-column {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .recovery-banner {
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-panel-elevated);
+    }
+
+    .recovery-banner.mode-hot {
+      border-color: var(--accent-ram-border);
+      background: var(--accent-ram-bg);
+    }
+
+    .recovery-banner.mode-cold {
+      border-color: var(--accent-wal-border);
+      background: var(--accent-wal-bg);
+    }
+
+    .recovery-banner.mode-shredded {
+      border-color: var(--accent-gdpr-border);
+      background: var(--accent-gdpr-bg);
+    }
+
+    .recovery-title {
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 3px;
+    }
+
+    .recovery-desc {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Tier 1 RAM Buffer Pool Deck */
+    .tier-box {
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 12px 14px;
+      background: var(--bg-panel-elevated);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .tier-box.tier-ram {
+      border-left: 4px solid var(--accent-ram);
+    }
+
+    .tier-box.tier-wal {
+      border-left: 4px solid var(--accent-wal);
+    }
+
+    .tier-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tier-name {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scope-tag {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .scope-full {
+      background: var(--accent-ram-bg);
+      color: var(--accent-ram);
+      border: 1px solid var(--accent-ram-border);
+    }
+
+    .scope-data {
+      background: var(--accent-wal-bg);
+      color: var(--accent-wal);
+      border: 1px solid var(--accent-wal-border);
+    }
+
+    .slab-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+    }
+
+    .slab-page {
+      height: 34px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--accent-ram-border);
+      background: var(--accent-ram-bg);
+      color: var(--accent-ram);
+    }
+
+    .slab-page.discarded {
+      border: 1px dashed var(--border-strong);
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .tier-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    @media (max-width: 760px) {
+      .tier-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-cell {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 7px 9px;
+      font-family: var(--font-mono);
+    }
+
+    .stat-cell .k {
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .stat-cell .v {
+      font-size: 13.5px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    /* WAL Table */
+    .wal-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      background: var(--bg-slot);
+    }
+
+    table.wal-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    table.wal-table th,
+    table.wal-table td {
+      padding: 7px 9px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    table.wal-table th {
+      color: var(--text-secondary);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      background: var(--bg-panel);
+    }
+
+    .pod-trail {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .pod-chip {
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--bg-slot);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+    }
+
+    /* Right column controls */
+    .action-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .action-btn {
+      padding: 9px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-panel-elevated);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .action-btn.btn-ram {
+      border-color: var(--accent-ram-border);
+      color: var(--accent-ram);
+      background: var(--accent-ram-bg);
+    }
+
+    .action-btn.btn-wal {
+      border-color: var(--accent-wal-border);
+      color: var(--accent-wal);
+      background: var(--accent-wal-bg);
+    }
+
+    .action-btn.btn-ok {
+      border-color: var(--accent-ok-border);
+      color: var(--accent-ok);
+      background: var(--accent-ok-bg);
+    }
+
+    .sql-proof-box {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      padding: 9px 11px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--accent-ok);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      padding: 7px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-slot);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .gdpr-card {
+      border: 1.5px solid var(--accent-gdpr-border);
+      background: var(--accent-gdpr-bg);
+      border-radius: 9px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .gdpr-btn {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 7px;
+      border: 1px solid var(--accent-gdpr);
+      background: var(--accent-gdpr);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .receipt-box {
+      background: var(--bg-slot);
+      border: 1px solid var(--accent-gdpr-border);
+      border-radius: 6px;
+      padding: 9px 11px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .audit-list {
+      max-height: 195px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .audit-item {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 6px 9px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- Top Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">
+            <span>SUBSTRATE TENANTDB // ONE DATABASE PER CUSTOMER</span>
+          </div>
+          <div class="brand-sub">
+            DurableDir (/data/wal.jsonl) + Split Snapshot Scopes (onPause: FULL vs. onCommit: DATA)
+          </div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="metric-pill">
+          <span class="label">FLEET HOT RAM:</span>
+          <span class="val-ram" id="hdr-raw-ram">0.0 MB</span>
+        </div>
+        <div class="metric-pill">
+          <span class="label">GCS DATA COMMIT:</span>
+          <span class="val-wal" id="hdr-gcs-wal">0 B</span>
+        </div>
+        <div class="metric-pill">
+          <span class="label">GCS BANDWIDTH SAVED:</span>
+          <span class="val-ok" id="hdr-savings-pct">99.997%</span>
+        </div>
+        <div class="metric-pill">
+          <span class="label">MODE:</span>
+          <span id="hdr-mode">LOCAL</span>
+        </div>
+        <!-- Segmented icon-only Moon/Sun Projector Light Mode Toggle -->
+        <div class="theme-toggle" role="group" aria-label="Theme Toggle">
+          <button type="button" id="theme-toggle-dark" class="theme-btn active" title="Dark Mode" aria-label="Dark Mode">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+          <button type="button" id="theme-toggle-light" class="theme-btn" title="Projector Light Mode" aria-label="Projector Light Mode">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Guided Stage Act III Playbook Bar -->
+    <section class="playbook-bar" aria-label="Stage Playbook">
+      <div class="playbook-steps">
+        <button type="button" class="step-btn" id="btn-step-1" onclick="runStageStep1()">
+          <span class="step-num">1</span>
+          <span>Seed 4 Customer DBs (3 Worker Pods)</span>
+        </button>
+        <button type="button" class="step-btn" id="btn-step-2" onclick="runStageStep2()">
+          <span class="step-num">2</span>
+          <span>Pause FULL &amp; Query (16MB Hot RAM Hit)</span>
+        </button>
+        <button type="button" class="step-btn step-wal" id="btn-step-3" onclick="runStageStep3()">
+          <span class="step-num">3</span>
+          <span>Suspend DATA &amp; Query (99.99% GCS Saved + WAL Replay)</span>
+        </button>
+        <button type="button" class="step-btn step-gdpr" id="btn-step-4" onclick="runStageStep4()">
+          <span class="step-num">4</span>
+          <span>GDPR Article 17 Shred (db-acme)</span>
+        </button>
+      </div>
+      <button type="button" class="step-btn" onclick="resetFleet()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"></polyline>
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+        </svg>
+        <span>Reset Fleet</span>
+      </button>
+    </section>
+
+    <!-- Top Rack: 3-Worker Pool Multiplexer + 4-Tenant Fleet Cards -->
+    <section class="fleet-rack">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            <span>3-Worker Pool Multiplexer (WorkerPool=3)</span>
+          </div>
+        </div>
+        <div class="worker-slots" id="worker-slots-container"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>4 Isolated Customer Databases (Click Tenant to Inspect Storage vs. RAM Tiers)</span>
+          </div>
+        </div>
+        <div class="tenant-cards" id="tenant-cards-container"></div>
+      </div>
+    </section>
+
+    <!-- Main Centerpiece: Left Two-Tier X-Ray + Right Workbench & GDPR Shredder -->
+    <section class="main-grid">
+      <div class="xray-column">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+              <span id="xray-header-title">TWO-TIER STORAGE VS. RAM X-RAY // db-acme (Acme Corp)</span>
+            </div>
+            <span class="status-badge status-RUNNING" id="xray-status-badge">RUNNING</span>
+          </div>
+
+          <!-- Recovery Mode Banner -->
+          <div class="recovery-banner mode-hot" id="recovery-banner">
+            <div>
+              <div class="recovery-title" id="recovery-mode-title">HOT_RAM_RESUME (FULL Scope)</div>
+              <div class="recovery-desc" id="recovery-mode-desc">
+                Select or seed a customer database to inspect its 16.0 MB Go Heap Buffer Pool vs. /data/wal.jsonl DurableDir.
+              </div>
+            </div>
+          </div>
+
+          <!-- Tier 1: Hot RAM Buffer Pool -->
+          <div class="tier-box tier-ram" style="margin-top: 12px;">
+            <div class="tier-header">
+              <div class="tier-name">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                  <rect x="9" y="9" width="6" height="6"></rect>
+                </svg>
+                <span>TIER 1: GO HEAP RAM BUFFER POOL &amp; MATERIALIZED CACHE (16.0 MB)</span>
+              </div>
+              <span class="scope-tag scope-full">onPause: SNAPSHOT_CONTENT_SCOPE_FULL</span>
+            </div>
+
+            <div class="slab-grid" id="ram-slab-grid"></div>
+
+            <div class="tier-stats">
+              <div class="stat-cell">
+                <div class="k">Buffer Pool State</div>
+                <div class="v" id="stat-ram-status" style="color: var(--accent-ram);">HOT_INTACT</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">RAM Queries Since Boot</div>
+                <div class="v" id="stat-ram-queries">0</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">Materialized ARR</div>
+                <div class="v" id="stat-mat-arr">$0</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">Heap Slab Size</div>
+                <div class="v" id="stat-ram-mb">16.0 MB</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tier 2: DurableDir /data/wal.jsonl -->
+          <div class="tier-box tier-wal" style="margin-top: 12px;">
+            <div class="tier-header">
+              <div class="tier-name">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span>TIER 2: DURABLEDIR MICRO-VOLUME (/data/wal.jsonl)</span>
+              </div>
+              <span class="scope-tag scope-data">onCommit: SNAPSHOT_CONTENT_SCOPE_DATA</span>
+            </div>
+
+            <div class="tier-stats">
+              <div class="stat-cell">
+                <div class="k">Committed WAL Rows</div>
+                <div class="v" id="stat-wal-rows" style="color: var(--accent-wal);">0</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">WAL Replayed On Boot</div>
+                <div class="v" id="stat-wal-replayed">0</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">Durable WAL Size</div>
+                <div class="v" id="stat-wal-bytes">0 B</div>
+              </div>
+              <div class="stat-cell">
+                <div class="k">DATA Commit Savings</div>
+                <div class="v" id="stat-wal-savings" style="color: var(--accent-ok);">99.997%</div>
+              </div>
+            </div>
+
+            <div class="pod-trail" id="pod-history-trail"></div>
+
+            <div class="wal-table-wrap">
+              <table class="wal-table">
+                <thead>
+                  <tr>
+                    <th>#Seq</th>
+                    <th>Table</th>
+                    <th>Key</th>
+                    <th>Value</th>
+                    <th>Amount</th>
+                    <th>Worker Pod IP</th>
+                    <th>SHA-256</th>
+                  </tr>
+                </thead>
+                <tbody id="wal-table-body">
+                  <tr>
+                    <td colspan="7" style="color: var(--text-muted); text-align: center;">No committed WAL entries yet</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Lifecycle Controls, Query Workbench & GDPR Shredder -->
+      <div class="control-column">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+              <span>TENANT LIFECYCLE &amp; ZERO-TENANT_ID WORKBENCH</span>
+            </div>
+          </div>
+
+          <div class="action-row" style="margin-bottom: 10px;">
+            <button type="button" class="action-btn btn-ok" onclick="querySelectedTenant()">
+              <span>SELECT * (Wake/Query)</span>
+            </button>
+            <button type="button" class="action-btn btn-ram" onclick="pauseSelectedTenant()">
+              <span>Pause (FULL Scope)</span>
+            </button>
+            <button type="button" class="action-btn btn-wal" onclick="suspendSelectedTenant()">
+              <span>Suspend (DATA Scope)</span>
+            </button>
+          </div>
+
+          <div class="sql-proof-box" id="sql-isolation-proof">
+            SELECT * FROM tenant_records; -- Zero WHERE tenant_id = ? needed (Dedicated gVisor + DurableDir)
+          </div>
+
+          <div class="form-grid">
+            <select id="inp-table" class="form-select" aria-label="Table">
+              <option value="invoices">table: invoices</option>
+              <option value="subscriptions">table: subscriptions</option>
+              <option value="settings">table: settings</option>
+            </select>
+            <input id="inp-amount" class="form-input" type="number" placeholder="Amount USD (e.g. 42000)" value="42000" />
+            <input id="inp-key" class="form-input" type="text" placeholder="Key (e.g. inv-2026-09)" value="inv-2026-09" />
+            <input id="inp-val" class="form-input" type="text" placeholder="Value" value="Enterprise Expansion Pack" />
+          </div>
+          <button type="button" class="action-btn btn-ram" style="width: 100%; margin-top: 8px;" onclick="insertRowSelectedTenant()">
+            <span>INSERT INTO /data/wal.jsonl &amp; Update 16MB Buffer Pool</span>
+          </button>
+        </div>
+
+        <!-- GDPR Right-to-be-Forgotten Shredder -->
+        <div class="panel gdpr-card">
+          <div class="panel-header" style="margin-bottom: 2px;">
+            <div class="panel-title" style="color: var(--accent-gdpr);">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>GDPR ARTICLE 17 // RIGHT-TO-BE-FORGOTTEN SHREDDER</span>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            Instead of fragile <code>DELETE FROM ... WHERE tenant_id = ?</code> across 50 shared tables, destroy the tenant's compute sandbox, RAM checkpoints, and <code>/data</code> DurableDir in one command:
+          </div>
+          <button type="button" class="gdpr-btn" onclick="gdprDeleteSelectedTenant()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18"></path>
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+            </svg>
+            <span id="gdpr-btn-label">kubectl ate delete actor db-acme --any-state</span>
+          </button>
+          <div class="receipt-box" id="gdpr-receipt-box" style="display: none;"></div>
+        </div>
+
+        <!-- Audit Log -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+              <span>SUBSTRATE STORAGE &amp; LIFECYCLE AUDIT STREAM</span>
+            </div>
+          </div>
+          <div class="audit-list" id="audit-log-list"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    let fleetState = null;
+    let selectedActor = 'db-acme';
+
+    // Theme toggle setup
+    (function initTheme() {
+      const saved = localStorage.getItem('tenantdb_theme') || 'dark';
+      applyTheme(saved);
+      document.getElementById('theme-toggle-dark').addEventListener('click', () => applyTheme('dark'));
+      document.getElementById('theme-toggle-light').addEventListener('click', () => applyTheme('light'));
+    })();
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('tenantdb_theme', theme);
+      document.getElementById('theme-toggle-dark').classList.toggle('active', theme === 'dark');
+      document.getElementById('theme-toggle-light').classList.toggle('active', theme === 'light');
+    }
+
+    function escapeHTML(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return bytes + ' B';
+    }
+
+    async function apiCall(path, method = 'GET') {
+      const res = await fetch(path, { method });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+      return data;
+    }
+
+    async function refreshState() {
+      try {
+        fleetState = await apiCall('/api/state');
+        renderAll();
+      } catch (err) {
+        console.error('Failed to refresh state:', err);
+      }
+    }
+
+    function selectTenant(actorName) {
+      selectedActor = actorName;
+      renderAll();
+    }
+
+    function renderAll() {
+      if (!fleetState) return;
+      const sum = fleetState.summary || {};
+      document.getElementById('hdr-raw-ram').textContent = formatBytes(sum.raw_full_snapshot_bytes || 0);
+      document.getElementById('hdr-gcs-wal').textContent = formatBytes(sum.data_scope_committed_bytes || 0);
+      document.getElementById('hdr-savings-pct').textContent = (sum.gcs_savings_pct || 99.997).toFixed(3) + '%';
+      document.getElementById('hdr-mode').textContent = (fleetState.mode || 'local').toUpperCase();
+
+      // Render 3 WorkerPool slots
+      const slotsEl = document.getElementById('worker-slots-container');
+      slotsEl.innerHTML = '';
+      (fleetState.worker_slots || []).forEach(slot => {
+        const div = document.createElement('div');
+        const cls = slot.actor_state === 'RUNNING' ? 'occupied' : (slot.actor_state === 'PAUSED_FULL' ? 'paused' : '');
+        div.className = 'worker-slot ' + cls;
+        const occupant = slot.hosted_actor
+          ? `${escapeHTML(slot.hosted_actor)} (${escapeHTML(slot.company_name)}) [${escapeHTML(slot.actor_state)}]`
+          : 'IDLE (Ready for &lt;100ms Actor Mount)';
+        div.innerHTML = `
+          <span><strong>Worker-${escapeHTML(slot.slot)}</strong> <span style="color:var(--text-secondary)">(${escapeHTML(slot.pod_ip)})</span></span>
+          <span>${occupant}</span>
+        `;
+        slotsEl.appendChild(div);
+      });
+
+      // Render 4 Tenant Cards
+      const cardsEl = document.getElementById('tenant-cards-container');
+      cardsEl.innerHTML = '';
+      const tenants = fleetState.tenants || [];
+      let currentTenant = tenants.find(t => t.actor_name === selectedActor) || tenants[0];
+      if (currentTenant) {
+        selectedActor = currentTenant.actor_name;
+      }
+
+      tenants.forEach(t => {
+        const card = document.createElement('div');
+        const isSelected = t.actor_name === selectedActor;
+        const isShredded = t.status === 'GDPR_SHREDDED';
+        card.className = 'tenant-card' + (isSelected ? ' selected' : '') + (isShredded ? ' shredded' : '');
+        card.onclick = () => selectTenant(t.actor_name);
+        const snap = t.last_snapshot;
+        const rowsCount = snap ? snap.rows_in_durable_dir : 0;
+        const arr = snap && snap.materialized_stats ? '$' + snap.materialized_stats.total_revenue_usd.toLocaleString() : '$0';
+        const podInfo = t.worker_pod_ip ? `Pod ${escapeHTML(t.worker_pod_ip)}` : (isShredded ? 'SHREDDED (404)' : 'GCS / Unmounted');
+        card.innerHTML = `
+          <div class="tenant-card-top">
+            <span class="tenant-actor-id">${escapeHTML(t.actor_name)}</span>
+            <span class="status-badge status-${escapeHTML(t.status)}">${escapeHTML(t.status)}</span>
+          </div>
+          <div class="tenant-company">${escapeHTML(t.company_name)} <span style="color:var(--text-secondary);font-size:11px;">(${escapeHTML(t.industry)})</span></div>
+          <div class="tenant-meta">
+            <span>Rows: ${escapeHTML(rowsCount)} | ARR: ${escapeHTML(arr)}</span>
+            <span>${podInfo}</span>
+          </div>
+        `;
+        cardsEl.appendChild(card);
+      });
+
+      if (currentTenant) {
+        renderXRay(currentTenant);
+      }
+
+      // Render Audit Log
+      const auditEl = document.getElementById('audit-log-list');
+      auditEl.innerHTML = '';
+      (fleetState.audit_log || []).forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'audit-item';
+        const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
+        item.innerHTML = `
+          <div><strong>[${escapeHTML(ts)}] ${escapeHTML(ev.actor_name)}</strong> &middot; <span style="color:var(--accent-ram)">${escapeHTML(ev.action)}</span> <span style="color:var(--accent-wal)">(${escapeHTML(ev.scope)})</span></div>
+          <div style="color:var(--text-secondary);margin-top:2px;">${escapeHTML(ev.detail)}</div>
+        `;
+        auditEl.appendChild(item);
+      });
+    }
+
+    function renderXRay(tenant) {
+      document.getElementById('xray-header-title').textContent =
+        `TWO-TIER STORAGE VS. RAM X-RAY // ${tenant.actor_name} (${tenant.company_name})`;
+      const badge = document.getElementById('xray-status-badge');
+      badge.className = 'status-badge status-' + tenant.status;
+      badge.textContent = tenant.status;
+
+      document.getElementById('gdpr-btn-label').textContent =
+        `kubectl ate delete actor ${tenant.actor_name} -a anything-but-agents --any-state`;
+
+      const snap = tenant.last_snapshot;
+      const banner = document.getElementById('recovery-banner');
+      const rTitle = document.getElementById('recovery-mode-title');
+      const rDesc = document.getElementById('recovery-mode-desc');
+
+      // Render 16x 1MB Buffer Pool Slab Grid
+      const slabGrid = document.getElementById('ram-slab-grid');
+      slabGrid.innerHTML = '';
+      const isDiscarded = tenant.status === 'SUSPENDED_DATA' || tenant.status === 'GDPR_SHREDDED' || tenant.status === 'UNINITIALIZED';
+      for (let i = 0; i < 16; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'slab-page' + (isDiscarded ? ' discarded' : '');
+        cell.innerHTML = `<span>P${String(i).padStart(2, '0')}</span><span>${isDiscarded ? '0 MB' : '1 MB'}</span>`;
+        slabGrid.appendChild(cell);
+      }
+
+      const receiptBox = document.getElementById('gdpr-receipt-box');
+      if (tenant.status === 'GDPR_SHREDDED' && tenant.gdpr_receipt) {
+        const r = tenant.gdpr_receipt;
+        banner.className = 'recovery-banner mode-shredded';
+        rTitle.textContent = '404 TENANT_SHREDDED // GDPR ARTICLE 17 ERASURE COMPLETE';
+        rDesc.textContent = `Executed "${r.command_executed}". Compute sandbox, RAM checkpoints, and /data DurableDir volume permanently destroyed. Sibling check: ${r.sibling_tenant_verified}.`;
+        receiptBox.style.display = 'flex';
+        receiptBox.innerHTML = `
+          <div><strong>GDPR ERASURE RECEIPT (${escapeHTML(r.actor_name)}):</strong></div>
+          <div>&bull; Compute Sandbox: <span style="color:var(--accent-ok)">SHREDDED</span> | RAM Snapshots: <span style="color:var(--accent-ok)">PURGED</span> | DurableDir (/data): <span style="color:var(--accent-ok)">SHREDDED</span></div>
+          <div>&bull; Post-Delete Probe: <strong>HTTP ${escapeHTML(r.post_delete_probe_http)} Not Found</strong></div>
+          <div>&bull; Sibling Isolation Proof: <strong>${escapeHTML(r.sibling_tenant_verified)}</strong></div>
+        `;
+      } else if (tenant.status === 'SUSPENDED_DATA' && snap) {
+        receiptBox.style.display = 'none';
+        banner.className = 'recovery-banner mode-cold';
+        rTitle.textContent = 'SUSPENDED TO GCS (SNAPSHOT_CONTENT_SCOPE_DATA)';
+        rDesc.textContent = `16.0 MB dirty Go heap RAM was discarded (0 B uploaded); ONLY /data/wal.jsonl (${snap.durable_wal_bytes} B) was committed to GCS (${snap.gcs_snapshot_savings_pct.toFixed(3)}% bandwidth saved). Next HTTP query will cold-replay WAL in <1ms!`;
+      } else if (snap) {
+        receiptBox.style.display = 'none';
+        const isCold = snap.recovery_mode === 'COLD_DATA_REPLAY';
+        banner.className = 'recovery-banner ' + (isCold ? 'mode-cold' : 'mode-hot');
+        rTitle.textContent = `${snap.recovery_mode} // ${tenant.status}`;
+        rDesc.textContent = snap.recovery_explanation;
+      } else {
+        receiptBox.style.display = 'none';
+        banner.className = 'recovery-banner';
+        rTitle.textContent = 'UNINITIALIZED TENANT DATABASE';
+        rDesc.textContent = 'Click Step 1 ("Seed 4 Customer DBs") or run a query to initialize this tenant.';
+      }
+
+      // Populate stats & WAL table
+      document.getElementById('stat-ram-status').textContent = snap ? snap.ram_buffer_pool_status : (tenant.status === 'GDPR_SHREDDED' ? 'SHREDDED' : 'UNINITIALIZED');
+      document.getElementById('stat-ram-queries').textContent = snap ? snap.ram_queries_since_boot : 0;
+      document.getElementById('stat-mat-arr').textContent = snap && snap.materialized_stats ? '$' + snap.materialized_stats.total_revenue_usd.toLocaleString() : '$0';
+      document.getElementById('stat-ram-mb').textContent = snap ? snap.ram_buffer_pool_mb.toFixed(1) + ' MB' : '0.0 MB';
+
+      document.getElementById('stat-wal-rows').textContent = snap ? snap.rows_in_durable_dir : 0;
+      document.getElementById('stat-wal-replayed').textContent = snap ? snap.wal_replayed_on_boot : 0;
+      document.getElementById('stat-wal-bytes').textContent = snap ? formatBytes(snap.durable_wal_bytes) : '0 B';
+      document.getElementById('stat-wal-savings').textContent = snap ? snap.gcs_snapshot_savings_pct.toFixed(3) + '%' : '99.997%';
+
+      // Pod IP History Trail
+      const trailEl = document.getElementById('pod-history-trail');
+      trailEl.innerHTML = '<span>Worker Pod IP Trail (Persisted in /data/wal.jsonl):</span>';
+      const hist = (snap && snap.pod_ip_history) || [];
+      if (hist.length === 0) {
+        trailEl.innerHTML += '<span class="pod-chip">none</span>';
+      } else {
+        hist.forEach((ip, idx) => {
+          trailEl.innerHTML += `<span class="pod-chip">${escapeHTML(ip)}</span>` + (idx < hist.length - 1 ? '<span>&rarr;</span>' : '');
+        });
+      }
+
+      // WAL Table rows
+      const tbody = document.getElementById('wal-table-body');
+      tbody.innerHTML = '';
+      const entries = (snap && snap.wal_entries) || [];
+      if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-muted); text-align: center;">No committed WAL entries on /data/wal.jsonl</td></tr>';
+      } else {
+        entries.forEach(r => {
+          const tr = document.createElement('tr');
+          const amt = r.amount_usd ? '$' + r.amount_usd.toLocaleString() : '—';
+          tr.innerHTML = `
+            <td>#${escapeHTML(r.seq)}</td>
+            <td><span class="scope-tag scope-data">${escapeHTML(r.table)}</span></td>
+            <td><strong>${escapeHTML(r.key)}</strong></td>
+            <td>${escapeHTML(r.value)}</td>
+            <td>${escapeHTML(amt)}</td>
+            <td>${escapeHTML(r.pod_ip || '—')}</td>
+            <td><code>${escapeHTML(r.sha256)}</code></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    // Guided Stage Playbook Actions
+    async function runStageStep1() {
+      await apiCall('/api/tenant/seed?actor=all', 'POST');
+      selectedActor = 'db-acme';
+      await refreshState();
+    }
+
+    async function runStageStep2() {
+      await apiCall(`/api/tenant/pause?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function runStageStep3() {
+      await apiCall(`/api/tenant/suspend?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+      await new Promise(r => setTimeout(r, 450));
+      await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function runStageStep4() {
+      selectedActor = 'db-acme';
+      await apiCall('/api/tenant/gdpr-delete?actor=db-acme', 'POST');
+      await refreshState();
+    }
+
+    async function querySelectedTenant() {
+      await apiCall(`/api/tenant/query?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function pauseSelectedTenant() {
+      await apiCall(`/api/tenant/pause?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function suspendSelectedTenant() {
+      await apiCall(`/api/tenant/suspend?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function insertRowSelectedTenant() {
+      const table = document.getElementById('inp-table').value;
+      const key = document.getElementById('inp-key').value.trim();
+      const val = document.getElementById('inp-val').value.trim();
+      const amount = document.getElementById('inp-amount').value.trim();
+      if (!key) return;
+      const qs = new URLSearchParams({ actor: selectedActor, table, key, val, amount });
+      await apiCall('/api/tenant/query?' + qs.toString(), 'POST');
+      await refreshState();
+    }
+
+    async function gdprDeleteSelectedTenant() {
+      await apiCall(`/api/tenant/gdpr-delete?actor=${encodeURIComponent(selectedActor)}`, 'POST');
+      await refreshState();
+    }
+
+    async function resetFleet() {
+      await apiCall('/api/reset', 'POST');
+      selectedActor = 'db-acme';
+      await refreshState();
+    }
+
+    refreshState();
+  </script>
+</body>
+</html>

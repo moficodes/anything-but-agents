@@ -728,28 +728,168 @@ act2_coldstart() {
 
 act3_tenantdb() {
   ensure_router_port_forward
-  banner "ACT III: 'One Database Per Customer' — DurableDir + FULL Pause vs DATA Commit"
-  reset_act_resources db-acme db-globex
+  banner "ACT III: 'One Database Per Customer' — DurableDir + 16MB Hot RAM Pause (FULL) vs. Compact GCS Commit (DATA)"
+  reset_act_resources db-acme db-globex db-initech db-umbrella
 
-  step "1. Create two isolated single-tenant database actors: 'db-acme' and 'db-globex'"
+  local tdb_port="${TENANTDB_PORT:-8086}"
+  local tdb_url="http://localhost:${tdb_port}"
+  local cluster_lb_ip=""
+  local presenter_token=""
+  presenter_token="$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  cluster_lb_ip="$(kubectl get svc tenantdb-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+
+  if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
+    tdb_url="http://${cluster_lb_ip}"
+    echo "Using in-cluster TenantDB Storage & Memory Tiering Console at ${tdb_url}..."
+  else
+    echo "Starting TenantDB Storage & Memory Tiering Console on ${tdb_url}..."
+    (
+      cd "${REPO_ROOT}"
+      PRESENTER_TOKEN="${presenter_token}" go run ./cmd/tenantdb \
+        --mode=gateway \
+        --addr=":${tdb_port}" \
+        --atespace="${ATESPACE}" \
+        --template=tenantdb \
+        --router-url="${ROUTER_URL}" >/dev/null 2>&1
+    ) &
+    TENANTDB_GW_PID=$!
+    trap 'kill "${PORT_FORWARD_PID:-}" "${TENANTDB_GW_PID:-}" 2>/dev/null || true' EXIT
+
+    for _ in {1..30}; do
+      if curl -s -o /dev/null --connect-timeout 1 "${tdb_url}/readyz" 2>/dev/null; then
+        break
+      fi
+      sleep 0.3
+    done
+  fi
+
+  echo ""
+  if [[ -n "${presenter_token}" ]]; then
+    echo "  TenantDB Storage & Memory X-Ray Console : ${tdb_url}/dashboard?key=${presenter_token}"
+  else
+    echo "  TenantDB Storage & Memory X-Ray Console : ${tdb_url}/dashboard"
+  fi
+  echo ""
+
+  step "1. Create isolated single-tenant database actors: 'db-acme' (Acme Corp) and 'db-globex' (Globex Logistics)"
   run_cmd kubectl ate create actor db-acme -a "${ATESPACE}" --template tenantdb
   run_cmd kubectl ate create actor db-globex -a "${ATESPACE}" --template tenantdb
 
-  step "2. Insert rows into db-acme's DurableDir (/data/wal.jsonl) and warm its RAM counter"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?key=tier&val=enterprise"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?key=region&val=us-west3-slc"
+  step "2. Insert SaaS rows into both tenants' DurableDir (/data/wal.jsonl) and warm their 16.0 MB RAM Buffer Pools"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?table=subscriptions&key=tier&val=enterprise&amount=48000"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?table=settings&key=region&val=us-west3-slc"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-globex" "${ROUTER_URL}/?table=subscriptions&key=tier&val=freight-scale&amount=32000"
 
-  step "3. PAUSE db-acme (onPause: FULL) -> resume it: both DurableDir rows AND ram_queries_since_boot survive!"
+  step "3. PAUSE db-acme (onPause: FULL) -> query it: HOT_RAM_RESUME! Both /data/wal.jsonl AND 16.0 MB RAM Buffer Pool survive intact (0 WAL replayed)"
   run_cmd kubectl ate pause actor db-acme -a "${ATESPACE}"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/"
 
-  step "4. SUSPEND db-acme (onCommit: DATA) -> resume it: DurableDir rows survive via WAL replay, while RAM cold-boots cleanly!"
+  step "4. SUSPEND db-acme (onCommit: DATA) -> query it: COLD_DATA_REPLAY! 16.0 MB RAM heap discarded (99.997% GCS saved); /data/wal.jsonl replayed in <1ms"
   run_cmd kubectl ate suspend actor db-acme -a "${ATESPACE}"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/"
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?resume_hint=suspend_data"
 
-  step "5. GDPR Right-to-be-Forgotten in one command: delete tenant 'db-acme'"
+  step "5. GDPR Article 17 Right-to-be-Forgotten: delete tenant 'db-acme' in 1 command, then verify sibling 'db-globex' is 100% intact!"
   run_cmd kubectl ate delete actor db-acme -a "${ATESPACE}" --any-state
+  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-globex" "${ROUTER_URL}/"
 
+  echo ""
+  echo "  ================================================================================"
+  echo "  PER-TENANT DATABASE STORAGE TIERING & GDPR SCORECARD"
+  echo "  --------------------------------------------------------------------------------"
+  echo "  Short Idle (onPause: FULL)   : 16.0 MB Hot RAM Buffer Pool + /data/wal.jsonl intact (0 WAL replayed)"
+  echo "  Long Idle  (onCommit: DATA)  : 16.0 MB RAM discarded; ~320 B /data/wal.jsonl committed (99.997% GCS saved)"
+  echo "  GDPR Right-to-be-Forgotten   : 'db-acme' compute + snapshots + DurableDir shredded; 'db-globex' 100% online"
+  echo "  ================================================================================"
+
+  if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
+    echo ""
+    echo ">>> TenantDB Storage & Memory Tiering Console (${tdb_url}/dashboard) is still live!"
+    read -r -p "    [Press Enter when finished exploring the browser UI] " _
+  fi
+
+  kill "${TENANTDB_GW_PID:-}" 2>/dev/null || true
+  free_workers
+}
+
+deploy_tenantdb_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster TenantDB Storage & Memory Tiering Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  free_workers
+
+  if ! kubectl get secret tenantdb-gateway -n anything-but-agents >/dev/null 2>&1; then
+    kubectl create secret generic tenantdb-gateway \
+      -n anything-but-agents \
+      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
+  fi
+
+  kubectl ate delete actor-template tenantdb -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/tenantdb-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+
+  echo "Waiting for 'tenantdb' Golden Snapshot to become READY..."
+  for ((i = 1; i <= 60; i++)); do
+    yaml_out="$(kubectl ate get actor-template tenantdb -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
+    if [[ -n "${golden_tag}" ]]; then
+      echo "  [READY] tenantdb (snapshot taken at: ${golden_tag})"
+      break
+    fi
+    sleep 2
+  done
+
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
+      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
+      KUBECTL_ATE_IMAGE="$(
+        cd "${SUBSTRATE_ROOT}"
+        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+      )"
+    else
+      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy tenantdb-gateway." >&2
+      exit 1
+    fi
+  fi
+  export KUBECTL_ATE_IMAGE
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/tenantdb-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/tenantdb-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc tenantdb-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  TenantDB Storage & Memory Tiering Console : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+}
+
+cleanup_tenantdb_gateway() {
+  banner "Cleaning up TenantDB Gateway Deployment & Actors"
+  for act in db-acme db-globex db-initech db-umbrella; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount tenantdb-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding tenantdb-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding tenantdb-gateway-ate-client --ignore-not-found
   free_workers
 }
 
@@ -929,8 +1069,9 @@ cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_dungeon2d_gateway
   cleanup_coldstart_hpa
+  cleanup_tenantdb_gateway
   cleanup_honeypot_gateway
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
@@ -949,6 +1090,8 @@ case "${1:-}" in
   cleanup-dungeon2d)     cleanup_dungeon2d_gateway ;;
   deploy-coldstart-hpa)  deploy_coldstart_hpa ;;
   cleanup-coldstart-hpa) cleanup_coldstart_hpa ;;
+  deploy-tenantdb)       deploy_tenantdb_gateway ;;
+  cleanup-tenantdb)      cleanup_tenantdb_gateway ;;
   deploy-honeypot)       deploy_honeypot_gateway ;;
   cleanup-honeypot)      cleanup_honeypot_gateway ;;
   run-all)               run_all_acts ;;
@@ -960,7 +1103,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-honeypot|cleanup-honeypot|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac
