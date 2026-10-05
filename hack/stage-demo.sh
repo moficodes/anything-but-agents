@@ -816,6 +816,7 @@ deploy_honeypot_gateway() {
   banner "Deploying In-Cluster Honeypot Split-Screen Gateway & LoadBalancer"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  free_workers
 
   # Ensure ActorTemplate honeypot is rebuilt and Golden Snapshot is READY
   kubectl ate delete actor-template honeypot -a "${ATESPACE}" 2>/dev/null || true
