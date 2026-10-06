@@ -92,6 +92,7 @@ type TenantDB struct {
 	WALReplayedOnBoot   int
 	LastRecoveryMode    string
 	RAMBufferPoolStatus string
+	justReplayedOnWrite bool
 }
 
 func openTenantDB(dataDir string) (*TenantDB, error) {
@@ -235,6 +236,7 @@ func (db *TenantDB) DiscardRAMForDataScope() {
 	db.WALReplayedOnBoot = 0
 	db.LastRecoveryMode = ""
 	db.RAMBufferPoolStatus = "DISCARDED_ON_DATA_COMMIT"
+	db.justReplayedOnWrite = false
 }
 
 func (db *TenantDB) Put(key, value string) error {
@@ -271,7 +273,9 @@ func (db *TenantDB) PutRow(table, key, value string, amountUSD int, podIP string
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	wasFirstQuerySinceBoot := db.RAMQueriesSinceBoot == 0
 	db.hydrateIfNeededLocked()
+	db.justReplayedOnWrite = wasFirstQuerySinceBoot && db.WALReplayedOnBoot > 0
 	if table == "" {
 		table = inferTableForKey(key)
 	}
@@ -308,7 +312,7 @@ func (db *TenantDB) PutRow(table, key, value string, amountUSD int, podIP string
 	db.RAMBufferPool[key] = row
 	db.WALEntries = append(db.WALEntries, row)
 	db.RAMQueriesSinceBoot++
-	if db.RAMQueriesSinceBoot > 1 && db.LastRecoveryMode != "COLD_DATA_REPLAY" {
+	if db.RAMQueriesSinceBoot > 1 && !db.justReplayedOnWrite {
 		db.LastRecoveryMode = "HOT_RAM_RESUME"
 		db.RAMBufferPoolStatus = "HOT_INTACT"
 	}
@@ -368,9 +372,14 @@ func (db *TenantDB) BuildSnapshot(podIP string) TenantSnapshot {
 	if podIP == "" {
 		podIP = currentPodIP()
 	}
-	db.hydrateIfNeededLocked()
-	db.recordPodIPLocked(podIP)
-	db.RAMQueriesSinceBoot++
+	if db.justReplayedOnWrite {
+		db.justReplayedOnWrite = false
+		db.recordPodIPLocked(podIP)
+	} else {
+		db.hydrateIfNeededLocked()
+		db.recordPodIPLocked(podIP)
+		db.RAMQueriesSinceBoot++
+	}
 
 	var walBytes int64
 	if info, err := os.Stat(db.WALPath); err == nil {

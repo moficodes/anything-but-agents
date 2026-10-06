@@ -1308,18 +1308,21 @@
         });
       }
 
-      // WAL Table rows
+      // WAL Table rows (newest sequence number first at the top so new writes are immediately visible)
       const tbody = document.getElementById('wal-table-body');
       tbody.innerHTML = '';
-      const entries = (snap && snap.wal_entries) || [];
+      const entries = [...((snap && snap.wal_entries) || [])].reverse();
       if (entries.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-muted); text-align: center;">No committed WAL entries on /data/wal.jsonl</td></tr>';
       } else {
-        entries.forEach(r => {
+        entries.forEach((r, idx) => {
           const tr = document.createElement('tr');
+          if (idx === 0 && entries.length > 3) {
+            tr.style.background = 'var(--accent-wal-bg)';
+          }
           const amt = r.amount_usd ? '$' + r.amount_usd.toLocaleString() : '—';
           tr.innerHTML = `
-            <td>#${escapeHTML(r.seq)}</td>
+            <td><strong>#${escapeHTML(r.seq)}</strong></td>
             <td><span class="scope-tag scope-data">${escapeHTML(r.table)}</span></td>
             <td><strong>${escapeHTML(r.key)}</strong></td>
             <td>${escapeHTML(r.value)}</td>
@@ -1340,11 +1343,14 @@
     async function insertRowSelectedTenant() {
       const tenants = (fleetState && fleetState.tenants) || [];
       const cur = tenants.find(t => t.actor_name === selectedActor);
-      const nextNum = ((cur && cur.last_snapshot && cur.last_snapshot.rows_in_durable_dir) || 3) + 1;
+      const snap = cur && cur.last_snapshot;
+      const count = snap ? Math.max(snap.rows_in_durable_dir || 0, (snap.wal_entries && snap.wal_entries.length) || 0) : 3;
+      const nextNum = (count || 3) + 1;
+      const numStr = nextNum < 10 ? `0${nextNum}` : `${nextNum}`;
       const qs = new URLSearchParams({
         actor: selectedActor,
         table: 'invoices',
-        key: `inv-2026-0${nextNum}`,
+        key: `inv-2026-${numStr}`,
         val: `Enterprise Seat Expansion #${nextNum}`,
         amount: '42000'
       });

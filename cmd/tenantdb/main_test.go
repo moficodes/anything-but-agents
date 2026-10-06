@@ -169,6 +169,28 @@ func TestLocalSimulatorBackendLifecycleMultiplexingAndGDPR(t *testing.T) {
 		t.Fatalf("expected pod_ip_history to show migration across worker pods, got %v", coldSnap.PodIPHistory)
 	}
 
+	// 3b. Suspend db-acme again and wake it directly via a write (+ Append Invoice):
+	// verify both the new WAL row (#4) is persisted AND recovery_mode remains COLD_DATA_REPLAY.
+	if _, err := sim.SuspendTenant(ctx, "db-acme"); err != nil {
+		t.Fatalf("SuspendTenant (second): %v", err)
+	}
+	writeWakeSnap, err := sim.QueryTenant(ctx, "db-acme", "invoices", "inv-2026-04", "42000", 42000)
+	if err != nil {
+		t.Fatalf("QueryTenant write after Suspend: %v", err)
+	}
+	if writeWakeSnap.RecoveryMode != "COLD_DATA_REPLAY" {
+		t.Fatalf("expected COLD_DATA_REPLAY when waking suspended actor via write, got %s", writeWakeSnap.RecoveryMode)
+	}
+	if writeWakeSnap.RAMBufferPoolStatus != "REHYDRATED_FROM_WAL" {
+		t.Fatalf("expected REHYDRATED_FROM_WAL when waking suspended actor via write, got %s", writeWakeSnap.RAMBufferPoolStatus)
+	}
+	if writeWakeSnap.RowsInDurableDir != 4 {
+		t.Fatalf("expected 4 rows in durable dir after write-on-wake, got %d", writeWakeSnap.RowsInDurableDir)
+	}
+	if writeWakeSnap.WALReplayedOnBoot != 3 {
+		t.Fatalf("expected 3 prior WAL entries replayed before write, got %d", writeWakeSnap.WALReplayedOnBoot)
+	}
+
 	// 4. GDPR delete db-acme -> verify db-acme returns 404 TENANT_SHREDDED while db-globex remains 100% intact.
 	receipt, err := sim.GDPRDeleteTenant(ctx, "db-acme")
 	if err != nil {
