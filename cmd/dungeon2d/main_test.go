@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -167,7 +168,7 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
 
 	// 1. Start session -> creates actor, wakes on worker, mutates, and suspends to GCS
-	rec, err := b.StartSession(t.Context(), "mofi", "paladin")
+	rec, err := b.StartSession(context.Background(), "mofi", "paladin")
 	if err != nil {
 		t.Fatalf("StartSession failed: %v", err)
 	}
@@ -176,10 +177,10 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// 2. Floor 1 -> Floor 2 + Quicksave
-	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key"})
-	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f1:stairs"})
-	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword"})
-	savedRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "quicksave", Target: "f2:shrine"})
+	_, _ = b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key"})
+	_, _ = b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f1:stairs"})
+	_, _ = b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword"})
+	savedRec, err := b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "quicksave", Target: "f2:shrine"})
 	if err != nil {
 		t.Fatalf("quicksave failed: %v", err)
 	}
@@ -188,7 +189,7 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// 3. Fork a parallel timeline from the quicksaved actor before entering Floor 3!
-	forkedRec, err := b.ForkSession(t.Context(), "d2d-mofi", "d2d-mofi-branch")
+	forkedRec, err := b.ForkSession(context.Background(), "d2d-mofi", "d2d-mofi-branch")
 	if err != nil {
 		t.Fatalf("ForkSession failed: %v", err)
 	}
@@ -200,8 +201,8 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	// Note: For Revert to rewind to before the fatal attack, attacking the Dragon
 	// leaves the dead actor in RUNNING (uncommitted) state so Revert rewinds to the
 	// last committed GCS snapshot!
-	_, _ = b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f2:stairs"})
-	deadRec, err := b.ExecuteMilestone(t.Context(), "d2d-mofi", MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon"})
+	_, _ = b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "stairs", Target: "f2:stairs"})
+	deadRec, err := b.ExecuteMilestone(context.Background(), "d2d-mofi", MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon"})
 	if err != nil {
 		t.Fatalf("dragon combat failed: %v", err)
 	}
@@ -210,7 +211,7 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// 5. SAVE-SCUM! Revert actor -> restores to last committed GCS snapshot (Alive == true!)
-	revertedRec, err := b.RevertSession(t.Context(), "d2d-mofi")
+	revertedRec, err := b.RevertSession(context.Background(), "d2d-mofi")
 	if err != nil {
 		t.Fatalf("RevertSession failed: %v", err)
 	}
@@ -223,11 +224,11 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	// When a player picks up the Gold Chest at (5, 2), the save happens AFTER the milestone
 	// with the new state saved. Moving around and clicking Revert restores (5, 2) right after
 	// picking up the chest (with the chest still looted!).
-	_, err = b.StartSession(t.Context(), "stepper", "ranger")
+	_, err = b.StartSession(context.Background(), "stepper", "ranger")
 	if err != nil {
 		t.Fatalf("StartSession stepper failed: %v", err)
 	}
-	afterChest, err := b.ExecuteMilestone(t.Context(), "d2d-stepper", MutateRequest{
+	afterChest, err := b.ExecuteMilestone(context.Background(), "d2d-stepper", MutateRequest{
 		Action: "pickup", Target: "gold-chest", EntityID: "f1:chest", X: 5, Y: 2,
 	})
 	if err != nil {
@@ -238,7 +239,7 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// Revert after picking up chest -> restores state right AFTER picking up chest at (5,2)
-	revChest, err := b.RevertSession(t.Context(), "d2d-stepper")
+	revChest, err := b.RevertSession(context.Background(), "d2d-stepper")
 	if err != nil {
 		t.Fatalf("RevertSession after chest failed: %v", err)
 	}
@@ -248,13 +249,13 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// Pick up Healing Potion at (3, 7), then revert -> restores state right AFTER picking up potion at (3,7)
-	_, err = b.ExecuteMilestone(t.Context(), "d2d-stepper", MutateRequest{
+	_, err = b.ExecuteMilestone(context.Background(), "d2d-stepper", MutateRequest{
 		Action: "pickup", Target: "healing-potion", EntityID: "f1:potion", X: 3, Y: 7,
 	})
 	if err != nil {
 		t.Fatalf("pickup potion failed: %v", err)
 	}
-	revPotion, err := b.RevertSession(t.Context(), "d2d-stepper")
+	revPotion, err := b.RevertSession(context.Background(), "d2d-stepper")
 	if err != nil {
 		t.Fatalf("RevertSession after potion failed: %v", err)
 	}
@@ -264,7 +265,7 @@ func TestSubstrateBackendLifecycleRevertAndFork(t *testing.T) {
 	}
 
 	// 7. Test reverting to a specific earlier snapshot version (v2 = right after gold-chest, before potion):
-	revV2, err := b.RevertSession(t.Context(), "d2d-stepper", 2)
+	revV2, err := b.RevertSession(context.Background(), "d2d-stepper", 2)
 	if err != nil {
 		t.Fatalf("RevertSession to v2 failed: %v", err)
 	}

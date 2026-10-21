@@ -719,14 +719,21 @@ func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 	var parsed struct {
 		Status struct {
 			WorkerAssignment struct {
-				WorkerPodIP string `json:"workerPodIp"`
+				WorkerPodIP  string   `json:"workerPodIp"`
+				WorkerPodIPs []string `json:"workerPodIps"`
 			} `json:"workerAssignment"`
 		} `json:"status"`
 	}
 	if json.Unmarshal([]byte(raw), &parsed) != nil {
 		return ""
 	}
-	return parsed.Status.WorkerAssignment.WorkerPodIP
+	if parsed.Status.WorkerAssignment.WorkerPodIP != "" {
+		return parsed.Status.WorkerAssignment.WorkerPodIP
+	}
+	if len(parsed.Status.WorkerAssignment.WorkerPodIPs) > 0 {
+		return parsed.Status.WorkerAssignment.WorkerPodIPs[0]
+	}
+	return ""
 }
 
 func (b *ClusterAteBackend) freeWorkerSlotFor(ctx context.Context, keepActors ...string) {

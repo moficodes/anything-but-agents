@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Demo 1: "Look Ma, No Database" — Zork-style Dungeon where 100% of state
-# lives in Go heap variables preserved by SNAPSHOT_CONTENT_SCOPE_FULL.
+# lives in Go heap variables preserved by SNAPSHOT_FIDELITY_MEMORY.
 metadata:
   atespace: anything-but-agents
   name: dungeon
@@ -36,9 +36,8 @@ resources:
   - name: memory
     quantity: 512Mi
 snapshotConfig:
-  onPause: SNAPSHOT_CONTENT_SCOPE_FULL
-  onCommit: SNAPSHOT_CONTENT_SCOPE_FULL
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
   storageLocation: gs://${BUCKET_NAME}/anything-but-agents/dungeon/
 sandboxConfig:
-  sandboxClass: SANDBOX_CLASS_GVISOR
+  sandboxClass: gvisor
   configName: gvisor-default

@@ -221,14 +221,63 @@ detect_cluster_defaults() {
   export BUCKET_NAME SUBSTRATE_VERSION ATEOM_GVISOR_IMAGE
 }
 
+wait_for_template_golden_snapshot() {
+  local tmpl="$1"
+  echo "Waiting for '${tmpl}' Golden Snapshot to become READY..."
+  for ((i = 1; i <= 90; i++)); do
+    local yaml_out golden_ts err_msg
+    yaml_out="$(kubectl ate get actor-template "${tmpl}" -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+    golden_ts="$(echo "${yaml_out}" | awk '/snapshotTime:|takeGoldenSnapshotAt:/ {print $2; exit}')"
+    err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
+    if [[ -n "${golden_ts}" ]] || grep -q "goldenTag:" <<< "${yaml_out}"; then
+      echo "  [READY] ${tmpl} (snapshot ready at: ${golden_ts:-ready})"
+      return 0
+    fi
+    if [[ -n "${err_msg}" && "${err_msg}" != '""' ]]; then
+      echo "  [ERROR] ${tmpl}: ${err_msg}" >&2
+      return 1
+    fi
+    sleep 2
+  done
+  echo "  [TIMEOUT] Waiting for Golden Snapshot of ${tmpl}" >&2
+  return 1
+}
+
+ensure_template_ready() {
+  local tmpl="$1"
+  local yaml_out
+  yaml_out="$(kubectl ate get actor-template "${tmpl}" -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+  if [[ "${FORCE_REBUILD_TEMPLATES:-0}" != "1" ]] && grep -qE "goldenTag:|snapshotTime:|takeGoldenSnapshotAt:" <<< "${yaml_out}"; then
+    echo "ActorTemplate '${tmpl}' Golden Snapshot is already READY."
+    return 0
+  fi
+  kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/${tmpl}-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+  wait_for_template_golden_snapshot "${tmpl}"
+}
+
 deploy_all() {
   detect_cluster_defaults
-  banner "Deploying 'Anything But Agents' WorkerPool & 5 ActorTemplates"
+  banner "Deploying 'Anything But Agents' WorkerPool & 6 ActorTemplates"
 
   echo "Using BUCKET_NAME=${BUCKET_NAME}"
   echo "Using SUBSTRATE_VERSION=${SUBSTRATE_VERSION}"
   echo "Using ATEOM_GVISOR_IMAGE=${ATEOM_GVISOR_IMAGE}"
   echo "Using KO_DOCKER_REPO=${KO_DOCKER_REPO:-}"
+
+  if kubectl get workerpool anything-but-agents -n anything-but-agents >/dev/null 2>&1; then
+    local existing_sc
+    existing_sc="$(kubectl get workerpool anything-but-agents -n anything-but-agents -o jsonpath='{.spec.sandboxClasses[0].name}' 2>/dev/null || true)"
+    if [[ -z "${existing_sc}" ]]; then
+      echo "Replacing legacy pre-v0.5.0 WorkerPool anything-but-agents..."
+      kubectl delete workerpool anything-but-agents -n anything-but-agents --ignore-not-found
+    fi
+  fi
 
   envsubst < "${REPO_ROOT}/manifests/workerpool.yaml.tmpl" | kubectl apply -f -
   kubectl rollout status deployment/anything-but-agents -n anything-but-agents --timeout=300s
@@ -241,7 +290,7 @@ deploy_all() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 raft-leader-1; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
@@ -256,26 +305,10 @@ deploy_all() {
         | ko resolve -f - \
         | kubectl ate create actor-template -f -
     )
+    wait_for_template_golden_snapshot "${tmpl}"
   done
 
   echo ""
-  echo "Waiting for all Golden Snapshots to become READY (coldstart takes ~12s by design)..."
-  for tmpl in dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
-    for ((i = 1; i <= 60; i++)); do
-      yaml_out="$(kubectl ate get actor-template "${tmpl}" -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-      golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
-      err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
-      if [[ -n "${golden_tag}" ]]; then
-        echo "  [READY] ${tmpl} (snapshot taken at: ${golden_tag})"
-        break
-      fi
-      if [[ -n "${err_msg}" ]]; then
-        echo "  [ERROR] ${tmpl}: ${err_msg}" >&2
-        exit 1
-      fi
-      sleep 3
-    done
-  done
   kubectl ate get actor-templates -a "${ATESPACE}"
 }
 
@@ -295,11 +328,11 @@ ensure_router_port_forward() {
 }
 
 # Release all worker pods in the shared 3-replica WorkerPool by suspending any
-# RUNNING or PAUSED actors in the atespace.
+# RUNNING, RESUMING, or PAUSED actors in the atespace.
 free_workers() {
   local active_actors
   active_actors="$(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null \
-    | awk '$4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_PAUSED" {print $2}' || true)"
+    | awk '$4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_RESUMING" || $4 == "ACTOR_STATE_PAUSED" || ($1 != "ATESPACE" && $5 != "" && $5 != "<none>") {print $2}' || true)"
   for actor in ${active_actors}; do
     echo "Suspending active actor '${actor}' to free worker capacity..."
     kubectl ate suspend actor "${actor}" -a "${ATESPACE}" >/dev/null 2>&1 || true
@@ -450,13 +483,7 @@ deploy_dungeon2d_gateway() {
   fi
 
   # Ensure ActorTemplate dungeon2d is up to date
-  kubectl ate delete actor-template dungeon2d -a "${ATESPACE}" 2>/dev/null || true
-  (
-    cd "${REPO_ROOT}"
-    envsubst < "manifests/dungeon2d-template.yaml.tmpl" \
-      | ko resolve -f - \
-      | kubectl ate create actor-template -f -
-  )
+  ensure_template_ready dungeon2d
 
   if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
     if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
@@ -523,24 +550,7 @@ deploy_coldstart_hpa() {
   fi
 
   # Ensure ActorTemplate coldstart is up to date
-  kubectl ate delete actor-template coldstart -a "${ATESPACE}" 2>/dev/null || true
-  (
-    cd "${REPO_ROOT}"
-    envsubst < "manifests/coldstart-template.yaml.tmpl" \
-      | ko resolve -f - \
-      | kubectl ate create actor-template -f -
-  )
-
-  echo "Waiting for 'coldstart' Golden Snapshot (50,000-doc search index, ~12s build) to become READY..."
-  for ((i = 1; i <= 60; i++)); do
-    yaml_out="$(kubectl ate get actor-template coldstart -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
-    if [[ -n "${golden_tag}" ]]; then
-      echo "  [READY] coldstart (Golden Snapshot taken at: ${golden_tag})"
-      break
-    fi
-    sleep 3
-  done
+  ensure_template_ready coldstart
 
   for i in 1 2 3; do
     kubectl ate delete actor "coldstart-${i}" -a "${ATESPACE}" --any-state 2>/dev/null || true
@@ -825,24 +835,7 @@ deploy_tenantdb_gateway() {
       --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
   fi
 
-  kubectl ate delete actor-template tenantdb -a "${ATESPACE}" 2>/dev/null || true
-  (
-    cd "${REPO_ROOT}"
-    envsubst < "manifests/tenantdb-template.yaml.tmpl" \
-      | ko resolve -f - \
-      | kubectl ate create actor-template -f -
-  )
-
-  echo "Waiting for 'tenantdb' Golden Snapshot to become READY..."
-  for ((i = 1; i <= 60; i++)); do
-    yaml_out="$(kubectl ate get actor-template tenantdb -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
-    if [[ -n "${golden_tag}" ]]; then
-      echo "  [READY] tenantdb (snapshot taken at: ${golden_tag})"
-      break
-    fi
-    sleep 2
-  done
+  ensure_template_ready tenantdb
 
   if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
     KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
@@ -960,29 +953,7 @@ deploy_honeypot_gateway() {
   free_workers
 
   # Ensure ActorTemplate honeypot is rebuilt and Golden Snapshot is READY
-  kubectl ate delete actor-template honeypot -a "${ATESPACE}" 2>/dev/null || true
-  (
-    cd "${REPO_ROOT}"
-    envsubst < "manifests/honeypot-template.yaml.tmpl" \
-      | ko resolve -f - \
-      | kubectl ate create actor-template -f -
-  )
-
-  echo "Waiting for 'honeypot' Golden Snapshot to become READY..."
-  for ((i = 1; i <= 60; i++)); do
-    yaml_out="$(kubectl ate get actor-template honeypot -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
-    err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
-    if [[ -n "${golden_tag}" ]]; then
-      echo "  [READY] honeypot (snapshot taken at: ${golden_tag})"
-      break
-    fi
-    if [[ -n "${err_msg}" ]]; then
-      echo "  [ERROR] honeypot: ${err_msg}" >&2
-      exit 1
-    fi
-    sleep 2
-  done
+  ensure_template_ready honeypot
 
   if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
     KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
@@ -1107,29 +1078,7 @@ deploy_timewarp_gateway() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
-  kubectl ate delete actor-template timewarp -a "${ATESPACE}" 2>/dev/null || true
-  (
-    cd "${REPO_ROOT}"
-    envsubst < "manifests/timewarp-template.yaml.tmpl" \
-      | ko resolve -f - \
-      | kubectl ate create actor-template -f -
-  )
-
-  echo "Waiting for 'timewarp' Golden Snapshot to become READY..."
-  for ((i = 1; i <= 60; i++)); do
-    yaml_out="$(kubectl ate get actor-template timewarp -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
-    err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
-    if [[ -n "${golden_tag}" ]]; then
-      echo "  [READY] timewarp (snapshot taken at: ${golden_tag})"
-      break
-    fi
-    if [[ -n "${err_msg}" ]]; then
-      echo "  [ERROR] timewarp: ${err_msg}" >&2
-      exit 1
-    fi
-    sleep 2
-  done
+  ensure_template_ready timewarp
 
   if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
     KUBECTL_ATE_IMAGE="$(kubectl get deployment honeypot-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"

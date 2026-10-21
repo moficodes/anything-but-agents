@@ -700,16 +700,34 @@ func (c *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 			ExternalSnapshot struct {
 				SnapshotURI string `json:"snapshotUri"`
 			} `json:"externalSnapshot"`
+			Snapshots []struct {
+				DurableSnapshot struct {
+					Object struct {
+						SnapshotURI string `json:"snapshotUri"`
+					} `json:"object"`
+				} `json:"durableSnapshot"`
+			} `json:"snapshots"`
 			WorkerAssignment struct {
-				WorkerPod   string `json:"workerPod"`
-				WorkerPodIP string `json:"workerPodIp"`
+				WorkerPod    string   `json:"workerPod"`
+				WorkerPodIP  string   `json:"workerPodIp"`
+				WorkerPodIPs []string `json:"workerPodIps"`
 			} `json:"workerAssignment"`
 		} `json:"status"`
 	}
 	if json.Unmarshal(raw, &parsed) != nil {
 		return "", "", ""
 	}
-	return parsed.Status.WorkerAssignment.WorkerPodIP, parsed.Status.WorkerAssignment.WorkerPod, parsed.Status.ExternalSnapshot.SnapshotURI
+	ip := parsed.Status.WorkerAssignment.WorkerPodIP
+	if ip == "" && len(parsed.Status.WorkerAssignment.WorkerPodIPs) > 0 {
+		ip = parsed.Status.WorkerAssignment.WorkerPodIPs[0]
+	}
+	uri := parsed.Status.ExternalSnapshot.SnapshotURI
+	for _, s := range parsed.Status.Snapshots {
+		if s.DurableSnapshot.Object.SnapshotURI != "" {
+			uri = s.DurableSnapshot.Object.SnapshotURI
+		}
+	}
+	return ip, parsed.Status.WorkerAssignment.WorkerPod, uri
 }
 
 func appendPodIPHop(history []string, ip string) []string {
@@ -1215,6 +1233,13 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 					ExternalSnapshot struct {
 						SnapshotURI string `json:"snapshotUri"`
 					} `json:"externalSnapshot"`
+					Snapshots []struct {
+						DurableSnapshot struct {
+							Object struct {
+								SnapshotURI string `json:"snapshotUri"`
+							} `json:"object"`
+						} `json:"durableSnapshot"`
+					} `json:"snapshots"`
 				} `json:"status"`
 			} `json:"actors"`
 		}
@@ -1238,8 +1263,14 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 					c.records[a.Metadata.Name] = rec
 				}
 				rec.State = a.Status.State
-				if a.Status.ExternalSnapshot.SnapshotURI != "" {
-					rec.SnapshotURI = a.Status.ExternalSnapshot.SnapshotURI
+				uri := a.Status.ExternalSnapshot.SnapshotURI
+				for _, s := range a.Status.Snapshots {
+					if s.DurableSnapshot.Object.SnapshotURI != "" {
+						uri = s.DurableSnapshot.Object.SnapshotURI
+					}
+				}
+				if uri != "" {
+					rec.SnapshotURI = uri
 				}
 			}
 			c.mu.Unlock()

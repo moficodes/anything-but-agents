@@ -1177,7 +1177,9 @@ func (b *ClusterAteBackend) GetFleetState(ctx context.Context) (*FleetStateRespo
 			case strings.Contains(a.State, "PAUSE"):
 				tr.Status = "PAUSED_FULL"
 			case strings.Contains(a.State, "SUSPEND"):
-				tr.Status = "SUSPENDED_DATA"
+				if tr.Status != "PAUSED_FULL" {
+					tr.Status = "SUSPENDED_DATA"
+				}
 			}
 		}
 	}

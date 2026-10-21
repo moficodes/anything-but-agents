@@ -21,6 +21,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: anything-but-agents
+  labels:
+    ate.dev/api-access: "true"
 
 ---
 
@@ -34,9 +36,11 @@ metadata:
 spec:
   replicas: 3
   workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+    configRef:
+      name: gvisor-default
   template:
-    nodeSelector:
-      ate.dev/substrate-version: "${SUBSTRATE_VERSION}"
     resources:
       limits:
         cpu: "1"

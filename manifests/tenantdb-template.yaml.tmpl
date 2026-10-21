@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # Demo 3: "One Database Process Per Customer" — Combines a DurableDir volume
-# (/data) with SNAPSHOT_CONTENT_SCOPE_FULL on Pause (keeping the RAM buffer
-# pool hot on the node) and SNAPSHOT_CONTENT_SCOPE_DATA on Commit (persisting
+# (/data) with SNAPSHOT_FIDELITY_MEMORY on local Pause (keeping the 16MB RAM
+# buffer pool hot on the node) and pre-commit RAM discard on Suspend (persisting
 # only the compact /data WAL to GCS when suspended).
 metadata:
   atespace: anything-but-agents
@@ -42,11 +42,10 @@ resources:
   - name: memory
     quantity: 512Mi
 snapshotConfig:
-  onPause: SNAPSHOT_CONTENT_SCOPE_FULL
-  onCommit: SNAPSHOT_CONTENT_SCOPE_DATA
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
   storageLocation: gs://${BUCKET_NAME}/anything-but-agents/tenantdb/
 sandboxConfig:
-  sandboxClass: SANDBOX_CLASS_GVISOR
+  sandboxClass: gvisor
   configName: gvisor-default
 volumes:
 - name: data

@@ -485,16 +485,34 @@ func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 			ExternalSnapshot struct {
 				SnapshotURI string `json:"snapshotUri"`
 			} `json:"externalSnapshot"`
+			Snapshots []struct {
+				DurableSnapshot struct {
+					Object struct {
+						SnapshotURI string `json:"snapshotUri"`
+					} `json:"object"`
+				} `json:"durableSnapshot"`
+			} `json:"snapshots"`
 			WorkerAssignment struct {
-				WorkerPod   string `json:"workerPod"`
-				WorkerPodIP string `json:"workerPodIp"`
+				WorkerPod    string   `json:"workerPod"`
+				WorkerPodIP  string   `json:"workerPodIp"`
+				WorkerPodIPs []string `json:"workerPodIps"`
 			} `json:"workerAssignment"`
 		} `json:"status"`
 	}
 	if json.Unmarshal([]byte(raw), &parsed) != nil {
 		return "", "", ""
 	}
-	return parsed.Status.WorkerAssignment.WorkerPodIP, parsed.Status.WorkerAssignment.WorkerPod, parsed.Status.ExternalSnapshot.SnapshotURI
+	ip := parsed.Status.WorkerAssignment.WorkerPodIP
+	if ip == "" && len(parsed.Status.WorkerAssignment.WorkerPodIPs) > 0 {
+		ip = parsed.Status.WorkerAssignment.WorkerPodIPs[0]
+	}
+	uri := parsed.Status.ExternalSnapshot.SnapshotURI
+	for _, s := range parsed.Status.Snapshots {
+		if s.DurableSnapshot.Object.SnapshotURI != "" {
+			uri = s.DurableSnapshot.Object.SnapshotURI
+		}
+	}
+	return ip, parsed.Status.WorkerAssignment.WorkerPod, uri
 }
 
 func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method, path, workerPodIP string, body any, out any) error {
