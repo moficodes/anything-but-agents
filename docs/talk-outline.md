@@ -99,11 +99,12 @@ sequenceDiagram
 
 * **Slide 12: Pattern 2 — One Database Process Per Customer (`cmd/tenantdb`)**
   * *Real-world examples:* Per-tenant SQLite, DuckDB, or embedded analytical engines.
-  * *Why Multi-Tenant DBs Hurt:* Noisy neighbors, row-level security bugs, painful per-tenant backup/restore, and complex GDPR deletion queries.
-  * *The Substrate Hybrid (`onPause: FULL`, `onCommit: DATA` + `DurableDir`):*
-    * Short idle (`Pause` on the node): `FULL` snapshot keeps the in-memory buffer pool hot.
-    * Long idle (`Suspend` to GCS): `DATA` snapshot discards the heavy RAM heap and only uploads the compact `/data` `DurableDir` WAL! On next wakeup, the process cold-boots in milliseconds and replays `/data/wal.jsonl`.
-    * **GDPR Right-to-be-Forgotten:** `kubectl ate delete actor db-acme` deletes the compute instance and its snapshot storage in one shot.
+  * *Why Multi-Tenant DBs Hurt:* Noisy neighbors, missing `WHERE tenant_id = ?` row-level security bugs, painful per-tenant backup/restore, and complex GDPR deletion queries across 50 shared tables.
+  * *The Substrate Hybrid (`onPause: FULL`, `onCommit: DATA` + `DurableDir` + Storage/Memory Tiering X-Ray UI `:8086`):*
+    * **4 Customer Databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) on 3 Worker Pods:** Queries execute `SELECT * FROM tenant_records` with **zero `WHERE tenant_id` clause** because each customer has a dedicated gVisor address space and `/data/wal.jsonl` `DurableDir` micro-volume.
+    * **Short Idle (`Pause` on the node -> `FULL` scope):** Freezes the **`16.0 MB` Hot RAM Buffer Pool & Materialized View** (`recovery_mode: HOT_RAM_RESUME`, `0` WAL entries replayed).
+    * **Long Idle (`Suspend` to GCS -> `DATA` scope):** Discards the `16.0 MB` dirty RAM heap and uploads **only the `~480 B` `/data/wal.jsonl` `DurableDir`** (**`99.997%` GCS snapshot bandwidth saved**). On next wakeup, the process replays `/data/wal.jsonl` in `<1ms` (`recovery_mode: COLD_DATA_REPLAY`) and re-hydrates its Buffer Pool across Worker Pod migrations (`pod_ip_history`).
+    * **GDPR Article 17 Right-to-be-Forgotten:** `kubectl ate delete actor db-acme --any-state` shreds `db-acme`'s compute, RAM checkpoints, and `/data` volume in one command (`404 TENANT_SHREDDED`) while `db-globex` stays 100% online.
 
 * **Slide 14: Pattern 3 — The "Truman Show" Deception Grid (`cmd/honeypot`)**
   * *Real-world examples:* High-interaction security honeypots, per-PR full-stack preview environments, SaaS webhook/plugin runners, CTF (Capture The Flag) challenge boxes per contestant.
