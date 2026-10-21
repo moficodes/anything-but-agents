@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronos Split-Brain &amp; Dual-Clock Lab // Agent Substrate</title>
+  <style>
+    :root {
+      --bg-base: #070a0f;
+      --bg-panel: #0d121b;
+      --bg-panel-alt: #121926;
+      --bg-elevated: #172031;
+      --border-dim: #1e2a40;
+      --border-bright: #2e4060;
+      --text-main: #ecf2f8;
+      --text-muted: #8b9bb4;
+      --text-dim: #586984;
+      --accent-cyan: #06b6d4;
+      --accent-cyan-bg: rgba(6, 182, 212, 0.12);
+      --accent-green: #10b981;
+      --accent-green-bg: rgba(16, 185, 129, 0.14);
+      --accent-amber: #f59e0b;
+      --accent-amber-bg: rgba(245, 158, 11, 0.15);
+      --accent-purple: #a855f7;
+      --accent-purple-bg: rgba(168, 85, 247, 0.15);
+      --accent-red: #ef4444;
+      --accent-red-bg: rgba(239, 68, 68, 0.16);
+      --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.45);
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    html[data-theme="light"] {
+      --bg-base: #f1f5f9;
+      --bg-panel: #ffffff;
+      --bg-panel-alt: #f8fafc;
+      --bg-elevated: #e2e8f0;
+      --border-dim: #cbd5e1;
+      --border-bright: #94a3b8;
+      --text-main: #0f172a;
+      --text-muted: #334155;
+      --text-dim: #64748b;
+      --accent-cyan: #0284c7;
+      --accent-cyan-bg: rgba(2, 132, 199, 0.12);
+      --accent-green: #059669;
+      --accent-green-bg: rgba(5, 150, 105, 0.14);
+      --accent-amber: #d97706;
+      --accent-amber-bg: rgba(217, 119, 6, 0.15);
+      --accent-purple: #7e22ce;
+      --accent-purple-bg: rgba(126, 34, 206, 0.14);
+      --accent-red: #dc2626;
+      --accent-red-bg: rgba(220, 38, 38, 0.14);
+      --shadow-panel: 0 6px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      line-height: 1.45;
+      padding: 14px 18px 28px;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    .app-shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Top Rack Header */
+    .rack-header {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 10px;
+      padding: 12px 16px;
+      box-shadow: var(--shadow-panel);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+      border: 1px solid var(--accent-red);
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Segmented icon-only theme toggle */
+    .theme-segmented {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-dim);
+      border-radius: 8px;
+      padding: 2px;
+      cursor: pointer;
+      height: 34px;
+    }
+
+    .theme-seg-icon {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+
+    .theme-seg-icon.active {
+      background: var(--bg-elevated);
+      color: var(--accent-cyan);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Step Playbook Bar */
+    .playbook-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-dim);
+    }
+
+    .step-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .hw-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 13px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--border-bright);
+      background: var(--bg-panel-alt);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .hw-btn:hover:not(:disabled) {
+      background: var(--bg-elevated);
+      border-color: var(--accent-cyan);
+    }
+
+    .hw-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .hw-btn.step-active {
+      border-color: var(--accent-cyan);
+      background: var(--accent-cyan-bg);
+      color: var(--accent-cyan);
+    }
+
+    .hw-btn.trigger-danger {
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+    }
+
+    .hw-btn.trigger-guard {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+    }
+
+    .guard-toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--border-bright);
+      background: var(--bg-panel-alt);
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .guard-toggle-pill.guard-on {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+    }
+
+    /* Dual-Clock Chronometer Strip */
+    .chronometer-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.35fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 1080px) {
+      .chronometer-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .clock-bay {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 10px;
+      padding: 12px 16px;
+      box-shadow: var(--shadow-panel);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .clock-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .clock-digits {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--accent-cyan);
+    }
+
+    .clock-digits.frozen {
+      color: var(--accent-purple);
+    }
+
+    .clock-digits.shock {
+      color: var(--accent-red);
+    }
+
+    .clock-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* Drift Progress Bar */
+    .drift-bar-track {
+      position: relative;
+      height: 16px;
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-dim);
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 4px 0;
+    }
+
+    .drift-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-cyan);
+      transition: width 0.08s linear, background-color 0.2s;
+    }
+
+    .drift-bar-fill.warn {
+      background: var(--accent-amber);
+    }
+
+    .drift-bar-fill.expired {
+      background: var(--accent-red);
+    }
+
+    .lease-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      background: var(--accent-red);
+      z-index: 2;
+    }
+
+    /* Scenario Status Banner */
+    .scenario-banner {
+      background: var(--bg-panel);
+      border: 2px solid var(--border-bright);
+      border-radius: 10px;
+      padding: 11px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      box-shadow: var(--shadow-panel);
+    }
+
+    .scenario-banner.split-brain {
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    .scenario-banner.guarded {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .scenario-phase-pill {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 5px 10px;
+      border-radius: 6px;
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .scenario-summary-text {
+      font-size: 13.5px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    /* Main 2-Column Telemetry Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 1180px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .rack-col {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow-panel);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-dim);
+      padding-bottom: 8px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Distributed KV Database & Split-Brain Diff Card */
+    .vault-card {
+      background: var(--bg-panel-alt);
+      border: 2px solid var(--border-bright);
+      border-radius: 9px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .vault-card.double-spend {
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    .vault-card.vault-guarded {
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .vault-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .vault-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .kv-put-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .kv-select,
+    .kv-input {
+      background: var(--bg-panel-alt);
+      color: var(--text-main);
+      border: 1px solid var(--border-bright);
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .kv-input {
+      width: 155px;
+    }
+
+    .node-kv-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .node-kv-pill {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 5px;
+      padding: 3px 7px;
+      color: var(--text-muted);
+    }
+
+    .node-kv-pill strong {
+      color: var(--text-main);
+    }
+
+    .node-kv-pill.diverged {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    /* Raft Topology SVG Canvas */
+    .topology-box {
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-dim);
+      border-radius: 9px;
+      padding: 8px 12px;
+    }
+
+    .topology-svg {
+      width: 100%;
+      height: 128px;
+      display: block;
+    }
+
+    /* 3-Node Consensus Cards */
+    .node-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .node-card {
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-dim);
+      border-left: 5px solid var(--accent-cyan);
+      border-radius: 8px;
+      padding: 11px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .node-card.role-leader {
+      border-left-color: var(--accent-green);
+    }
+
+    .node-card.state-suspended {
+      border-left-color: var(--accent-purple);
+      background: var(--accent-purple-bg);
+    }
+
+    .node-card.role-zombie {
+      border-left-color: var(--accent-red);
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    .node-card.role-fenced {
+      border-left-color: var(--accent-amber);
+    }
+
+    .node-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .node-name-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .node-title {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--border-bright);
+      background: var(--bg-elevated);
+    }
+
+    .badge.running {
+      color: var(--accent-green);
+      border-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+
+    .badge.suspended {
+      color: var(--accent-purple);
+      border-color: var(--accent-purple);
+      background: var(--accent-purple-bg);
+    }
+
+    .badge.zombie {
+      color: var(--accent-red);
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    .badge.fenced {
+      color: var(--accent-amber);
+      border-color: var(--accent-amber);
+      background: var(--accent-amber-bg);
+    }
+
+    .badge.leader {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      background: var(--accent-cyan-bg);
+    }
+
+    .node-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .metric-box {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+
+    .metric-box .k {
+      color: var(--text-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+      display: block;
+    }
+
+    .metric-box .v {
+      color: var(--text-main);
+      font-weight: 700;
+    }
+
+    /* Visual Raft WAL Log Slots per Node */
+    .wal-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .wal-slot {
+      background: var(--bg-panel);
+      border: 1px dashed var(--border-bright);
+      border-radius: 6px;
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .wal-slot.committed {
+      border-style: solid;
+      border-color: var(--accent-green);
+    }
+
+    .wal-slot.forked {
+      border-style: solid;
+      border-color: var(--accent-red);
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+      font-weight: 700;
+    }
+
+    /* Right Column: 3 Failure Mode Diagnostics */
+    .diag-card {
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-dim);
+      border-radius: 8px;
+      padding: 11px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .diag-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .ledger-table th,
+    .ledger-table td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-dim);
+    }
+
+    .ledger-table th {
+      color: var(--text-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .ledger-table tr.conflict-row {
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+      font-weight: 700;
+    }
+
+    /* Event Log */
+    .event-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 175px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .event-item {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--bg-panel);
+      border-left: 3px solid var(--accent-cyan);
+    }
+
+    .event-item.WARN {
+      border-left-color: var(--accent-amber);
+    }
+
+    .event-item.CRITICAL {
+      border-left-color: var(--accent-red);
+      background: var(--accent-red-bg);
+    }
+
+    .event-item.GUARDED {
+      border-left-color: var(--accent-green);
+      background: var(--accent-green-bg);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Rack Header -->
+    <header class="rack-header">
+      <div class="header-top">
+        <div class="brand-group">
+          <span class="brand-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            ACT IV // ANTI-PATTERN LAB
+          </span>
+          <div>
+            <h1 class="brand-title">CHRONOS SPLIT-BRAIN &amp; DISTRIBUTED KV DATABASE LAB</h1>
+            <div class="brand-subtitle">Why You Never Run etcd / Raft Consensus Voters or Unguarded Wall-Clock Loops on SNAPSHOT_CONTENT_SCOPE_FULL</div>
+          </div>
+        </div>
+
+        <div class="header-controls">
+          <button class="hw-btn" onclick="runStep('/api/reset')" title="Reset 3-Node Cluster to Step 1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            <span>Reset</span>
+          </button>
+
+          <!-- High-Contrast Projector Light Mode Icon-Only Segmented Toggle -->
+          <button id="btnThemeToggle" class="theme-segmented" onclick="toggleTheme()" aria-label="Toggle Projector Light Mode" title="Toggle Dark / Projector Light Mode (T)">
+            <span id="themeSegDark" class="theme-seg-icon active">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </span>
+            <span id="themeSegLight" class="theme-seg-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4-Step Interactive Stage Playbook -->
+      <div class="playbook-bar">
+        <div class="step-buttons">
+          <button id="btnStep1" class="hw-btn step-active" onclick="runStep('/api/step/1-quorum')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>1. Establish Quorum (KV rev=1 Synced)</span>
+          </button>
+          <button id="btnStep2" class="hw-btn" onclick="runStep('/api/step/2-freeze-elect?async=1')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            <span>2. Freeze Leader in GCS -&gt; Watch 3s Lease Expire &amp; Quorum Commit rev=2 (Bob)</span>
+          </button>
+          <button id="btnStep3" class="hw-btn trigger-danger" onclick="runStep('/api/step/3-wake-zombie')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>3. Wake Zombie Leader via atenet ("Mallory" Forks KV rev=2!)</span>
+          </button>
+          <button id="btnStep4" class="hw-btn trigger-guard" onclick="runStep('/api/step/4-guardrail')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>4. Replay with Clock-Jump Guardrail (409 Fence &amp; Clamp)</span>
+          </button>
+        </div>
+
+        <button id="btnGuardToggle" class="guard-toggle-pill" onclick="toggleGuardrail()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span id="guardToggleLabel">WAKEUP CLOCK-JUMP GUARD: OFF (NAIVE)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Dual-Clock Chronometer Bar -->
+    <section class="chronometer-strip">
+      <div class="clock-bay">
+        <div class="clock-label">
+          <span>UNIVERSE / CLUSTER WALL CLOCK (T_wall)</span>
+          <span class="badge running">CONTINUOUS</span>
+        </div>
+        <div class="clock-digits" id="wallClockReadout">+00.00s</div>
+        <div class="clock-sub">Real-world time keeps advancing while actors sleep in GCS</div>
+      </div>
+
+      <div class="clock-bay">
+        <div class="clock-label">
+          <span>raft-node-1 PROCESS HEAP CLOCK (T_heap)</span>
+          <span class="badge running" id="heapClockBadge">SYNCHRONIZED</span>
+        </div>
+        <div class="clock-digits" id="heapClockReadout">+00.00s</div>
+        <div class="clock-sub" id="heapClockSub">100ms ticker executing normally on worker pod</div>
+      </div>
+
+      <div class="clock-bay">
+        <div class="clock-label">
+          <span>LEADER LEASE COUNTDOWN &amp; WALL-CLOCK DRIFT (3,000ms TTL)</span>
+          <span class="mono" id="driftReadout">0 ms drift (Lease: 3.0s)</span>
+        </div>
+        <div class="drift-bar-track">
+          <div class="lease-marker" title="3,000ms Leader Lease Expiry Threshold"></div>
+          <div class="drift-bar-fill" id="driftBarFill"></div>
+        </div>
+        <div class="clock-sub" id="driftSubText">Red marker = 3,000ms Leader Lease TTL (quorum elects Term 2 when crossed)</div>
+      </div>
+    </section>
+
+    <!-- Scenario Status Banner -->
+    <section class="scenario-banner" id="scenarioBanner">
+      <div class="scenario-phase-pill" id="scenarioPhasePill">STEP 1: HEALTHY TERM 1 QUORUM</div>
+      <div class="scenario-summary-text" id="scenarioSummaryText">Initializing 3-node etcd-style KV consensus cluster...</div>
+    </section>
+
+    <!-- Main 2-Column Telemetry Grid -->
+    <div class="main-grid">
+      <!-- Left Column: Distributed KV Store + Live Raft Topology + 3 Node Cards -->
+      <div class="rack-col">
+        <!-- etcd-style Distributed KV Store & Split-Brain Conflict Diff Panel -->
+        <div class="vault-card" id="vaultCard">
+          <div class="vault-top">
+            <div class="vault-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>DISTRIBUTED KV DATABASE (etcd-kv-store) // LIVE KEY-CONFLICT DIFF</span>
+            </div>
+            <span class="badge running" id="vaultStatusBadge">ALL 3 NODES IN SYNC (REV=1)</span>
+          </div>
+
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th id="thNode1">raft-node-1 (LEADER — Term 1)</th>
+                <th id="thNode23">raft-node-2 &amp; 3 (FOLLOWERS — Term 1)</th>
+                <th>Consistency State</th>
+              </tr>
+            </thead>
+            <tbody id="kvComparisonBody"></tbody>
+          </table>
+
+          <!-- Interactive PUT key=value Tester -->
+          <div class="kv-put-bar">
+            <span style="font-weight:700;color:var(--text-muted)">CLIENT PUT:</span>
+            <select id="kvTargetNode" class="kv-select" title="Select target Raft node for client PUT">
+              <option id="optNode1" value="raft-node-1">Target: raft-node-1 (LEADER — Term 1)</option>
+              <option id="optNode2" value="raft-node-2">Target: raft-node-2 (FOLLOWER — Term 1 -&gt; 409)</option>
+              <option id="optNode3" value="raft-node-3">Target: raft-node-3 (FOLLOWER — Term 1 -&gt; 409)</option>
+            </select>
+            <input id="kvInputKey" class="kv-input" type="text" value="/config/db_primary" placeholder="/config/key" />
+            <span>=</span>
+            <input id="kvInputValue" class="kv-input" type="text" value="postgres-custom-9" placeholder="value" />
+            <button class="hw-btn" onclick="submitCustomKV()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <span>PUT Key=Value</span>
+            </button>
+            <span id="kvPutResultBadge" class="badge" style="display:none"></span>
+          </div>
+        </div>
+
+        <!-- Live 3-Node Raft Heartbeat & Replication Topology SVG -->
+        <div class="topology-box">
+          <svg class="topology-svg" viewBox="0 0 680 122" id="raftTopologySvg">
+            <!-- Links rendered dynamically by JS -->
+          </svg>
+        </div>
+
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            <span>3-Node Raft Actors &amp; Replicated KV State (WorkerPool)</span>
+          </h2>
+          <span class="badge running" id="activeLeadersBadge">1 ACTIVE LEADER</span>
+        </div>
+
+        <div class="node-cards" id="nodeCardsContainer"></div>
+      </div>
+
+      <!-- Right Column: The 3 Time-Travel Shock Diagnostics -->
+      <div class="rack-col">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <span>Three Time-Travel Shock Failure Modes (raft-node-1)</span>
+          </h2>
+        </div>
+
+        <!-- Failure Mode 1: Tick Delta Jump -->
+        <div class="diag-card">
+          <div class="diag-head">
+            <span>1. Heartbeat Ticker Delta (Expected: 100ms)</span>
+            <span class="badge running" id="diagTickBadge">100 ms (1.0x)</span>
+          </div>
+          <div class="drift-bar-track">
+            <div class="drift-bar-fill" id="diagTickBar" style="width: 4%"></div>
+          </div>
+          <div class="clock-sub" id="diagTickDesc">Background time.NewTicker(100ms) measures now.Sub(lastHeartbeatAt) on every wakeup.</div>
+        </div>
+
+        <!-- Failure Mode 2: Replicated Raft Commit Log & Fencing Ledger -->
+        <div class="diag-card">
+          <div class="diag-head">
+            <span>2. Replicated Raft Commit Log &amp; Fencing Ledger</span>
+            <span class="badge running" id="diagLedgerBadge">LINEARIZABLE</span>
+          </div>
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Node</th>
+                <th>Log Idx</th>
+                <th>Term</th>
+                <th>Token</th>
+                <th>Committed KV Transaction</th>
+                <th>Role at Commit</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Failure Mode 3: Naive Rate-Limiter Token Bucket -->
+        <div class="diag-card">
+          <div class="diag-head">
+            <span>3. Naive Rate-Limiter Token Bucket (tokens += dt * 100/s)</span>
+            <span class="badge running" id="diagBucketBadge">10.0 tokens</span>
+          </div>
+          <div class="drift-bar-track">
+            <div class="drift-bar-fill" id="diagBucketBar" style="width: 10%"></div>
+          </div>
+          <div class="clock-sub" id="diagBucketDesc">Unguarded elapsed.Seconds() * rate mints hundreds of burst tokens after a multi-second snapshot freeze.</div>
+        </div>
+
+        <!-- Cluster Event Timeline -->
+        <div class="diag-card">
+          <div class="diag-head">
+            <span>Cluster &amp; Snapshot Lifecycle Log</span>
+          </div>
+          <div class="event-feed" id="eventFeed"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let latestState = null;
+    let baseWallTimeMS = Date.now();
+    let lastStateReceivedAtMS = Date.now();
+    let frozenHeapSnapshotSec = null;
+    let busy = false;
+
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        document.getElementById('themeSegLight').classList.add('active');
+        document.getElementById('themeSegDark').classList.remove('active');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        document.getElementById('themeSegDark').classList.add('active');
+        document.getElementById('themeSegLight').classList.remove('active');
+      }
+      try { localStorage.setItem('timewarp_theme', theme); } catch (_) {}
+    }
+
+    function toggleTheme() {
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      applyTheme(isLight ? 'dark' : 'light');
+    }
+
+    (function initTheme() {
+      try {
+        const saved = localStorage.getItem('timewarp_theme');
+        if (saved === 'light' || saved === 'dark') applyTheme(saved);
+      } catch (_) {}
+    })();
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+      if (e.key === 't' || e.key === 'T') toggleTheme();
+    });
+
+    function escapeHTML(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderState(data);
+      } catch (_) {}
+    }
+
+    async function runStep(endpoint) {
+      if (busy) return;
+      busy = true;
+      document.querySelectorAll('button.hw-btn').forEach(b => b.disabled = true);
+      const putBadge = document.getElementById('kvPutResultBadge');
+      if (putBadge) putBadge.style.display = 'none';
+      try {
+        if (endpoint.includes('1-quorum') || endpoint.includes('reset')) {
+          baseWallTimeMS = Date.now();
+          frozenHeapSnapshotSec = null;
+        }
+        const res = await fetch(endpoint, { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          renderState(data);
+        }
+      } finally {
+        busy = false;
+        document.querySelectorAll('button.hw-btn').forEach(b => b.disabled = false);
+      }
+    }
+
+    async function submitCustomKV() {
+      if (busy) return;
+      const targetNode = document.getElementById('kvTargetNode').value;
+      const key = document.getElementById('kvInputKey').value.trim() || '/config/db_primary';
+      const value = document.getElementById('kvInputValue').value.trim() || 'custom-val';
+      const putBadge = document.getElementById('kvPutResultBadge');
+
+      busy = true;
+      try {
+        const res = await fetch('/api/kv/put', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_node: targetNode, key: key, value: value })
+        });
+        const data = await res.json();
+        if (data && data.nodes) {
+          renderState(data);
+        }
+        if (putBadge) {
+          putBadge.style.display = 'inline-block';
+          if (res.status === 409) {
+            putBadge.className = 'badge fenced';
+            putBadge.textContent = `409 REJECTED (${targetNode} is not active leader)`;
+          } else if (targetNode === 'raft-node-1' && data && data.split_brain_active) {
+            putBadge.className = 'badge zombie';
+            putBadge.textContent = `200 OK -> ZOMBIE SPLIT-BRAIN WRITE (KEY DIVERGED!)`;
+          } else {
+            putBadge.className = 'badge running';
+            putBadge.textContent = `200 OK -> Replicated to Quorum`;
+          }
+        }
+      } finally {
+        busy = false;
+      }
+    }
+
+    async function toggleGuardrail() {
+      if (!latestState) return;
+      const nextGuard = !latestState.clock_jump_guard;
+      const res = await fetch('/api/guardrail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guard: nextGuard })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        renderState(data);
+      }
+    }
+
+    function renderTopologySVG(st) {
+      const svg = document.getElementById('raftTopologySvg');
+      if (!svg || !st || !st.nodes) return;
+      const n1 = st.nodes[0] || {};
+      const n2 = st.nodes[1] || {};
+      const n3 = st.nodes[2] || {};
+      const n1Susp = n1.substrate_state === 'SUSPENDED';
+      const r1 = (n1.actor_status && n1.actor_status.role) || 'LEADER';
+      const r2 = (n2.actor_status && n2.actor_status.role) || 'FOLLOWER';
+      const t1 = (n1.actor_status && n1.actor_status.term) || 1;
+      const t2 = (n2.actor_status && n2.actor_status.term) || 1;
+      const t3 = (n3.actor_status && n3.actor_status.term) || 1;
+      const rev1 = (n1.actor_status && n1.actor_status.kv_revision) || 1;
+      const rev2 = (n2.actor_status && n2.actor_status.kv_revision) || 1;
+      const rev3 = (n3.actor_status && n3.actor_status.kv_revision) || 1;
+
+      let link12Color = 'var(--accent-green)';
+      let link13Color = 'var(--accent-green)';
+      let link23Color = 'var(--border-bright)';
+      let link12Dash = '';
+      let link13Dash = '';
+      let statusCaption = 'Term 1 Quorum Active: raft-node-1 replicating KV rev=1 & 100ms heartbeats to raft-node-2 & raft-node-3';
+
+      if (n1Susp) {
+        link12Color = 'var(--accent-purple)';
+        link13Color = 'var(--accent-purple)';
+        link12Dash = 'stroke-dasharray="5,5"';
+        link13Dash = 'stroke-dasharray="5,5"';
+        if (r2 === 'LEADER') {
+          link23Color = 'var(--accent-cyan)';
+          statusCaption = 'raft-node-1 FROZEN IN GCS (rev=1) // Surviving Quorum (Node 2 + Node 3) Elected Term 2 Leader & Committed KV rev=2!';
+        } else {
+          link23Color = 'var(--accent-amber)';
+          statusCaption = 'raft-node-1 FROZEN IN GCS // No heartbeats arriving -> Node 2 & 3 Lease Timeout Counting Down...';
+        }
+      } else if (st.split_brain_active) {
+        link12Color = 'var(--accent-red)';
+        link13Color = 'var(--accent-red)';
+        link12Dash = 'stroke-dasharray="4,4"';
+        link13Dash = 'stroke-dasharray="4,4"';
+        link23Color = 'var(--accent-cyan)';
+        statusCaption = 'SPLIT-BRAIN: Zombie Leader Node 1 (Term 1) + Quorum Leader Node 2 (Term 2) BOTH Accepting Conflicting KV Writes!';
+      } else if (st.split_brain_guarded) {
+        link12Color = 'var(--accent-amber)';
+        link13Color = 'var(--accent-amber)';
+        link12Dash = 'stroke-dasharray="4,4"';
+        link13Dash = 'stroke-dasharray="4,4"';
+        link23Color = 'var(--accent-green)';
+        statusCaption = 'GUARDED: Node 1 Detected +5s Clock Jump on Wakeup & Self-Fenced (409) // Term 2 KV Database Intact!';
+      }
+
+      const n1Fill = n1Susp ? 'var(--accent-purple)' : (r1 === 'ZOMBIE_LEADER' ? 'var(--accent-red)' : (r1 === 'STALE_LEADER_FENCED' ? 'var(--accent-amber)' : 'var(--accent-green)'));
+      const n2Fill = r2 === 'LEADER' ? 'var(--accent-cyan)' : 'var(--bg-elevated)';
+      const n3Fill = t3 === 2 ? 'var(--accent-cyan)' : 'var(--bg-elevated)';
+
+      svg.innerHTML = `
+        <!-- Links -->
+        <line x1="145" y1="52" x2="310" y2="32" stroke="${link12Color}" stroke-width="2.5" ${link12Dash} />
+        <line x1="145" y1="62" x2="310" y2="84" stroke="${link13Color}" stroke-width="2.5" ${link13Dash} />
+        <line x1="415" y1="36" x2="525" y2="76" stroke="${link23Color}" stroke-width="3" />
+
+        ${!n1Susp && r1 === 'LEADER' ? `
+          <circle r="4" fill="var(--accent-green)">
+            <animateMotion dur="1.1s" repeatCount="indefinite" path="M145,52 L310,32" />
+          </circle>
+          <circle r="4" fill="var(--accent-green)">
+            <animateMotion dur="1.1s" repeatCount="indefinite" path="M145,62 L310,84" />
+          </circle>
+        ` : ''}
+
+        ${r2 === 'LEADER' ? `
+          <circle r="4.5" fill="var(--accent-cyan)">
+            <animateMotion dur="0.9s" repeatCount="indefinite" path="M415,36 L525,76" />
+          </circle>
+        ` : ''}
+
+        <!-- Node 1 Box -->
+        <rect x="16" y="26" width="132" height="58" rx="8" fill="var(--bg-panel)" stroke="${n1Fill}" stroke-width="2.5"/>
+        <text x="82" y="47" text-anchor="middle" fill="var(--text-main)" font-family="monospace" font-size="12" font-weight="800">raft-node-1</text>
+        <text x="82" y="63" text-anchor="middle" fill="${n1Fill}" font-family="monospace" font-size="10" font-weight="700">${n1Susp ? 'FROZEN IN GCS' : r1 + ' (T' + t1 + ')'}</text>
+        <text x="82" y="77" text-anchor="middle" fill="var(--text-muted)" font-family="monospace" font-size="9.5">KV Store: rev=${rev1}</text>
+
+        <!-- Node 2 Box -->
+        <rect x="295" y="10" width="132" height="46" rx="8" fill="var(--bg-panel)" stroke="${n2Fill}" stroke-width="2.5"/>
+        <text x="361" y="29" text-anchor="middle" fill="var(--text-main)" font-family="monospace" font-size="11.5" font-weight="800">raft-node-2</text>
+        <text x="361" y="45" text-anchor="middle" fill="var(--accent-cyan)" font-family="monospace" font-size="10" font-weight="700">${r2} (T${t2}) | rev=${rev2}</text>
+
+        <!-- Node 3 Box -->
+        <rect x="515" y="48" width="145" height="46" rx="8" fill="var(--bg-panel)" stroke="${n3Fill}" stroke-width="2.5"/>
+        <text x="587" y="67" text-anchor="middle" fill="var(--text-main)" font-family="monospace" font-size="11.5" font-weight="800">raft-node-3</text>
+        <text x="587" y="83" text-anchor="middle" fill="var(--text-muted)" font-family="monospace" font-size="10" font-weight="700">FOLLOWER (T${t3}) | rev=${rev3}</text>
+
+        <!-- Bottom Caption -->
+        <text x="340" y="114" text-anchor="middle" fill="var(--text-muted)" font-family="monospace" font-size="10.5" font-weight="700">${escapeHTML(statusCaption)}</text>
+      `;
+    }
+
+    function formatNodeDropdownOption(node) {
+      if (!node) return '';
+      const name = node.actor_name || '';
+      const ast = node.actor_status || {};
+      const role = ast.role || 'FOLLOWER';
+      const term = ast.term || 1;
+      if (node.substrate_state === 'SUSPENDED') {
+        return `Target: ${name} (SUSPENDED in GCS — Frozen Term ${term} Leader)`;
+      }
+      if (role === 'LEADER') {
+        return `Target: ${name} (LEADER — Term ${term})`;
+      }
+      if (role === 'ZOMBIE_LEADER') {
+        return `Target: ${name} (ZOMBIE LEADER — Stale Term ${term})`;
+      }
+      if (role === 'STALE_LEADER_FENCED') {
+        return `Target: ${name} (FENCED — Stepped Down Term ${term} -> 409)`;
+      }
+      return `Target: ${name} (FOLLOWER — Term ${term} -> 409)`;
+    }
+
+    function renderKVComparison(st, prevStep) {
+      const vaultCard = document.getElementById('vaultCard');
+      const vaultBadge = document.getElementById('vaultStatusBadge');
+      const tbody = document.getElementById('kvComparisonBody');
+      if (!vaultCard || !vaultBadge || !tbody || !st || !st.nodes) return;
+
+      vaultCard.classList.remove('double-spend', 'vault-guarded');
+      const n1 = st.nodes[0] || {};
+      const n2 = st.nodes[1] || {};
+      const n3 = st.nodes[2] || {};
+      const n1Susp = n1.substrate_state === 'SUSPENDED';
+      const r1 = (n1.actor_status && n1.actor_status.role) || 'LEADER';
+      const r2 = (n2.actor_status && n2.actor_status.role) || 'FOLLOWER';
+      const t1 = (n1.actor_status && n1.actor_status.term) || 1;
+      const t2 = (n2.actor_status && n2.actor_status.term) || 1;
+      const n1Store = (n1.actor_status && n1.actor_status.kv_store) || [];
+      const n2Store = (n2.actor_status && n2.actor_status.kv_store) || [];
+      const conflicts = st.kv_conflicts || [];
+
+      // Update dynamic table column headers to match live node roles!
+      const thNode1 = document.getElementById('thNode1');
+      const thNode23 = document.getElementById('thNode23');
+      if (thNode1) {
+        if (n1Susp) thNode1.textContent = `raft-node-1 (SUSPENDED IN GCS — Frozen Term ${t1})`;
+        else if (r1 === 'ZOMBIE_LEADER') thNode1.textContent = `raft-node-1 (ZOMBIE LEADER — Stale Term ${t1})`;
+        else if (r1 === 'STALE_LEADER_FENCED') thNode1.textContent = `raft-node-1 (FENCED — Stepped Down Term ${t1})`;
+        else thNode1.textContent = `raft-node-1 (${r1} — Term ${t1})`;
+      }
+      if (thNode23) {
+        if (r2 === 'LEADER') thNode23.textContent = `raft-node-2 (LEADER — Term ${t2}) & raft-node-3 (FOLLOWER)`;
+        else thNode23.textContent = `raft-node-2 & 3 (FOLLOWERS — Term ${t2})`;
+      }
+
+      // Update dynamic dropdown options so they reflect each node's current state!
+      const opt1 = document.getElementById('optNode1');
+      const opt2 = document.getElementById('optNode2');
+      const opt3 = document.getElementById('optNode3');
+      if (opt1) opt1.textContent = formatNodeDropdownOption(n1);
+      if (opt2) opt2.textContent = formatNodeDropdownOption(n2);
+      if (opt3) opt3.textContent = formatNodeDropdownOption(n3);
+
+      // When transitioning between steps, auto-select the most relevant active leader
+      const sel = document.getElementById('kvTargetNode');
+      if (sel && prevStep !== st.scenario_step) {
+        if (st.scenario_step === 1) sel.value = 'raft-node-1';
+        else if (st.scenario_step === 2) sel.value = 'raft-node-2';
+        else if (st.scenario_step === 3) sel.value = 'raft-node-1';
+        else if (st.scenario_step === 4) sel.value = 'raft-node-2';
+      }
+
+      if (conflicts.length > 0 || st.double_spend_active) {
+        vaultCard.classList.add('double-spend');
+        vaultBadge.className = 'badge zombie';
+        vaultBadge.textContent = `CRITICAL DATA CORRUPTION: ${conflicts.length} CONFLICTING KEYS AT REV=2!`;
+      } else if (st.split_brain_guarded) {
+        vaultCard.classList.add('vault-guarded');
+        vaultBadge.className = 'badge fenced';
+        vaultBadge.textContent = 'CONSISTENT: ZOMBIE LEADER FENCED (409) — 0 CONFLICTS';
+      } else if (n1Susp && (n2.actor_status && n2.actor_status.term === 2)) {
+        vaultBadge.className = 'badge leader';
+        vaultBadge.textContent = 'QUORUM AT REV=2 (NODE 1 FROZEN AT STALE REV=1 IN GCS)';
+      } else {
+        vaultBadge.className = 'badge running';
+        vaultBadge.textContent = 'ALL 3 NODES IN SYNC (REV=1, 0 CONFLICTS)';
+      }
+
+      const n1Map = {};
+      const qMap = {};
+      const keys = [];
+      n1Store.forEach(e => {
+        n1Map[e.key] = e;
+        if (!keys.includes(e.key)) keys.push(e.key);
+      });
+      n2Store.forEach(e => {
+        qMap[e.key] = e;
+        if (!keys.includes(e.key)) keys.push(e.key);
+      });
+
+      const rows = keys.map(k => {
+        const e1 = n1Map[k];
+        const eq = qMap[k];
+        const v1 = e1 ? `${e1.value} (rev=${e1.revision}, T${e1.term})` : '(not present)';
+        const vq = eq ? `${eq.value} (rev=${eq.revision}, T${eq.term})` : '(not present)';
+        const isConflict = st.split_brain_active && (!e1 || !eq || e1.value !== eq.value);
+        let stateCell = '<span class="badge running">IN SYNC</span>';
+        if (isConflict) {
+          stateCell = '<span class="badge zombie">SPLIT-BRAIN CONFLICT!</span>';
+        } else if (n1Susp && e1 && eq && e1.value !== eq.value) {
+          stateCell = '<span class="badge suspended">NODE 1 FROZEN AT REV=1</span>';
+        } else if (st.split_brain_guarded && e1 && eq && e1.value !== eq.value) {
+          stateCell = '<span class="badge fenced">NODE 1 FENCED (QUORUM WINS)</span>';
+        }
+        return `
+          <tr class="${isConflict ? 'conflict-row' : ''}">
+            <td><strong>${escapeHTML(k)}</strong></td>
+            <td>${escapeHTML(v1)}</td>
+            <td>${escapeHTML(vq)}</td>
+            <td>${stateCell}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = rows.join('');
+    }
+
+    function renderState(st) {
+      const prevStep = latestState ? latestState.scenario_step : null;
+      const wasSuspended = latestState && latestState.nodes && latestState.nodes[0] && latestState.nodes[0].substrate_state === 'SUSPENDED';
+      const nowSuspended = st && st.nodes && st.nodes[0] && st.nodes[0].substrate_state === 'SUSPENDED';
+
+      if (nowSuspended && !wasSuspended) {
+        // Lock the frozen heap clock readout at the exact moment raft-node-1 entered SUSPENDED!
+        frozenHeapSnapshotSec = Math.max(0, (Date.now() - baseWallTimeMS - (st.clock_drift_ms || 0)) / 1000);
+      } else if (!nowSuspended) {
+        frozenHeapSnapshotSec = null;
+      }
+
+      latestState = st;
+      lastStateReceivedAtMS = Date.now();
+
+      // Highlight active step button
+      [1, 2, 3, 4].forEach(n => {
+        const btn = document.getElementById('btnStep' + n);
+        if (btn) btn.classList.toggle('step-active', st.scenario_step === n);
+      });
+
+      // Guardrail toggle pill
+      const guardBtn = document.getElementById('btnGuardToggle');
+      const guardLbl = document.getElementById('guardToggleLabel');
+      if (st.clock_jump_guard) {
+        guardBtn.classList.add('guard-on');
+        guardLbl.textContent = 'WAKEUP CLOCK-JUMP GUARD: ON (FENCE & CLAMP)';
+      } else {
+        guardBtn.classList.remove('guard-on');
+        guardLbl.textContent = 'WAKEUP CLOCK-JUMP GUARD: OFF (NAIVE)';
+      }
+
+      // Banner
+      const banner = document.getElementById('scenarioBanner');
+      banner.classList.remove('split-brain', 'guarded');
+      if (st.split_brain_active) banner.classList.add('split-brain');
+      else if (st.split_brain_guarded) banner.classList.add('guarded');
+
+      document.getElementById('scenarioPhasePill').textContent = st.scenario_phase || 'READY';
+      document.getElementById('scenarioSummaryText').textContent = st.scenario_summary || '';
+
+      // Render Distributed KV Database & Conflict Diff Table
+      renderKVComparison(st, prevStep);
+
+      // Render Topology SVG
+      renderTopologySVG(st);
+
+      // Active Leaders Badge
+      const leadersBadge = document.getElementById('activeLeadersBadge');
+      const numLeaders = (st.active_leaders || []).length;
+      if (numLeaders > 1) {
+        leadersBadge.className = 'badge zombie';
+        leadersBadge.textContent = numLeaders + ' SIMULTANEOUS LEADERS (SPLIT-BRAIN!)';
+      } else if (st.split_brain_guarded) {
+        leadersBadge.className = 'badge fenced';
+        leadersBadge.textContent = '1 VALID LEADER (ZOMBIE FENCED)';
+      } else {
+        leadersBadge.className = 'badge running';
+        leadersBadge.textContent = numLeaders + ' ACTIVE LEADER (QUORUM OK)';
+      }
+
+      // Render 3 Node Cards with Side-by-Side Raft Log Slots (Index #1 and Index #2) + In-Memory KV Store
+      const conflictKeys = new Set((st.kv_conflicts || []).map(c => c.key));
+      const cardsHTML = (st.nodes || []).map(n => {
+        const ast = n.actor_status || {};
+        const role = ast.role || 'FOLLOWER';
+        const isSuspended = n.substrate_state === 'SUSPENDED';
+        let cardClass = 'node-card';
+        if (isSuspended) cardClass += ' state-suspended';
+        else if (role === 'ZOMBIE_LEADER') cardClass += ' role-zombie';
+        else if (role === 'STALE_LEADER_FENCED') cardClass += ' role-fenced';
+        else if (role === 'LEADER') cardClass += ' role-leader';
+
+        let roleBadgeClass = 'badge';
+        if (role === 'ZOMBIE_LEADER') roleBadgeClass += ' zombie';
+        else if (role === 'STALE_LEADER_FENCED') roleBadgeClass += ' fenced';
+        else if (role === 'LEADER') roleBadgeClass += ' leader';
+
+        const subBadgeClass = isSuspended ? 'badge suspended' : 'badge running';
+        const subLabel = isSuspended ? 'SUSPENDED IN GCS (0 CPU)' : 'RUNNING ON WORKER';
+        const history = ast.commit_history || [];
+        const idx1 = history.find(e => e.log_index === 1) || history[0];
+        const idx2 = history.find(e => e.log_index === 2) || history[1];
+
+        const idx1HTML = idx1
+          ? `<div class="wal-slot committed"><span>Idx #1 [T${idx1.term}]</span><span>${escapeHTML(idx1.owner)} (#${idx1.fencing_token})</span></div>`
+          : `<div class="wal-slot"><span>Idx #1</span><span>Empty</span></div>`;
+
+        let idx2HTML = `<div class="wal-slot"><span>Idx #2 (rev=2)</span><span>[UNCOMMITTED — at rev=1]</span></div>`;
+        if (idx2) {
+          const isFork = idx2.zombie_split_brain || st.log_fork_detected;
+          idx2HTML = `<div class="wal-slot ${isFork ? 'forked' : 'committed'}"><span>Idx #2 [T${idx2.term}]</span><span>${escapeHTML(idx2.owner)} (#${idx2.fencing_token})</span></div>`;
+        }
+
+        const kvStore = ast.kv_store || [];
+        const kvPillsHTML = kvStore.map(entry => {
+          const isDiverged = st.split_brain_active && conflictKeys.has(entry.key) && n.actor_name === 'raft-node-1';
+          return `<span class="node-kv-pill ${isDiverged ? 'diverged' : ''}"><strong>${escapeHTML(entry.key)}</strong>=${escapeHTML(entry.value)} (r${entry.revision})</span>`;
+        }).join('');
+
+        const podHistory = (ast.pod_ip_history && ast.pod_ip_history.length > 0)
+          ? ast.pod_ip_history.join(' -> ')
+          : (n.worker_pod_ip || '127.0.0.1');
+        const kvRev = ast.kv_revision || 1;
+        const escrowEntry = kvStore.find(e => e.key === '/escrow/acct_balance');
+        const escrowVal = escrowEntry ? escrowEntry.value : '$10,000';
+
+        return `
+          <div class="${cardClass}">
+            <div class="node-top">
+              <div class="node-name-group">
+                <span class="node-title">${escapeHTML(n.actor_name)}</span>
+                <span class="${roleBadgeClass}">${escapeHTML(role)} (Term ${ast.term || 1})</span>
+              </div>
+              <span class="${subBadgeClass}">${subLabel}</span>
+            </div>
+            <div class="wal-strip">
+              ${idx1HTML}
+              ${idx2HTML}
+            </div>
+            <div class="node-kv-strip">${kvPillsHTML}</div>
+            <div class="node-metrics">
+              <div class="metric-box">
+                <span class="k">In-Heap KV Revision &amp; Escrow</span>
+                <span class="v">rev=${kvRev} | ${escapeHTML(escrowVal)}</span>
+              </div>
+              <div class="metric-box">
+                <span class="k">Last Tick Delta / Tokens</span>
+                <span class="v">${ast.last_observed_gap_ms || 100}ms | ${escapeHTML(ast.naive_token_bucket || '10.0 tokens')}</span>
+              </div>
+              <div class="metric-box">
+                <span class="k">Worker Pod IP</span>
+                <span class="v">${escapeHTML(podHistory)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      document.getElementById('nodeCardsContainer').innerHTML = cardsHTML;
+
+      // Diagnostics for raft-node-1
+      const node1 = (st.nodes || [])[0];
+      const ast1 = (node1 && node1.actor_status) ? node1.actor_status : {};
+      const gapMS = ast1.last_observed_gap_ms || 100;
+      const tickBadge = document.getElementById('diagTickBadge');
+      const tickBar = document.getElementById('diagTickBar');
+      const tickDesc = document.getElementById('diagTickDesc');
+
+      const mult = (gapMS / 100.0).toFixed(1);
+      tickBadge.textContent = `${gapMS} ms (${mult}x expected)`;
+      const tickPct = Math.min(100, Math.max(4, (gapMS / 6000) * 100));
+      tickBar.style.width = tickPct + '%';
+      if (gapMS >= 3000) {
+        tickBadge.className = 'badge zombie';
+        tickBar.className = 'drift-bar-fill expired';
+        tickDesc.textContent = `TIME-TRAVEL SHOCK: Single 100ms ticker jumped ${gapMS}ms after waking from GCS snapshot!`;
+      } else {
+        tickBadge.className = 'badge running';
+        tickBar.className = 'drift-bar-fill';
+        tickDesc.textContent = `Normal 100ms heartbeat tick interval.`;
+      }
+
+      // Token bucket diagnostic
+      const bucketVal = ast1.token_bucket_value || 10.0;
+      const bucketBadge = document.getElementById('diagBucketBadge');
+      const bucketBar = document.getElementById('diagBucketBar');
+      const bucketDesc = document.getElementById('diagBucketDesc');
+      bucketBadge.textContent = `${bucketVal.toFixed(1)} tokens`;
+      bucketBar.style.width = Math.min(100, Math.max(5, (bucketVal / 550) * 100)) + '%';
+      if (bucketVal > 150) {
+        bucketBadge.className = 'badge zombie';
+        bucketBar.className = 'drift-bar-fill expired';
+        bucketDesc.textContent = `BURST OVERFLOW: Naive elapsed.Seconds() * 100 minted +${(bucketVal - 10).toFixed(0)} burst tokens in a single wakeup tick!`;
+      } else if (st.split_brain_guarded) {
+        bucketBadge.className = 'badge fenced';
+        bucketBar.className = 'drift-bar-fill';
+        bucketDesc.textContent = `CLAMPED: Wakeup Clock-Jump Guardrail clamped token refill to 1x ExpectedTick (+10.0 tokens).`;
+      } else {
+        bucketBadge.className = 'badge running';
+        bucketBar.className = 'drift-bar-fill';
+        bucketDesc.textContent = `Steady-state rate-limiter bucket capacity.`;
+      }
+
+      // Replicated Raft Commit Ledger
+      const ledgerBadge = document.getElementById('diagLedgerBadge');
+      if (st.double_spend_active || st.log_fork_detected) {
+        ledgerBadge.className = 'badge zombie';
+        ledgerBadge.textContent = 'FORKED AT LOG INDEX #2 (KV DIVERGENCE!)';
+      } else if (st.split_brain_guarded) {
+        ledgerBadge.className = 'badge fenced';
+        ledgerBadge.textContent = 'PROTECTED (409 FENCED)';
+      } else {
+        ledgerBadge.className = 'badge running';
+        ledgerBadge.textContent = 'LINEARIZABLE QUORUM';
+      }
+
+      const rows = [];
+      (st.nodes || []).forEach(n => {
+        const l = n.actor_status && n.actor_status.current_lock;
+        if (!l) return;
+        const rowClass = l.zombie_split_brain ? 'conflict-row' : '';
+        rows.push(`
+          <tr class="${rowClass}">
+            <td>${escapeHTML(n.actor_name)}</td>
+            <td>#${l.log_index || 1}</td>
+            <td>Term ${l.term}</td>
+            <td>#${l.fencing_token}</td>
+            <td>${escapeHTML(l.owner)} — ${escapeHTML(l.action || '')}</td>
+            <td>${escapeHTML(l.granted_by_role)}</td>
+          </tr>
+        `);
+      });
+      document.getElementById('ledgerTableBody').innerHTML = rows.join('');
+
+      // Events feed
+      const evHTML = (st.events || []).slice().reverse().map(ev => `
+        <div class="event-item ${escapeHTML(ev.severity)}">
+          <strong>[Step ${ev.step} // ${escapeHTML(ev.severity)}] ${escapeHTML(ev.title)}:</strong>
+          ${escapeHTML(ev.description)}
+        </div>
+      `).join('');
+      document.getElementById('eventFeed').innerHTML = evHTML;
+    }
+
+    // 60fps Dual-Clock Chronometer loop — rock-solid frozen clock when SUSPENDED!
+    function updateChronometers() {
+      const nowMS = Date.now();
+      const elapsedSec = (nowMS - baseWallTimeMS) / 1000;
+      const wallEl = document.getElementById('wallClockReadout');
+      const heapEl = document.getElementById('heapClockReadout');
+      const heapBadge = document.getElementById('heapClockBadge');
+      const heapSub = document.getElementById('heapClockSub');
+      const driftEl = document.getElementById('driftReadout');
+      const driftBar = document.getElementById('driftBarFill');
+      const driftSub = document.getElementById('driftSubText');
+
+      if (latestState) {
+        const node1 = (latestState.nodes || [])[0];
+        const isSuspended = node1 && node1.substrate_state === 'SUSPENDED';
+        const baseDriftMS = latestState.clock_drift_ms || 0;
+        const liveDriftMS = isSuspended
+          ? baseDriftMS + Math.max(0, nowMS - lastStateReceivedAtMS)
+          : baseDriftMS;
+
+        wallEl.textContent = `+${elapsedSec.toFixed(2)}s`;
+
+        if (isSuspended) {
+          if (frozenHeapSnapshotSec === null) {
+            frozenHeapSnapshotSec = Math.max(0, elapsedSec - (baseDriftMS / 1000));
+          }
+          // Rock-solid constant readout while suspended in GCS (zero jitter!)
+          heapEl.textContent = `+${frozenHeapSnapshotSec.toFixed(2)}s [FROZEN]`;
+          heapEl.className = 'clock-digits frozen';
+          heapBadge.className = 'badge suspended';
+          heapBadge.textContent = 'FROZEN IN GCS';
+          heapSub.textContent = '0 CPU instructions executing; heap frozen at Role=LEADER (Term 1), KV rev=1 ($10k escrow)';
+        } else if (latestState.split_brain_active) {
+          heapEl.textContent = `+${elapsedSec.toFixed(2)}s [JUMPED +${(baseDriftMS / 1000).toFixed(1)}s!]`;
+          heapEl.className = 'clock-digits shock';
+          heapBadge.className = 'badge zombie';
+          heapBadge.textContent = 'TIME-TRAVEL SHOCK';
+          heapSub.textContent = `Woke from GCS with +${baseDriftMS}ms clock jump; committed conflicting KV rev=2 for Mallory!`;
+        } else if (latestState.split_brain_guarded) {
+          heapEl.textContent = `+${elapsedSec.toFixed(2)}s [GUARDED +${(baseDriftMS / 1000).toFixed(1)}s]`;
+          heapEl.className = 'clock-digits';
+          heapBadge.className = 'badge fenced';
+          heapBadge.textContent = '409 FENCED';
+          heapSub.textContent = `Guardrail caught +${baseDriftMS}ms clock jump on wakeup & stepped down before write`;
+        } else {
+          heapEl.textContent = `+${elapsedSec.toFixed(2)}s`;
+          heapEl.className = 'clock-digits';
+          heapBadge.className = 'badge running';
+          heapBadge.textContent = 'SYNCHRONIZED';
+          heapSub.textContent = '100ms ticker executing normally on worker pod';
+        }
+
+        const leaseRemSec = Math.max(0, (3000 - liveDriftMS) / 1000);
+        driftEl.textContent = isSuspended && liveDriftMS < 3000
+          ? `${Math.round(liveDriftMS)} ms drift (Lease: ${leaseRemSec.toFixed(1)}s left)`
+          : `${Math.round(liveDriftMS)} ms drift`;
+
+        const pct = Math.min(100, Math.max(3, (liveDriftMS / 6000) * 100));
+        driftBar.style.width = pct + '%';
+        if (liveDriftMS >= 3000) {
+          driftBar.className = 'drift-bar-fill expired';
+          driftSub.textContent = `3.0s LEASE EXPIRED BY +${Math.round(liveDriftMS - 3000)}ms — TERM 2 QUORUM ELECTED & COMMITTED KV REV=2 (BOB)!`;
+        } else if (isSuspended) {
+          driftBar.className = 'drift-bar-fill warn';
+          driftSub.textContent = `Leader frozen in GCS! Lease expires in ${leaseRemSec.toFixed(1)}s -> raft-node-2 & 3 will elect Term 2...`;
+        } else {
+          driftBar.className = 'drift-bar-fill';
+          driftSub.textContent = `Red marker = 3,000ms Leader Lease TTL (quorum elects Term 2 when crossed)`;
+        }
+      }
+      requestAnimationFrame(updateChronometers);
+    }
+
+    fetchState();
+    setInterval(() => {
+      if (!busy) fetchState();
+    }, 600);
+    requestAnimationFrame(updateChronometers);
+  </script>
+</body>
+</html>

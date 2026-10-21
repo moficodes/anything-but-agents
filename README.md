@@ -141,24 +141,23 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 
 ---
 
-### Demo 5: "Don't Try This at Home" — Wall-Clock Time-Jump Shock & Raft Split-Brain (`cmd/timewarp`)
+### Demo 5: "Don't Try This at Home" — 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab (`cmd/timewarp`)
 
 * **Why this demo:**
-  The best way to truly understand a new infrastructure primitive is to see **where the wheels fall off**. If you tell engineers "Substrate can checkpoint and restore any container," someone will inevitably try to run a distributed consensus cluster (`etcd`/`Raft`), a Kafka broker, or a wall-clock-sensitive heartbeat daemon on it.
+  The best way to truly understand a new infrastructure primitive is to see **where the wheels fall off**. If you tell engineers "Substrate can checkpoint and restore any container," someone will inevitably try to run a distributed consensus cluster (`etcd`/`Raft`), a distributed lock service, or a wall-clock-sensitive heartbeat daemon on it.
 * **Why this demo specifically:**
-  `cmd/timewarp` simulates a naive cluster node that holds an in-memory leader lease (`InMemoryRaftRole = "LEADER (Term 1)"`, `LeaseTTL = 3s`), runs a `100ms` background heartbeat ticker, and refills a naive rate-limiter token bucket using `elapsed.Seconds() * 100`.
+  `cmd/timewarp` is a multi-mode binary (`--mode=actor|gateway|local`) with an interactive **Chronos Split-Brain & Dual-Clock Telemetry Rack** (`:8085` locally or via in-cluster `Deployment/timewarp-gateway` + LoadBalancer) that coordinates **3 consensus & distributed-lock actors (`raft-node-1`, `raft-node-2`, `raft-node-3`)**:
+  1. **Step 1 — Healthy Term 1 Quorum:** `raft-node-1` is `LEADER (Term 1)` with a 3.0s lease; client `"Alice (checkout-svc)"` acquires exclusive lock `#101`, replicated across all 3 actors.
+  2. **Step 2 — Freeze Term 1 Leader in GCS (`kubectl ate suspend`) & Elect Term 2 Leader:** `raft-node-1` is suspended to GCS for 5 seconds (`0 CPU instructions executed`; its heap clock freezes flat in amber at `Role = LEADER (Term 1)`, `Lock = "Alice"`). After 3.0 seconds of real-world wall-clock time, `raft-node-1`'s lease expires—surviving quorum (`raft-node-2` + `raft-node-3`) elects **`raft-node-2` as `LEADER (Term 2)`** and grants exclusive lock `#102` to `"Bob (inventory-svc)"`.
+  3. **Step 3 — Wake the Zombie Leader via `atenet` (`"Mallory"` Split-Brain!):** A client request (`POST /lock/acquire?owner=Mallory`) hits `ate-target-actor: anything-but-agents/raft-node-1`. `atenet` restores `raft-node-1` from GCS in ~100ms (often on a different Worker Pod IP!). Because its restored RAM heap still believes it is `LEADER (Term 1)`, three failures fire at once:
+     * **Wall-Clock Time-Jump Shock:** A single `100ms` tick measures a `5,000+ ms` gap (`50x` normal tick).
+     * **Zombie Leader Split-Brain Corruption:** `raft-node-1` grants lock `#101` to `"Mallory"` in Term 1 while `raft-node-2` holds lock `#102` for `"Bob"` in Term 2—**two active leaders granting the same exclusive lock to two different clients!**
+     * **Naive Rate-Limiter Burst Overflow:** `tokens += gap.Seconds() * 100` mints `+500 burst tokens` in a single wakeup tick.
+  4. **Step 4 — Wakeup Clock-Jump Guardrail (`?guard=true`):** Toggling on the guardrail shows how valid Substrate actors protect themselves against wall-clock jumps: detecting `dt >> expectedTick` on wakeup, immediately fencing stale leases (`STALE_LEADER_FENCED` -> `409 Conflict`), and clamping rate-limiter token refills to `1x` tick.
 * **What do we learn:**
   **Checkpointing freezes process memory, not the universe's wall clock.**
-  1. While an actor is suspended in GCS for 5 seconds, it executes **zero CPU instructions**—so its heap variables still believe it is the Term 1 Leader.
-  2. The moment it resumes, `time.Since(lastHeartbeat)` jumps from `100ms` to `5,000+ ms` in a single tick.
-  3. Any workload that relies on continuous wall-clock progression, quorum heartbeats, or long-lived non-HTTP sockets will experience **Time-Travel Shock** and **Split-Brain**.
-* **Why is Substrate here:**
-  Here, Substrate is the **villain**! We use `kubectl ate suspend actor` to freeze a "Raft Leader" for 5 seconds (longer than its 3-second leader lease) and then wake it via `atenet` to watch its assumptions implode.
-* **What would be other ways to solve this:**
   * For consensus systems (`etcd`, `Raft`, `ZooKeeper`), continuous streaming brokers (`Kafka`), or 60Hz real-time game loops: **use Kubernetes `StatefulSets` or `Deployments`!** They are never idle (`1:1` multiplexing ratio) and require continuous wall-clock participation.
   * For workloads that *do* belong on Substrate: avoid unguarded `time.Since(lastTick)` multipliers, re-validate external leases/tokens on wakeup, and treat wall-clock discontinuities as normal lifecycle events.
-* **Why is this cool:**
-  On stage, one `curl` before suspend returns `"status": "HEALTHY"`, and the very next `curl` after a 5-second suspend returns `"status": "PANIC: TIME-TRAVEL SHOCK & RAFT SPLIT-BRAIN DETECTED AFTER RESUME!"`—showing a `5,000ms` gap in a `100ms` ticker, an expired leader lease that still thinks it's in charge, and a token bucket that just minted 500 burst tokens at once.
 * **How does Substrate fit into this:**
   * Demonstrates the architectural boundary of **process freeze (`Suspend`/`Resume`)** and sets up the closing **"Secretly Agent-Shaped" Litmus Test** of the talk.
 
@@ -218,7 +217,9 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh act4-honeypot         # Act IV: Truman Show gVisor Honeypot + Split-Screen UI (:8084) & Revert Recovery
 ./hack/stage-demo.sh deploy-honeypot       # Deploy in-cluster Honeypot Split-Screen Gateway + LoadBalancer
 ./hack/stage-demo.sh cleanup-honeypot      # Clean up in-cluster Honeypot Gateway & honeypot-* actors
-./hack/stage-demo.sh act5-timewarp         # Act V: Wall-Clock Time-Jump Shock & Raft Split-Brain
+./hack/stage-demo.sh act5-timewarp         # Act V: 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab (:8085)
+./hack/stage-demo.sh deploy-timewarp       # Deploy in-cluster Time-Warp Split-Brain Lab Gateway + LoadBalancer
+./hack/stage-demo.sh cleanup-timewarp      # Clean up in-cluster Time-Warp Gateway & raft-node-* actors
 ```
 
 ### 4. Cleanup

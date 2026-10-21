@@ -13,7 +13,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 2. **`cmd/coldstart` ("The Instant Cloner & Production HPA QPS Race")**: Multi-mode binary (`--mode=worker|gateway|k8s-router|local`). Worker mode builds a 50,000-document in-memory trigram & token search index + prime lookup table (~76.6 MB post-GC Go heap) across 6 stages (`--init-delay=12s`) before `/readyz` flips from `503` to `200 OK`, executing real BM25 + 3-gram searches (~53k posting intersections, ~15ms compute) with a `20 QPS` per-replica concurrency cap (`--max-concurrent=4`, `--min-query-duration=200ms`). Gateway/local mode runs a synchronized traffic generator, a Kubernetes Secret token-gated (`Secret/coldstart-gateway` `PRESENTER_TOKEN`) Hardware Telemetry & Oscilloscope Rack Web Dashboard (`/dashboard?key=...` setting `cs_presenter` cookie or `X-Presenter-Key` header, with top-right icon-only Moon/Sun Projector Light Mode toggle), and a Kubernetes `external.metrics.k8s.io/v1beta1` HTTPS server (`coldstart_lb_qps`) comparing Standard K8s HPA (`Deployment/coldstart-k8s`) vs. Substrate Golden Snapshot HPA (`coldstart-1..3`) across an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` running `--mode=k8s-router` vs `svc/atenet-router`) → Backend Pod network path.
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Single-tenant embedded key-value store backed by a `DurableDir` volume (`/data/wal.jsonl`) plus an in-memory buffer pool and query counter. Demonstrates split snapshot scopes (`onPause: SNAPSHOT_CONTENT_SCOPE_FULL` for hot local resume vs. `onCommit: SNAPSHOT_CONTENT_SCOPE_DATA` for compact GCS storage + WAL replay on boot) and 1-command GDPR deletion (`kubectl ate delete actor ... --any-state`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`SANDBOX_CLASS_GVISOR`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
-5. **`cmd/timewarp` ("Don't Try This at Home")**: Intentional anti-pattern demonstrating **Wall-Clock Time-Jump Shock** and **Raft Split-Brain**. Runs a 100ms heartbeat ticker, a 3s in-memory leader lease, and a naive `time.Since` rate-limiter token bucket; suspending the actor for 5s and resuming causes an immediate split-brain panic and token burst overflow.
+5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
 
 ## Repository Structure
 
@@ -24,7 +24,7 @@ cmd/
   coldstart/                    # Demo 2: 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
   tenantdb/                     # Demo 3: Per-tenant embedded DB with DurableDir (/data/wal.jsonl)
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
-  timewarp/                     # Demo 5: Wall-clock time-jump & Raft split-brain anti-pattern
+  timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
 manifests/
   workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1alpha1 WorkerPool
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
@@ -36,6 +36,7 @@ manifests/
   honeypot-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, gVisor sandbox)
   honeypot-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for honeypot-gateway
   timewarp-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, heartbeat/lease anti-pattern)
+  timewarp-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for timewarp-gateway
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
 docs/
@@ -72,6 +73,8 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh cleanup-coldstart-hpa # Clean up Cold-Start HPA comparison stack & actors
    ./hack/stage-demo.sh deploy-honeypot       # Deploy interactive Honeypot Split-Screen Gateway & LoadBalancer
    ./hack/stage-demo.sh cleanup-honeypot      # Clean up Honeypot Gateway deployment/service/actors/tags
+   ./hack/stage-demo.sh deploy-timewarp       # Deploy interactive Time-Warp Split-Brain Lab Gateway & LoadBalancer
+   ./hack/stage-demo.sh cleanup-timewarp      # Clean up Time-Warp Gateway deployment/service/actors
    ./hack/stage-demo.sh run-all               # Run all 5 live demos interactively
    PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
    ./hack/stage-demo.sh act1-dungeon          # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)

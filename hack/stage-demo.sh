@@ -33,7 +33,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ATESPACE="anything-but-agents"
 ROUTER_URL="${ROUTER_URL:-http://localhost:8000}"
 PAUSE_BETWEEN_STEPS="${PAUSE_BETWEEN_STEPS:-1}"
-export PATH="/usr/bin/go/bin:${HOME}/google-cloud-sdk/bin:${HOME}/go/bin:${HOME}/.local/bin:${PATH}"
+export PATH="${HOME}/.local/go/bin:/usr/bin/go/bin:${HOME}/google-cloud-sdk/bin:${HOME}/go/bin:${HOME}/.local/bin:${PATH}"
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Load local .env if present; fall back to worktree parent .env or parent .ate-dev-env.sh if present.
@@ -898,21 +898,148 @@ cleanup_honeypot_gateway() {
 
 act5_timewarp() {
   ensure_router_port_forward
-  banner "ACT V: 'Don't Try This at Home' — Wall-Clock Time-Jump Shock & Raft Split-Brain"
-  reset_act_resources raft-leader-1
+  banner "ACT V: 'Don't Try This at Home' — 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab"
+  reset_act_resources raft-leader-1 raft-node-1 raft-node-2 raft-node-3
 
-  step "1. Create 'raft-leader-1' from the 'timewarp' template and verify it is HEALTHY"
-  run_cmd kubectl ate create actor raft-leader-1 -a "${ATESPACE}" --template timewarp
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/raft-leader-1" "${ROUTER_URL}/"
+  local tw_port="${TIMEWARP_PORT:-8085}"
+  local tw_url="http://localhost:${tw_port}"
+  local cluster_lb_ip=""
+  cluster_lb_ip="$(kubectl get svc timewarp-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
 
-  step "2. Suspend 'raft-leader-1' for 5 seconds (longer than its 3-second leader lease TTL!)"
-  run_cmd kubectl ate suspend actor raft-leader-1 -a "${ATESPACE}"
-  echo "Sleeping 5 seconds while raft-leader-1 is frozen in object storage..."
+  if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
+    tw_url="http://${cluster_lb_ip}"
+    echo "Using in-cluster Chronos Split-Brain & Dual-Clock Lab Gateway at ${tw_url}..."
+  else
+    echo "Starting Chronos Split-Brain & Dual-Clock Lab Gateway on ${tw_url}..."
+    (
+      cd "${REPO_ROOT}"
+      go run ./cmd/timewarp \
+        --mode=gateway \
+        --addr=":${tw_port}" \
+        --atespace="${ATESPACE}" \
+        --template=timewarp \
+        --router-url="${ROUTER_URL}" >/dev/null 2>&1
+    ) &
+    TIMEWARP_GW_PID=$!
+    trap 'kill "${PORT_FORWARD_PID:-}" "${TIMEWARP_GW_PID:-}" 2>/dev/null || true' EXIT
+  fi
+
+  echo ""
+  echo "  Chronos Split-Brain & Dual-Clock Lab UI : ${tw_url}/dashboard"
+  echo ""
+
+  step "1. Create 3 consensus actors (raft-node-1..3), elect raft-node-1 as Term 1 LEADER (3s lease), and grant Lock #101 to 'Alice'"
+  run_cmd kubectl ate create actor raft-node-1 -a "${ATESPACE}" --template timewarp
+  run_cmd kubectl ate create actor raft-node-2 -a "${ATESPACE}" --template timewarp
+  run_cmd kubectl ate create actor raft-node-3 -a "${ATESPACE}" --template timewarp
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-1" "${ROUTER_URL}/raft/promote?node_name=raft-node-1&role=LEADER&term=1&leader_id=raft-node-1"
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-1" "${ROUTER_URL}/lock/acquire?owner=Alice+(checkout-svc)&token=101"
+
+  step "2. Suspend Term 1 Leader 'raft-node-1' to GCS for 5 seconds (0 CPU instructions executed; 3s lease expires in the real world!)"
+  run_cmd kubectl ate suspend actor raft-node-1 -a "${ATESPACE}"
+  echo "Sleeping 5 seconds while raft-node-1 is frozen in GCS — surviving quorum (raft-node-2, raft-node-3) elects raft-node-2 as Term 2 LEADER..."
   sleep 5
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-2" "${ROUTER_URL}/raft/promote?node_name=raft-node-2&role=LEADER&term=2&leader_id=raft-node-2"
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-2" "${ROUTER_URL}/lock/acquire?owner=Bob+(inventory-svc)&token=102"
 
-  step "3. Wake 'raft-leader-1' with an HTTP request and observe the Time-Travel Shock & Split-Brain Panic!"
-  run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/raft-leader-1" "${ROUTER_URL}/"
+  step "3. Wake frozen 'raft-node-1' via atenet with a conflicting write ('Mallory') -> ZOMBIE LEADER SPLIT-BRAIN & +500 TOKEN BURST!"
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-1" "${ROUTER_URL}/lock/acquire?owner=Mallory+(rogue-worker)&token=101"
 
+  step "4. Enable Wakeup Clock-Jump Guardrail (?guard=true) -> fences stale lease (409 Conflict) and clamps rate-limiter delta!"
+  run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-1" "${ROUTER_URL}/config?guard=true"
+
+  if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
+    echo ""
+    echo ">>> Chronos Split-Brain & Dual-Clock Lab UI (${tw_url}/dashboard) is still live!"
+    read -r -p "    [Press Enter when finished exploring the browser UI] " _
+  fi
+
+  kill "${TIMEWARP_GW_PID:-}" 2>/dev/null || true
+  free_workers
+}
+
+deploy_timewarp_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Time-Warp Split-Brain & Dual-Clock Lab Gateway & LoadBalancer"
+  reset_act_resources raft-leader-1 raft-node-1 raft-node-2 raft-node-3
+  free_workers
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+
+  kubectl ate delete actor-template timewarp -a "${ATESPACE}" 2>/dev/null || true
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/timewarp-template.yaml.tmpl" \
+      | ko resolve -f - \
+      | kubectl ate create actor-template -f -
+  )
+
+  echo "Waiting for 'timewarp' Golden Snapshot to become READY..."
+  for ((i = 1; i <= 60; i++)); do
+    yaml_out="$(kubectl ate get actor-template timewarp -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
+    golden_tag="$(echo "${yaml_out}" | awk '/takeGoldenSnapshotAt:/ {print $2; exit}')"
+    err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
+    if [[ -n "${golden_tag}" ]]; then
+      echo "  [READY] timewarp (snapshot taken at: ${golden_tag})"
+      break
+    fi
+    if [[ -n "${err_msg}" ]]; then
+      echo "  [ERROR] timewarp: ${err_msg}" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment honeypot-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
+      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
+      KUBECTL_ATE_IMAGE="$(
+        cd "${SUBSTRATE_ROOT}"
+        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+      )"
+    else
+      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy timewarp-gateway." >&2
+      exit 1
+    fi
+  fi
+  export KUBECTL_ATE_IMAGE
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/timewarp-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/timewarp-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc timewarp-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Chronos Split-Brain & Dual-Clock Lab UI (Public) : http://${lb_ip:-<pending>}/dashboard"
+  echo ""
+}
+
+cleanup_timewarp_gateway() {
+  banner "Cleaning up Time-Warp Gateway Deployment & Actors"
+  for act in raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+  done
+  kubectl delete deployment,service,serviceaccount timewarp-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding timewarp-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding timewarp-gateway-ate-client --ignore-not-found
   free_workers
 }
 
@@ -931,7 +1058,8 @@ cleanup_all() {
   cleanup_dungeon2d_gateway
   cleanup_coldstart_hpa
   cleanup_honeypot_gateway
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1; do
+  cleanup_timewarp_gateway
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
@@ -952,6 +1080,8 @@ case "${1:-}" in
   cleanup-coldstart-hpa) cleanup_coldstart_hpa ;;
   deploy-honeypot)       deploy_honeypot_gateway ;;
   cleanup-honeypot)      cleanup_honeypot_gateway ;;
+  deploy-timewarp)       deploy_timewarp_gateway ;;
+  cleanup-timewarp)      cleanup_timewarp_gateway ;;
   run-all)               run_all_acts ;;
   act1-dungeon)          act1_dungeon ;;
   act1b-dungeon2d)       act1b_dungeon2d ;;
@@ -961,7 +1091,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-honeypot|cleanup-honeypot|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

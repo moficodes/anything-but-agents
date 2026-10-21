@@ -120,14 +120,15 @@ sequenceDiagram
 * **Slide 17: What Happens When You Freeze a Process, But Not the Universe?**
   * When `gVisor` or a `microVM` checkpoints a process, the process's CPU registers and RAM freeze at $t_0$.
   * When it restores at $t_0 + \Delta t$, **the process has no idea $\Delta t$ happened** until it reads the clock or the network!
-* **Slide 18: Live Demo 5 — Wall-Clock Time-Jump Shock & Raft Split-Brain (`cmd/timewarp`)**
-  * **On Stage (`./hack/stage-demo.sh act5-timewarp`):**
-    * Start `raft-leader-1`. It runs a 100ms heartbeat loop and holds a 3-second leader lease in RAM (`InMemoryRaftRole = "LEADER (Term 1)"`).
-    * Suspend `raft-leader-1` for 5 seconds, then `curl` it.
-    * **BOOM:** The JSON response lights up with `PANIC: TIME-TRAVEL SHOCK & RAFT SPLIT-BRAIN DETECTED AFTER RESUME!`:
-      * A single "100ms" tick observed a `5,000+ ms` gap.
-      * Its heap still insists it is the `Term 1 LEADER`, even though its 3s lease expired 2 seconds ago while frozen in GCS.
-      * Its naive rate-limiter (`tokens += elapsed * rate`) just minted 500 burst tokens in a single tick.
+* **Slide 18: Live Demo 5 — 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab (`cmd/timewarp`)**
+  * **On Stage (`./hack/stage-demo.sh act5-timewarp` + `/dashboard`):**
+    1. **Healthy Term 1 Quorum:** Start `raft-node-1..3`. `raft-node-1` is `LEADER (Term 1)` with a 3s lease; client `"Alice"` acquires exclusive lock `#101`. Universe Wall Clock and `raft-node-1` Heap Clock tick in lockstep.
+    2. **Freeze Term 1 Leader in GCS (`kubectl ate suspend`) & Elect Term 2 Leader:** Suspend `raft-node-1` for 5 seconds (`0 CPU instructions`; its heap clock freezes flat in amber). After 3s, its lease expires in the real world—`raft-node-2` & `raft-node-3` elect **`raft-node-2` as `LEADER (Term 2)`** and grant exclusive lock `#102` to `"Bob"`.
+    3. **Wake the Zombie Leader via `atenet` (`"Mallory"` Split-Brain!):** Send a lock request for `"Mallory"` to `raft-node-1`. `atenet` restores `raft-node-1` from GCS in ~100ms:
+       * A single `100ms` tick observes a `5,000+ ms` wall-clock jump.
+       * Its restored heap still believes it is `LEADER (Term 1)` and grants lock `#101` to `"Mallory"` while `raft-node-2` holds lock `#102` for `"Bob"` (**two simultaneous leaders granting conflicting exclusive locks!**).
+       * Its naive rate-limiter (`tokens += elapsed * rate`) mints `+500` burst tokens in a single tick.
+    4. **The Guardrail Fix (`?guard=true`):** Replay with **Wakeup Clock-Jump Guardrail** enabled—showing how valid Substrate actors detect `dt >> expectedTick` on wakeup, fence stale leases (`409 Conflict`), and clamp rate-limiter deltas.
 * **Slide 19: The Four Horsemen of Substrate Anti-Patterns**
   1. **Distributed Consensus Voters (etcd / Raft / Paxos):** Suspending a voter triggers leader elections; resuming it reintroduces a zombie leader with amnesia.
   2. **Wall-Clock-Naive Loops:** Heartbeats, TLS session tickets, OAuth token refreshers, and token-bucket rate limiters that don't clamp `time.Since(lastTick)`.
