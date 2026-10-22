@@ -358,11 +358,11 @@ func (b *LocalSimulatorBackend) ExecuteMilestone(_ context.Context, actorName st
 		rec.SnapshotURI = fmt.Sprintf("gs://ate-snapshots/%s/%s/actors/%s/snapshots/v%d", b.atespace, b.template, actorName, rec.SnapshotVersion)
 		b.gcsSnapshots[actorName] = actor.Clone()
 
-		if req.Action == "quicksave" || resp.EventType == "FLOOR_CHANGE" {
+		if req.Action == "quicksave" || req.Action == "save_world" || resp.EventType == "FLOOR_CHANGE" {
 			tagName := fmt.Sprintf("tag-%s-f%d-v%d", actorName, resp.Session.Floor, rec.SnapshotVersion)
 			b.tagSnapshots[tagName] = actor.Clone()
 			rec.LastTag = tagName
-			if req.Action == "quicksave" {
+			if req.Action == "quicksave" || req.Action == "save_world" {
 				evType = "QUICKSAVE"
 			}
 		}
@@ -679,7 +679,7 @@ func (c *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName string,
 		return ActorResponse{}, 0, fmt.Errorf("atenet-router call failed: %w", err)
 	}
 	defer resp.Body.Close()
-	rawResp, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	rawResp, _ := io.ReadAll(io.LimitReader(resp.Body, 524288))
 	if resp.StatusCode >= 300 {
 		return ActorResponse{}, 0, fmt.Errorf("actor returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(rawResp)))
 	}
@@ -896,13 +896,13 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 		if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace); err != nil {
 			slog.Warn("Failed to suspend actor after milestone", slog.String("actor", actorName), slog.Any("err", err))
 		}
-		if req.Action == "quicksave" || actorResp.EventType == "FLOOR_CHANGE" {
+		if req.Action == "quicksave" || req.Action == "save_world" || actorResp.EventType == "FLOOR_CHANGE" {
 			newTag = fmt.Sprintf("tag-%s-f%d-%d", actorName, actorResp.Session.Floor, time.Now().Unix()%10000)
 			_, _ = c.runAte(ctx, "delete", "tag", newTag, "-a", c.atespace)
 			if _, err := c.runAte(ctx, "create", "tag", newTag, "-a", c.atespace, "--actor", actorName); err != nil {
 				slog.Warn("Failed to tag actor snapshot", slog.String("actor", actorName), slog.Any("err", err))
 			}
-			if req.Action == "quicksave" {
+			if req.Action == "quicksave" || req.Action == "save_world" {
 				evType = "QUICKSAVE"
 			}
 		}

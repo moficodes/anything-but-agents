@@ -436,32 +436,23 @@ act1b_dungeon2d() {
   echo "  Player 2D Mobile Game Frontend      : ${gateway_url}/play"
   echo ""
 
-  step "1. Start 2D hero session 'mofi' -> Wakes actor on WorkerPool, initializes Floor 1 heap, and suspends to GCS"
+  step "1. Start 2D hero session 'mofi' (Paladin, 140 HP, 8-Floor Campaign) -> Wakes actor on WorkerPool, initializes Floor 1 WorldState (v1), and suspends to GCS"
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/start" -d '{"hero_name":"mofi","character_class":"paladin"}'
 
-  step "2. Clear Floor 1 (The Forgotten Crypt): defeat Skeleton, grab Crypt Key, and descend to Floor 2"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Restless Skeleton","entity_id":"f1:skeleton"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"crypt-key","entity_id":"f1:key"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"stairs","target":"f1:stairs"}'
+  step "2. Client simulates Floors 1-4 locally at 60fps, then saves Floor 4 Clockwork Foundry WorldState (v2) to GCS"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"save_world","label":"Floor 4 Clockwork Foundry Cleared","world":{"floor":4,"max_floors":8,"hero":{"x":16,"y":8,"hp":118,"max_hp":140,"armor":25,"character_class":"paladin","equipped_weapon":"sunblade-greatsword","equipped_relic":"chrono-sigil","potions":2,"gold":290,"score":740,"inventory":["crypt-key","sunblade-greatsword","chrono-sigil","healing-potion"]}}}'
 
-  step "3. Floor 2 (Abandoned Armory): pick up Dragon-Slayer Sword, activate Quicksave Shrine, and descend to Floor 3 (skipping Fire Shield!)"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"dragon-slayer-sword","entity_id":"f2:sword"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"quicksave","target":"f2:shrine"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"stairs","target":"f2:stairs"}'
+  step "3. Floor 6 (Vault of Forking Paths) & Floor 7 (Obsidian Gauntlet): unlock Sunforged Vault and activate Pre-Boss Save Shrine (v3)"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"quicksave","target":"f7:shrine","label":"Floor 7 Obsidian Gauntlet Pre-Boss Shrine","world":{"floor":7,"max_floors":8,"hero":{"x":18,"y":8,"hp":140,"max_hp":140,"armor":35,"character_class":"paladin","equipped_weapon":"dragon-slayer-sword","equipped_armor":"sunforged-aegis","equipped_relic":"chrono-sigil","potions":3,"gold":620,"score":1680,"inventory":["crypt-key","dragon-slayer-sword","sunforged-aegis","chrono-sigil"]}}}'
 
-  step "4. Floor 3 Boss Fight: attack the Ancient Heap Dragon without Fire Shield -> YOU DIE (Alive=false in RAM)!"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
+  step "4. Floor 8 Boss Fight: charge the Ancient Heap Dragon without Fire Shield -> YOU DIE (Alive=false in RAM)!"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f8:dragon"}'
 
-  step "5. SAVE-SCUM! Revert actor directly back to Snapshot v6 (Floor 2 Shrine) via kubectl ate revert"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/revert" -d '{"actor_name":"d2d-mofi","target_version":6}'
+  step "5. SAVE-SCUM! Revert actor directly back to Snapshot v3 (Floor 7 Pre-Boss Shrine) via kubectl ate revert"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/revert" -d '{"actor_name":"d2d-mofi","target_version":3}'
 
-  step "6. Grab the Fire Shield on Floor 2, descend to Floor 3, slay the Ancient Heap Dragon, claim the Golden Chalice, and escape!"
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"fire-shield","entity_id":"f2:shield"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"stairs","target":"f2:stairs"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"combat","target":"Ancient Heap Dragon","entity_id":"f3:dragon"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"pickup","target":"golden-chalice","entity_id":"f3:chalice"}'
-  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"escape","target":"f3:portal"}'
+  step "6. Equip Fire Shield + Sunforged Aegis, slay the Ancient Heap Dragon on Floor 8, claim the Golden Chalice, and escape!"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/session/action" -d '{"actor_name":"d2d-mofi","action":"victory","label":"Floor 8 Ancient Heap Dragon Slain & Sanctum Escaped","world":{"floor":8,"max_floors":8,"hero":{"x":11,"y":1,"hp":96,"max_hp":140,"armor":45,"character_class":"paladin","equipped_weapon":"dragon-slayer-sword","equipped_armor":"sunforged-aegis","equipped_relic":"chrono-sigil","potions":1,"gold":950,"score":2650,"inventory":["crypt-key","dragon-slayer-sword","fire-shield","sunforged-aegis","chrono-sigil","golden-chalice"]}}}'
 
   step "7. Fork a parallel timeline ('d2d-mofi-timeline-b') from the tagged snapshot!"
   run_cmd curl -fsS -X POST "${gateway_url}/api/session/fork" -d '{"source_actor":"d2d-mofi","new_actor":"d2d-mofi-timeline-b"}'

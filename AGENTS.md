@@ -9,7 +9,7 @@ This is the companion repository (Go demo services, Substrate manifests, live-st
 Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native, sub-second memory-checkpointing, wake-on-HTTP, gVisor-sandboxed actor runtime**. This project demonstrates its architectural primitives—and its failure modes—by multiplexing five non-agent workloads across a single 3-replica `WorkerPool`:
 
 1. **`cmd/dungeon` ("Look Ma, No Database")**: Zork-style RPG where 100% of state (`GameState`: HP, inventory, room items, monster HP, `pod_ip_history`) lives in Go heap RAM with zero database or disk I/O. Demonstrates `SNAPSHOT_FIDELITY_MEMORY` across pod migrations, save-scumming via `kubectl ate revert actor`, and timeline branching via `kubectl ate create tag` + `--tag`.
-1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a 2D canvas roguelike (`/play`, public) and a Kubernetes Secret token-gated presenter leaderboard (`/dashboard?token=...`). Demonstrates milestone-driven `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
+1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a PixiJS v8 8-floor action roguelike (`/play`, public, 100% client-side 60fps simulation with asymmetric Paladin/Ranger/Wizard classes and A* enemy pathfinding) and a Kubernetes Secret token-gated presenter leaderboard (`/dashboard?token=...`). Demonstrates explicit `WorldState` checkpoints via `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
 2. **`cmd/coldstart` ("The Instant Cloner & Production HPA QPS Race")**: Multi-mode binary (`--mode=worker|gateway|k8s-router|local`). Worker mode builds a 50,000-document in-memory trigram & token search index + prime lookup table (~76.6 MB post-GC Go heap) across 6 stages (`--init-delay=12s`) before `/readyz` flips from `503` to `200 OK`, executing real BM25 + 3-gram searches (~53k posting intersections, ~15ms compute) with a `20 QPS` per-replica concurrency cap (`--max-concurrent=4`, `--min-query-duration=200ms`). Gateway/local mode runs a synchronized traffic generator, a Kubernetes Secret token-gated (`Secret/coldstart-gateway` `PRESENTER_TOKEN`) Hardware Telemetry & Oscilloscope Rack Web Dashboard (`/dashboard?key=...` setting `cs_presenter` cookie or `X-Presenter-Key` header, with top-right icon-only Moon/Sun Projector Light Mode toggle), and a Kubernetes `external.metrics.k8s.io/v1beta1` HTTPS server (`coldstart_lb_qps`) comparing Standard K8s HPA (`Deployment/coldstart-k8s`) vs. Substrate Golden Snapshot HPA (`coldstart-1..3`) across an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` running `--mode=k8s-router` vs `svc/atenet-router`) → Backend Pod network path.
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Multi-mode binary (`--mode=actor|gateway|local`) combining a single-tenant embedded database (`DurableDir` `/data/wal.jsonl` + lazy `16.0 MB` Hot RAM Buffer Pool & Materialized View) with a **Storage & Memory Tiering X-Ray Console** (`:8086` / `/dashboard`). Demonstrates memory vs. volume snapshot fidelity (`SNAPSHOT_FIDELITY_MEMORY` keeping the `16.0 MB` RAM Buffer Pool hot on `pause` vs. `SNAPSHOT_FIDELITY_VOLUMES` / pre-commit RAM discard committing only `/data/wal.jsonl` to GCS on `suspend` for `99.997%` bandwidth savings + `<1ms` WAL replay on wakeup), 4 customer databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) multiplexing across the 3-replica `WorkerPool` with zero `WHERE tenant_id` queries, and 1-command GDPR Article 17 deletion (`kubectl ate delete actor ... --any-state`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`sandboxClass: gvisor`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
@@ -107,3 +107,18 @@ Always run `go test ./...` after modifying any file under `cmd/`.
   - When adding or modifying a demo's flags, endpoints, or lifecycle steps, update `hack/stage-demo.sh`, `README.md`, and `docs/talk-outline.md` together.
 - **License Headers**:
   - Include the standard `Copyright 2026 Google LLC` Apache 2.0 license header on all new `.go`, `.sh`, and `.yaml.tmpl` files.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs for this repo live in GitHub Issues (`moficodes/anything-but-agents`) managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`GLOSSARY.md` at repo root and ADRs in `docs/adr/`). See `docs/agents/domain.md`.
+

@@ -26,6 +26,85 @@
       --parchment-bot: #c1a46e;
       --parchment-ink: #231709;
     }
+    body.light-mode {
+      --bg: #ede3cf;
+      --stone-hi: #c8b698;
+      --stone-mid: #e6dac2;
+      --stone-dark: #d5c5a6;
+      --stone-lo: #7a6648;
+      --stone-socket: #f7efe0;
+      --amber-border: #a16207;
+      --amber-dim: #92400e;
+      --text: #1c1308;
+      --muted: #57442a;
+      --cyan: #0369a1;
+      --emerald: #047857;
+      --amber: #b45309;
+      --rose: #be123c;
+      --violet: #6d28d9;
+      background: radial-gradient(circle at 50% 10%, #f5ebd6 0%, #dfd1b5 82%);
+    }
+    body.light-mode .stone-slab {
+      background: linear-gradient(180deg, #efe4ce 0%, #ded0b4 100%);
+      box-shadow: inset 0 0 0 1px rgba(120, 95, 60, 0.25), 0 4px 12px rgba(60, 45, 20, 0.18);
+    }
+    body.light-mode .stone-socket {
+      background: #f8f1e3;
+      border-top-color: #968160;
+      border-left-color: #968160;
+      border-right-color: #fff8eb;
+      border-bottom-color: #fff8eb;
+      box-shadow: inset 0 2px 5px rgba(80, 60, 30, 0.18);
+    }
+    body.light-mode .brand-title,
+    body.light-mode .section-title,
+    body.light-mode .actor-name,
+    body.light-mode .kpi-val,
+    body.light-mode .worker-top {
+      color: #1c1308;
+      text-shadow: none;
+    }
+    body.light-mode .btn {
+      background: linear-gradient(180deg, #e5d6b8 0%, #cbb894 100%);
+      border-top-color: #fff5e1;
+      border-left-color: #fff5e1;
+      border-right-color: #786444;
+      border-bottom-color: #786444;
+      color: #1c1308;
+      text-shadow: none;
+    }
+    body.light-mode .btn-primary {
+      background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
+      color: #fffbeb;
+    }
+    .theme-seg {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 4px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .theme-seg-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .theme-seg-btn.active {
+      background: rgba(245, 158, 11, 0.22);
+      color: #fbbf24;
+    }
+    body.light-mode .theme-seg-btn.active {
+      background: rgba(180, 83, 9, 0.2);
+      color: #92400e;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -583,6 +662,14 @@
         <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
         Player View (/play)
       </a>
+      <div class="theme-seg stone-socket" title="Projector Light / Dark Mode">
+        <button id="btnDarkMode" class="theme-seg-btn active" onclick="toggleLightMode(false)" aria-label="Dark Mode">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+        <button id="btnLightMode" class="theme-seg-btn" onclick="toggleLightMode(true)" aria-label="Light Mode">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -718,7 +805,8 @@
     function drawAvatar(canvasEl, cls) {
       if (!canvasEl) return;
       const c = canvasEl.getContext("2d");
-      const sp = CLASS_SPRITES[cls] || CLASS_SPRITES.paladin;
+      const key = (cls === "wizard") ? "mage" : cls;
+      const sp = CLASS_SPRITES[key] || CLASS_SPRITES.paladin;
       c.clearRect(0, 0, 16, 16);
       for (let r = 0; r < sp.length; r++) {
         for (let col = 0; col < sp[r].length; col++) {
@@ -728,6 +816,14 @@
           c.fillRect(col, r, 1, 1);
         }
       }
+    }
+
+    function toggleLightMode(isLight) {
+      document.body.classList.toggle("light-mode", isLight);
+      const d = document.getElementById("btnDarkMode");
+      const l = document.getElementById("btnLightMode");
+      if (d) d.classList.toggle("active", !isLight);
+      if (l) l.classList.toggle("active", isLight);
     }
 
     const SVG_ICONS = {
@@ -834,14 +930,15 @@
                 <div class="hp-bar-segments"></div>
                 <div class="hp-bar-label">
                   <span>HP ${s.hp}/${s.max_hp || 100}</span>
-                  <span>FL ${s.floor}/3 &bull; ${s.score} PTS</span>
+                  <span>FL ${s.floor}/8 &bull; ${s.score} PTS</span>
                 </div>
               </div>
 
               <div class="inv-row">
                 <span class="inv-chip stone-socket ${inv.includes('crypt-key') ? 'active' : ''}">${SVG_ICONS.key} Key</span>
-                <span class="inv-chip stone-socket ${inv.includes('dragon-slayer-sword') ? 'active' : ''}">${SVG_ICONS.sword} Sword</span>
-                <span class="inv-chip stone-socket ${inv.includes('fire-shield') ? 'active' : ''}">${SVG_ICONS.shield} Shield</span>
+                <span class="inv-chip stone-socket ${(inv.includes('dragon-slayer-sword') || inv.includes('sunblade-greatsword') || inv.includes('windforce-bow') || inv.includes('runic-firestaff')) ? 'active' : ''}">${SVG_ICONS.sword} Weapon</span>
+                <span class="inv-chip stone-socket ${(inv.includes('fire-shield') || inv.includes('sunforged-aegis')) ? 'active' : ''}" data-relic="sunforged-aegis">${SVG_ICONS.shield} Shield/Aegis</span>
+                <span class="inv-chip stone-socket ${(inv.includes('voidbane-relic') || inv.includes('chrono-sigil')) ? 'active' : ''}" data-relic="voidbane-relic">${SVG_ICONS.fork} Relic</span>
                 <span class="inv-chip stone-socket ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
                 <span class="inv-chip stone-socket ${potions > 0 ? 'active' : ''}">${SVG_ICONS.potion} x${potions}</span>
               </div>

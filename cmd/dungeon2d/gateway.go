@@ -199,6 +199,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	mux.HandleFunc("/play", func(w http.ResponseWriter, _ *http.Request) {
 		raw, _ := webFS.ReadFile("web/play.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		_, _ = w.Write(raw)
 	})
 
@@ -216,12 +219,16 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		if !g.IsPresenter(r) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(presenterKeyRequiredPage))
 			return
 		}
 		raw, _ := webFS.ReadFile("web/dashboard.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		_, _ = w.Write(raw)
 	})
 
@@ -287,18 +294,20 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 
 	mux.HandleFunc("/api/session/action", func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
-			ActorName      string `json:"actor_name"`
-			Action         string `json:"action"`
-			Target         string `json:"target"`
-			EntityID       string `json:"entity_id"`
-			CharacterClass string `json:"character_class"`
-			X              int    `json:"x"`
-			Y              int    `json:"y"`
-			PrevX          int    `json:"prev_x"`
-			PrevY          int    `json:"prev_y"`
+			ActorName      string      `json:"actor_name"`
+			Action         string      `json:"action"`
+			Label          string      `json:"label"`
+			Target         string      `json:"target"`
+			EntityID       string      `json:"entity_id"`
+			CharacterClass string      `json:"character_class"`
+			X              int         `json:"x"`
+			Y              int         `json:"y"`
+			PrevX          int         `json:"prev_x"`
+			PrevY          int         `json:"prev_y"`
+			World          *WorldState `json:"world,omitempty"`
 		}
 		if r.Body != nil {
-			body, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
+			body, _ := io.ReadAll(io.LimitReader(r.Body, 262144))
 			_ = json.Unmarshal(body, &payload)
 		}
 		if payload.ActorName == "" {
@@ -309,6 +318,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		rec, err := g.backend.ExecuteMilestone(r.Context(), payload.ActorName, MutateRequest{
 			Action:         payload.Action,
+			Label:          payload.Label,
 			Target:         payload.Target,
 			EntityID:       payload.EntityID,
 			CharacterClass: payload.CharacterClass,
@@ -316,6 +326,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			Y:              payload.Y,
 			PrevX:          payload.PrevX,
 			PrevY:          payload.PrevY,
+			World:          payload.World,
 		})
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -447,6 +458,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if r.URL.Path == "/" {
 			raw, _ := webFS.ReadFile("web/play.html")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
 			_, _ = w.Write(raw)
 			return
 		}
@@ -472,23 +486,172 @@ func (g *GatewayServer) runDemoBot(ctx context.Context, heroName string, stepDel
 		isRevert bool
 		req      MutateRequest
 	}{
-		{req: MutateRequest{Action: "pickup", Target: "healing-potion", EntityID: "f1:potion", X: 3, Y: 7}},
-		{req: MutateRequest{Action: "combat", Target: "Restless Skeleton", EntityID: "f1:skeleton", X: 7, Y: 5}},
-		{req: MutateRequest{Action: "pickup", Target: "crypt-key", EntityID: "f1:key", X: 11, Y: 3}},
-		{req: MutateRequest{Action: "stairs", Target: "f1:stairs", EntityID: "f1:stairs", X: 13, Y: 9}},
-		{req: MutateRequest{Action: "pickup", Target: "dragon-slayer-sword", EntityID: "f2:sword", X: 5, Y: 5}},
-		{req: MutateRequest{Action: "quicksave", Target: "f2:shrine", EntityID: "f2:shrine", X: 10, Y: 5}},
-		{req: MutateRequest{Action: "stairs", Target: "f2:stairs", EntityID: "f2:stairs", X: 13, Y: 5}},
-		// Recklessly attack the Ancient Heap Dragon WITHOUT fire-shield -> DIE!
-		{req: MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon", X: 7, Y: 4}},
-		// SAVE-SCUM! Revert actor back to pre-attack GCS snapshot
+		{
+			req: MutateRequest{
+				Action: "save_world",
+				Label:  "Floor 2 Crossroad Catacombs Cleared",
+				World: &WorldState{
+					Floor:     2,
+					MaxFloors: 8,
+					Hero: HeroWorldState{
+						X:              18,
+						Y:              8,
+						HP:             128,
+						MaxHP:          140,
+						Armor:          25,
+						CharacterClass: "paladin",
+						EquippedWeapon: "sunblade-greatsword",
+						Potions:        2,
+						Gold:           140,
+						Score:          320,
+						Inventory:      []string{"crypt-key", "sunblade-greatsword", "healing-potion", "healing-potion"},
+					},
+					Floors: map[string]FloorWorldState{
+						"2": {
+							Enemies: []EnemyState{
+								{ID: "f2:archer-1", Archetype: "bone_archer", Name: "Bone Archer", X: 14, Y: 7, HP: 0, MaxHP: 28, Alive: false, AIState: "dead"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			req: MutateRequest{
+				Action: "save_world",
+				Label:  "Floor 4 Clockwork Foundry Gate Opened",
+				World: &WorldState{
+					Floor:     4,
+					MaxFloors: 8,
+					Hero: HeroWorldState{
+						X:              16,
+						Y:              8,
+						HP:             112,
+						MaxHP:          140,
+						Armor:          25,
+						CharacterClass: "paladin",
+						EquippedWeapon: "sunblade-greatsword",
+						EquippedRelic:  "chrono-sigil",
+						Potions:        2,
+						Gold:           290,
+						Score:          740,
+						Inventory:      []string{"crypt-key", "sunblade-greatsword", "chrono-sigil", "healing-potion"},
+					},
+					Floors: map[string]FloorWorldState{
+						"4": {
+							Interactables: []InteractableState{
+								{ID: "f4:foundry-gate", Kind: "gate", X: 14, Y: 8, State: "open"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			req: MutateRequest{
+				Action: "save_world",
+				Label:  "Floor 6 Sunforged Vault Unlocked",
+				World: &WorldState{
+					Floor:     6,
+					MaxFloors: 8,
+					Hero: HeroWorldState{
+						X:              19,
+						Y:              8,
+						HP:             134,
+						MaxHP:          140,
+						Armor:          35,
+						CharacterClass: "paladin",
+						EquippedWeapon: "dragon-slayer-sword",
+						EquippedArmor:  "sunforged-aegis",
+						EquippedRelic:  "chrono-sigil",
+						Potions:        2,
+						Gold:           480,
+						Score:          1280,
+						Inventory:      []string{"crypt-key", "dragon-slayer-sword", "sunforged-aegis", "chrono-sigil"},
+					},
+					Floors: map[string]FloorWorldState{
+						"6": {
+							Interactables: []InteractableState{
+								{ID: "f6:vault-sunforged", Kind: "vault", X: 6, Y: 3, State: "open"},
+								{ID: "f6:vault-voidbane", Kind: "vault", X: 16, Y: 12, State: "sealed"},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			req: MutateRequest{
+				Action:   "quicksave",
+				Target:   "f7:shrine",
+				EntityID: "f7:shrine",
+				Label:    "Floor 7 Obsidian Gauntlet Pre-Boss Shrine",
+				World: &WorldState{
+					Floor:     7,
+					MaxFloors: 8,
+					Hero: HeroWorldState{
+						X:              18,
+						Y:              8,
+						HP:             140,
+						MaxHP:          140,
+						Armor:          35,
+						CharacterClass: "paladin",
+						EquippedWeapon: "dragon-slayer-sword",
+						EquippedArmor:  "sunforged-aegis",
+						EquippedRelic:  "chrono-sigil",
+						Potions:        3,
+						Gold:           620,
+						Score:          1680,
+						Inventory:      []string{"crypt-key", "dragon-slayer-sword", "sunforged-aegis", "chrono-sigil"},
+					},
+				},
+			},
+		},
+		// Recklessly charge Ancient Heap Dragon on Floor 8 without fire-shield equipped -> DIE in uncommitted RAM!
+		{
+			req: MutateRequest{
+				Action:   "combat",
+				Target:   "Ancient Heap Dragon",
+				EntityID: "f8:dragon",
+				X:        15,
+				Y:        8,
+			},
+		},
+		// SAVE-SCUM! Revert actor back to Floor 7 Pre-Boss Shrine snapshot
 		{isRevert: true},
-		// Now grab the Fire Shield and defeat the Dragon!
-		{req: MutateRequest{Action: "pickup", Target: "fire-shield", EntityID: "f2:shield", X: 10, Y: 1}},
-		{req: MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon", X: 7, Y: 4}},
-		{req: MutateRequest{Action: "combat", Target: "Ancient Heap Dragon", EntityID: "f3:dragon", X: 7, Y: 4}},
-		{req: MutateRequest{Action: "pickup", Target: "golden-chalice", EntityID: "f3:chalice", X: 7, Y: 2}},
-		{req: MutateRequest{Action: "escape", Target: "f3:portal", EntityID: "f3:portal", X: 7, Y: 1}},
+		// Equip Fire Shield + Sunforged Aegis and slay the Ancient Heap Dragon on Floor 8!
+		{
+			req: MutateRequest{
+				Action: "victory",
+				Label:  "Floor 8 Ancient Heap Dragon Slain & Sanctum Escaped",
+				World: &WorldState{
+					Floor:     8,
+					MaxFloors: 8,
+					Hero: HeroWorldState{
+						X:              20,
+						Y:              8,
+						HP:             96,
+						MaxHP:          140,
+						Armor:          45,
+						CharacterClass: "paladin",
+						EquippedWeapon: "dragon-slayer-sword",
+						EquippedArmor:  "sunforged-aegis",
+						EquippedRelic:  "chrono-sigil",
+						Potions:        1,
+						Gold:           950,
+						Score:          2650,
+						Inventory:      []string{"crypt-key", "dragon-slayer-sword", "fire-shield", "sunforged-aegis", "chrono-sigil", "golden-chalice"},
+					},
+					Floors: map[string]FloorWorldState{
+						"8": {
+							Enemies: []EnemyState{
+								{ID: "f8:dragon", Archetype: "heap_dragon", Name: "Ancient Heap Dragon", X: 15, Y: 8, HP: 0, MaxHP: 240, Alive: false, AIState: "dead"},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, st := range steps {

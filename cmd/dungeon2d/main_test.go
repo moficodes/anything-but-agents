@@ -41,9 +41,9 @@ func TestActorSessionThreeFloorProgressionAndVictory(t *testing.T) {
 		return session.Mutate(m, podIP)
 	}
 
-	// 2. Initialize hero on Worker Pod 1
+	// 2. Initialize hero on Worker Pod 1 (Paladin starts with 140 HP)
 	resp := mutate(MutateRequest{Action: "init", HeroName: "mofi", CharacterClass: "paladin"}, "10.120.0.11")
-	if resp.Session.HeroName != "mofi" || resp.Session.Floor != 1 || resp.Session.HP != 100 {
+	if resp.Session.HeroName != "mofi" || resp.Session.Floor != 1 || resp.Session.HP != 140 || resp.Session.MaxHP != 140 {
 		t.Fatalf("unexpected initial state: %+v", resp.Session)
 	}
 
@@ -437,6 +437,499 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 		t.Fatalf("expected bot-knight victory & revert in dashboard stats, got %+v", dash.Stats)
 	}
 }
+
+func TestWorldStateSaveRevertForkAndAsymmetricClasses(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://localhost:8090", "test-presenter-secret")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	postJSON := func(path string, payload any) SessionRecord {
+		t.Helper()
+		raw, _ := json.Marshal(payload)
+		resp, err := http.Post(srv.URL+path, "application/json", bytes.NewReader(raw))
+		if err != nil {
+			t.Fatalf("POST %s failed: %v", path, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST %s returned %d", path, resp.StatusCode)
+		}
+		var out SessionRecord
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode SessionRecord from %s failed: %v", path, err)
+		}
+		return out
+	}
+
+	// 1. Verify asymmetric Hero Class base stats across Paladin, Ranger, and Wizard
+	pal := postJSON("/api/session/start", map[string]string{"hero_name": "pal-hero", "character_class": "paladin"})
+	rng := postJSON("/api/session/start", map[string]string{"hero_name": "rng-hero", "character_class": "ranger"})
+	wiz := postJSON("/api/session/start", map[string]string{"hero_name": "wiz-hero", "character_class": "wizard"})
+
+	if pal.Session.MaxHP != 140 || pal.Session.World == nil || pal.Session.World.Hero.Armor != 25 || pal.Session.MaxFloors != 8 {
+		t.Fatalf("expected Paladin 140 HP, 25 armor, 8 floors; got %+v", pal.Session)
+	}
+	if rng.Session.MaxHP != 100 || rng.Session.World == nil || rng.Session.World.Hero.AttackRange < 4.0 {
+		t.Fatalf("expected Ranger 100 HP and ranged bow attack; got %+v", rng.Session)
+	}
+	if wiz.Session.MaxHP != 75 || wiz.Session.World == nil || wiz.Session.World.Hero.AttackDamage < 35 {
+		t.Fatalf("expected Wizard 75 HP glass cannon and high spell damage; got %+v", wiz.Session)
+	}
+
+	// 2. Client plays locally to Floor 4, wounds a Shadow Knight at (14.5, 8.2), opens a lever gate, and triggers Save (v2)
+	saveV2 := postJSON("/api/session/action", map[string]any{
+		"actor_name": "d2d-wiz-hero",
+		"action":     "save_world",
+		"label":      "Floor 4 Foundry Lever & Wounded Knight",
+		"world": map[string]any{
+			"floor":      4,
+			"max_floors": 8,
+			"hero": map[string]any{
+				"x":                12.5,
+				"y":                8.0,
+				"hp":               62,
+				"max_hp":           75,
+				"armor":            0,
+				"character_class":  "wizard",
+				"equipped_weapon":  "runic-firestaff",
+				"equipped_relic":   "chrono-sigil",
+				"potions":          2,
+				"gold":             240,
+				"score":            850,
+				"inventory":        []string{"crypt-key", "runic-firestaff", "healing-potion", "healing-potion"},
+			},
+			"floors": map[string]any{
+				"4": map[string]any{
+					"enemies": []map[string]any{
+						{
+							"id":        "f4:knight-1",
+							"archetype": "shadow_knight",
+							"name":      "Shadow Knight",
+							"x":         14.5,
+							"y":         8.2,
+							"hp":        18,
+							"max_hp":    60,
+							"alive":     true,
+							"ai_state":  "chasing",
+						},
+					},
+					"items": []map[string]any{
+						{
+							"id":        "f4:relic",
+							"kind":      "chrono-sigil",
+							"x":         6,
+							"y":         3,
+							"collected": true,
+						},
+					},
+					"interactables": []map[string]any{
+						{
+							"id":    "f4:foundry-gate",
+							"kind":  "gate",
+							"x":     10,
+							"y":     8,
+							"state": "open",
+						},
+					},
+				},
+			},
+		},
+	})
+
+	if saveV2.Session.Floor != 4 || saveV2.Session.HP != 62 || saveV2.SaveCount != 2 {
+		t.Fatalf("expected Floor 4, HP 62, SaveCount 2 after save_world; got Floor=%d HP=%d SaveCount=%d",
+			saveV2.Session.Floor, saveV2.Session.HP, saveV2.SaveCount)
+	}
+	f4 := saveV2.Session.World.Floors["4"]
+	if len(f4.Enemies) != 1 || f4.Enemies[0].HP != 18 || f4.Enemies[0].X != 14.5 {
+		t.Fatalf("expected wounded knight at (14.5, 8.2) with 18 HP in saved WorldState, got %+v", f4.Enemies)
+	}
+
+	// 3. Player advances to Floor 6, unlocks Sunforged Vault (sealing Voidbane Vault), takes heavy damage (11 HP), and saves v3
+	saveV3 := postJSON("/api/session/action", map[string]any{
+		"actor_name": "d2d-wiz-hero",
+		"action":     "save_world",
+		"label":      "Floor 6 Sunforged Vault Chosen",
+		"world": map[string]any{
+			"floor":      6,
+			"max_floors": 8,
+			"hero": map[string]any{
+				"x":               9.0,
+				"y":               11.0,
+				"hp":              11,
+				"max_hp":          75,
+				"character_class": "wizard",
+				"equipped_armor":  "sunforged-aegis",
+				"gold":            410,
+				"score":           1420,
+				"inventory":       []string{"crypt-key", "runic-firestaff", "sunforged-aegis"},
+			},
+			"floors": map[string]any{
+				"6": map[string]any{
+					"interactables": []map[string]any{
+						{"id": "f6:vault-sunforged", "kind": "vault", "x": 5, "y": 4, "state": "open"},
+						{"id": "f6:vault-voidbane", "kind": "vault", "x": 19, "y": 4, "state": "sealed"},
+					},
+				},
+			},
+		},
+	})
+	if saveV3.Session.Floor != 6 || saveV3.SaveCount != 3 {
+		t.Fatalf("expected Floor 6 and SaveCount 3, got Floor=%d SaveCount=%d", saveV3.Session.Floor, saveV3.SaveCount)
+	}
+
+	// 4. Revert back to Snapshot v2 (Floor 4) -> restores exact Floor 4 WorldState (HP=62, Knight at 14.5,8.2 with 18 HP)!
+	revV2 := postJSON("/api/session/revert", map[string]any{
+		"actor_name":     "d2d-wiz-hero",
+		"target_version": 2,
+	})
+	if revV2.Session.Floor != 4 || revV2.Session.HP != 62 || revV2.Session.World == nil {
+		t.Fatalf("expected revert to v2 to restore Floor 4 and 62 HP, got Floor=%d HP=%d", revV2.Session.Floor, revV2.Session.HP)
+	}
+	revF4 := revV2.Session.World.Floors["4"]
+	if len(revF4.Enemies) != 1 || revF4.Enemies[0].HP != 18 || revF4.Enemies[0].X != 14.5 {
+		t.Fatalf("expected revert to v2 to restore wounded knight at (14.5,8.2) with 18 HP, got %+v", revF4.Enemies)
+	}
+
+	// 5. Fork timeline from v2 so player can explore the alternate Floor 6 vault branch!
+	forked := postJSON("/api/session/fork", map[string]any{
+		"source_actor": "d2d-wiz-hero",
+		"new_actor":    "d2d-wiz-hero-alt",
+	})
+	if forked.ActorName != "d2d-wiz-hero-alt" || forked.Session.Floor != 4 || forked.Session.World == nil {
+		t.Fatalf("expected forked actor on Floor 4 with cloned WorldState, got %+v", forked.Session)
+	}
+}
+
+func TestPlayHTMLPixiEngineClassKitsAndMobileControls(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://localhost:8090", "test-presenter-secret")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/play")
+	if err != nil {
+		t.Fatalf("GET /play failed: %v", err)
+	}
+	defer resp.Body.Close()
+	raw := new(bytes.Buffer)
+	_, _ = raw.ReadFrom(resp.Body)
+	html := raw.Bytes()
+
+	requiredTokens := []string{
+		"PIXI",
+		"CLASS_KITS",
+		"Sunblade Cleave",
+		"Aegis Shield",
+		"Longbow Shot",
+		"Tumble & Snare",
+		"Arcane Fireball",
+		"Frost Blink",
+		"btnAttack",
+		"btnSkill",
+		"unsavedBadge",
+		"serializeWorldState",
+		"hydrateWorldState",
+		"save_world",
+		"toggleLightMode",
+	}
+	for _, tok := range requiredTokens {
+		if !bytes.Contains(html, []byte(tok)) {
+			t.Fatalf("expected /play to contain %q for PixiJS v8 engine, class kits, and mobile controls", tok)
+		}
+	}
+}
+
+func TestPlayHTMLEightFloorCampaignAndEnemyPathfindingAI(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://localhost:8090", "test-presenter-secret")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/play")
+	if err != nil {
+		t.Fatalf("GET /play failed: %v", err)
+	}
+	defer resp.Body.Close()
+	raw := new(bytes.Buffer)
+	_, _ = raw.ReadFrom(resp.Body)
+	html := raw.Bytes()
+
+	requiredCampaignTokens := []string{
+		"Floor 1: The Forgotten Crypt",
+		"Floor 2: The Crossroad Catacombs",
+		"Floor 3: The Sunken Cistern",
+		"Floor 4: The Clockwork Foundry",
+		"Floor 5: The Shadow Bastion",
+		"Floor 6: The Vault of Forking Paths",
+		"Floor 7: The Obsidian Gauntlet",
+		"Floor 8: Sanctum of the Ancient Heap Dragon",
+		"findPathAStar",
+		"hasLineOfSight",
+		"bone_archer",
+		"crypt_ghoul",
+		"shadow_knight",
+		"dark_acolyte",
+		"abyssal_warden",
+		"heap_dragon",
+		"sunforged-aegis",
+		"voidbane-relic",
+	}
+	for _, tok := range requiredCampaignTokens {
+		if !bytes.Contains(html, []byte(tok)) {
+			t.Fatalf("expected /play to contain %q for 8-floor campaign and enemy pathfinding AI", tok)
+		}
+	}
+}
+
+func TestDashboardEightFloorProgressionAndDemoBot(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://localhost:8090", "test-presenter-secret")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/dashboard", nil)
+	req.Header.Set(PresenterHeaderName, gw.PresenterKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /dashboard failed: %v", err)
+	}
+	defer resp.Body.Close()
+	raw := new(bytes.Buffer)
+	_, _ = raw.ReadFrom(resp.Body)
+	dashHTML := raw.Bytes()
+
+	requiredDashTokens := []string{
+		"toggleLightMode",
+		"light-mode",
+		"sunforged-aegis",
+		"voidbane-relic",
+		"/8",
+	}
+	for _, tok := range requiredDashTokens {
+		if !bytes.Contains(dashHTML, []byte(tok)) {
+			t.Fatalf("expected /dashboard to contain %q for 8-floor progression, relic badges, and Projector Light Mode", tok)
+		}
+	}
+
+	// Trigger the 8-Floor Demo Bot and verify it reaches Floor 8 Victory after a Save-Scum Revert
+	botPayload, _ := json.Marshal(map[string]any{
+		"hero_name": "bot-eight",
+		"mode":      "full-demo",
+		"delay_ms":  0,
+	})
+	botReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/session/bot", bytes.NewReader(botPayload))
+	botReq.Header.Set("Content-Type", "application/json")
+	botReq.Header.Set(PresenterHeaderName, gw.PresenterKey())
+	botResp, err := http.DefaultClient.Do(botReq)
+	if err != nil {
+		t.Fatalf("POST /api/session/bot failed: %v", err)
+	}
+	defer botResp.Body.Close()
+	if botResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from /api/session/bot, got %d", botResp.StatusCode)
+	}
+	var botRec SessionRecord
+	if err := json.NewDecoder(botResp.Body).Decode(&botRec); err != nil {
+		t.Fatalf("decode bot SessionRecord failed: %v", err)
+	}
+	if botRec.Session.Floor != 8 || !botRec.Session.Victory || botRec.RevertCount < 1 || botRec.Session.World == nil {
+		t.Fatalf("expected demo bot to reach Floor 8 Victory with RevertCount>=1 and World!=nil, got Floor=%d Victory=%v Reverts=%d World=%v",
+			botRec.Session.Floor, botRec.Session.Victory, botRec.RevertCount, botRec.Session.World != nil)
+	}
+}
+
+func TestAllEightFloorsFullyExplorableAndElevatedVisuals(t *testing.T) {
+	raw, err := webFS.ReadFile("web/play.html")
+	if err != nil {
+		t.Fatalf("failed to read web/play.html: %v", err)
+	}
+	html := string(raw)
+
+	// 1. Verify elevated 2.5D graphics, multi-part animated character/monster renderer, and particle engine
+	visualTokens := []string{
+		"drawBiomeTileAndWall",
+		"drawDetailedHero",
+		"drawDetailedEnemy",
+		"drawDetailedInteractable",
+		"spawnParticles",
+		"updateAndRenderParticles",
+		"bossHudBanner",
+		"FLOOR_BLUEPRINTS_JSON_START",
+		"FLOOR_BLUEPRINTS_JSON_END",
+	}
+	for _, tok := range visualTokens {
+		if !bytes.Contains(raw, []byte(tok)) {
+			t.Fatalf("expected web/play.html to contain elevated visual engine token %q", tok)
+		}
+	}
+
+	// 2. Extract FLOOR_BLUEPRINTS JSON and run BFS reachability across all 8 floors
+	const startMarker = "/* FLOOR_BLUEPRINTS_JSON_START */"
+	const endMarker = "/* FLOOR_BLUEPRINTS_JSON_END */"
+	sIdx := bytes.Index(raw, []byte(startMarker))
+	eIdx := bytes.Index(raw, []byte(endMarker))
+	if sIdx < 0 || eIdx <= sIdx {
+		t.Fatalf("missing FLOOR_BLUEPRINTS_JSON markers in web/play.html")
+	}
+	jsonBytes := bytes.TrimSpace(raw[sIdx+len(startMarker) : eIdx])
+
+	type coord struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	}
+	type bpEnemy struct {
+		ID        string `json:"id"`
+		Archetype string `json:"archetype"`
+		X         int    `json:"x"`
+		Y         int    `json:"y"`
+	}
+	type bpItem struct {
+		ID      string `json:"id"`
+		Kind    string `json:"kind"`
+		X       int    `json:"x"`
+		Y       int    `json:"y"`
+		VaultID string `json:"vaultId"`
+	}
+	type bpInteractable struct {
+		ID         string `json:"id"`
+		Kind       string `json:"kind"`
+		X          int    `json:"x"`
+		Y          int    `json:"y"`
+		State      string `json:"state"`
+		TargetGate string `json:"targetGate"`
+	}
+	type floorBP struct {
+		Name          string           `json:"name"`
+		Spawn         coord            `json:"spawn"`
+		Grid          []string         `json:"grid"`
+		Enemies       []bpEnemy        `json:"enemies"`
+		Items         []bpItem         `json:"items"`
+		Interactables []bpInteractable `json:"interactables"`
+	}
+
+	var floors map[string]floorBP
+	if err := json.Unmarshal(jsonBytes, &floors); err != nil {
+		t.Fatalf("failed to unmarshal FLOOR_BLUEPRINTS JSON: %v", err)
+	}
+	if len(floors) != 8 {
+		t.Fatalf("expected 8 floors in FLOOR_BLUEPRINTS, got %d", len(floors))
+	}
+
+	bfs := func(grid []string, start coord, blocked map[coord]bool) map[coord]bool {
+		visited := map[coord]bool{start: true}
+		q := []coord{start}
+		dirs := []coord{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+		for len(q) > 0 {
+			cur := q[0]
+			q = q[1:]
+			for _, d := range dirs {
+				nx, ny := cur.X+d.X, cur.Y+d.Y
+				next := coord{nx, ny}
+				if ny < 0 || ny >= len(grid) || nx < 0 || nx >= len(grid[0]) {
+					continue
+				}
+				if grid[ny][nx] == '#' || blocked[next] || visited[next] {
+					continue
+				}
+				visited[next] = true
+				q = append(q, next)
+			}
+		}
+		return visited
+	}
+
+	isAdjacentVisited := func(visited map[coord]bool, target coord) bool {
+		if visited[target] {
+			return true
+		}
+		for _, d := range []coord{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+			if visited[coord{target.X + d.X, target.Y + d.Y}] {
+				return true
+			}
+		}
+		return false
+	}
+
+	_ = html
+	for _, fKey := range []string{"1", "2", "3", "4", "5", "6", "7", "8"} {
+		bp, ok := floors[fKey]
+		if !ok {
+			t.Fatalf("missing floor %s in FLOOR_BLUEPRINTS", fKey)
+		}
+		if len(bp.Grid) != 16 {
+			t.Fatalf("floor %s expected 16 rows, got %d", fKey, len(bp.Grid))
+		}
+		for r, row := range bp.Grid {
+			if len(row) != 22 {
+				t.Fatalf("floor %s row %d expected 22 cols, got %d", fKey, r, len(row))
+			}
+		}
+		if bp.Grid[bp.Spawn.Y][bp.Spawn.X] == '#' {
+			t.Fatalf("floor %s spawn (%d,%d) is on a wall '#'", fKey, bp.Spawn.X, bp.Spawn.Y)
+		}
+
+		// Verify all enemies, items, and interactables are on walkable '.' tiles
+		for _, en := range bp.Enemies {
+			if bp.Grid[en.Y][en.X] == '#' {
+				t.Fatalf("floor %s enemy %s at (%d,%d) is on a wall '#'", fKey, en.ID, en.X, en.Y)
+			}
+		}
+		for _, it := range bp.Items {
+			if bp.Grid[it.Y][it.X] == '#' {
+				t.Fatalf("floor %s item %s at (%d,%d) is on a wall '#'", fKey, it.ID, it.X, it.Y)
+			}
+		}
+
+		closedGates := map[coord]bool{}
+		for _, ia := range bp.Interactables {
+			if bp.Grid[ia.Y][ia.X] == '#' {
+				t.Fatalf("floor %s interactable %s at (%d,%d) is on a wall '#'", fKey, ia.ID, ia.X, ia.Y)
+			}
+			if (ia.Kind == "gate" || ia.Kind == "vault") && ia.State != "open" {
+				closedGates[coord{ia.X, ia.Y}] = true
+			}
+		}
+
+		// Pre-gate BFS: verify levers, keys, shrines, and gate/vault approaches are reachable BEFORE opening gates/vaults
+		preReach := bfs(bp.Grid, bp.Spawn, closedGates)
+		for _, ia := range bp.Interactables {
+			pt := coord{ia.X, ia.Y}
+			if ia.Kind == "lever" || ia.Kind == "shrine" || ia.Kind == "stairs_up" {
+				if !preReach[pt] {
+					t.Fatalf("floor %s %s (%s) at (%d,%d) is unreachable before opening gates!", fKey, ia.Kind, ia.ID, ia.X, ia.Y)
+				}
+			}
+			if ia.Kind == "gate" || ia.Kind == "vault" {
+				if !isAdjacentVisited(preReach, pt) {
+					t.Fatalf("floor %s %s (%s) at (%d,%d) cannot even be approached from spawn!", fKey, ia.Kind, ia.ID, ia.X, ia.Y)
+				}
+			}
+		}
+		for _, it := range bp.Items {
+			if it.VaultID == "" && (it.Kind == "crypt-key" || it.Kind == "dragon-sigil") {
+				if !preReach[coord{it.X, it.Y}] {
+					t.Fatalf("floor %s progression key %s at (%d,%d) is unreachable before opening gates!", fKey, it.ID, it.X, it.Y)
+				}
+			}
+		}
+
+		// Full floor BFS (with gates/vaults unlocked): every single '.' tile on the floor must be reachable!
+		fullReach := bfs(bp.Grid, bp.Spawn, nil)
+		for r, row := range bp.Grid {
+			for c, ch := range row {
+				if ch == '.' && !fullReach[coord{c, r}] {
+					t.Fatalf("floor %s has unreachable '.' tile at (%d,%d) — floor is not 100%% explorable!", fKey, c, r)
+				}
+			}
+		}
+	}
+}
+
+
+
+
 
 
 

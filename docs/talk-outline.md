@@ -76,12 +76,12 @@ sequenceDiagram
 * **Slide 7: Live Demo 1 — The "Zero-Database" Dungeon (`cmd/dungeon` & `cmd/dungeon2d`)**
   * **Show the code (`cmd/dungeon/main.go` & `cmd/dungeon2d/actor.go`):** Point out `type GameState struct` / `type ActorSession struct`. No SQL driver, no `os.WriteFile`, no Redis client. Just a Go struct in RAM.
   * **CLI Walkthrough (`./hack/stage-demo.sh act1-dungeon`) & 2D Live Audience Game (`./hack/stage-demo.sh act1b-dungeon2d`):**
-    1. Open the **Live Mission-Control Dashboard (`/dashboard`)** on the projector and scan the QR code to open the **2D Mobile Dungeon (`/play`)**.
-    2. Walk around at 60fps in the browser (0 worker pods used while walking!). Clear Floor 1 (The Forgotten Crypt) and Floor 2 (Abandoned Armory) — watching the actor flash onto one of the 3 WorkerPool pods for ~100ms on each milestone and immediately suspend back to GCS.
-    3. **Quicksave Shrine:** Step onto the Floor 2 Quicksave Shrine (`kubectl ate suspend` + `kubectl ate create tag`).
-    4. **Die horribly on Floor 3:** Attack the Ancient Heap Dragon without the `fire-shield` -> The Heap Dragon breathes fire; `HP = 0, Alive = false`.
-    5. **Save-Scumming (`git reset --hard` for RAM):** Tap **Revert Actor** on the phone (`kubectl ate revert actor`), restoring the Floor 2 GCS snapshot! Grab the `fire-shield`, defeat the Dragon, claim the `golden-chalice`, and escape through the Ascension Portal.
-    6. **Fork the Multiverse:** Tap **Fork Timeline** (`--tag`)—two parallel universes forked from the same process memory!
+    1. Open the **Live Mission-Control Dashboard (`/dashboard`)** on the projector and scan the QR code to open the **2D Mobile Action Roguelike (`/play`)**.
+    2. Choose an asymmetric class (**Paladin** melee cleave + shield block, **Ranger** slow high-damage longbow + snare, or **Wizard** glass-cannon AoE fireball + frost blink) and fight through the 8-floor progressive campaign (`22x16` maps with A* pathfinding enemies, levers, spike traps, and Floor 6 branching vaults) at 60fps in the browser (0 worker pods used during real-time movement and combat!).
+    3. **Explicit Save Checkpoints (`save_world`):** Tap the Save button or step onto a Save Shrine (`kubectl ate save actor`), waking the actor on one of the 3 `WorkerPool` pods for ~100ms to checkpoint the entire multi-floor `WorldState` (hero stats, wounded enemy positions/HP, ground loot, and unlocked gates/vaults) into Go heap RAM and GCS (`v1..vN`).
+    4. **Die horribly on Floor 8:** Charge the multi-phase **Ancient Heap Dragon** without defensive relics -> `HP = 0, Alive = false`.
+    5. **Save-Scumming (`git reset --hard` for RAM):** Tap **Revert Actor** on the phone (`kubectl ate revert actor --snapshot-version`), restoring the pre-boss GCS snapshot with every enemy, item, and gate in its exact saved position! Equip the `fire-shield` / `sunforged-aegis`, defeat the Dragon, and escape through the Ascension Portal.
+    6. **Fork the Multiverse:** Tap **Fork Timeline** (`--tag`)—two parallel universes forked from the same Floor 6 vault checkpoint!
 
 ---
 
