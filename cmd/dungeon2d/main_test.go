@@ -706,6 +706,10 @@ func TestDashboardEightFloorProgressionAndDemoBot(t *testing.T) {
 		"sunforged-aegis",
 		"voidbane-relic",
 		"/8",
+		"qrModal",
+		"openQrModal",
+		"closeQrModal",
+		"qrModalImage",
 	}
 	for _, tok := range requiredDashTokens {
 		if !bytes.Contains(dashHTML, []byte(tok)) {

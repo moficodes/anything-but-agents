@@ -561,14 +561,90 @@
       align-items: center;
       gap: 12px;
     }
+    .qr-img-wrap {
+      position: relative;
+      flex-shrink: 0;
+      cursor: zoom-in;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
     .qr-img {
-      width: 104px;
-      height: 104px;
+      width: 108px;
+      height: 108px;
       border-radius: 4px;
       background: #fff;
       padding: 4px;
       flex-shrink: 0;
       border: 2px solid #5c4522;
+      transition: transform 0.14s ease, box-shadow 0.14s ease;
+    }
+    .qr-img-wrap:hover .qr-img {
+      transform: scale(1.04);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      border-color: #b45309;
+    }
+    .qr-zoom-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #231709;
+      background: rgba(255, 251, 235, 0.78);
+      border: 1px solid #785828;
+      border-radius: 3px;
+      padding: 2px 6px;
+    }
+
+    /* Fullscreen Stage QR Lightbox Modal */
+    .qr-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(10, 8, 6, 0.84);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .qr-modal-backdrop.hidden {
+      display: none;
+    }
+    .qr-modal-card {
+      max-width: 560px;
+      width: 100%;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+      position: relative;
+    }
+    .qr-modal-img {
+      width: min(420px, 74vw);
+      height: min(420px, 74vw);
+      background: #ffffff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 4px solid #5c4522;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+    }
+    .qr-modal-url {
+      font-size: 18px;
+      font-weight: 900;
+      color: #1e3a8a;
+      background: rgba(255, 255, 255, 0.82);
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1.5px solid #8c6f3e;
+      text-decoration: none;
+      word-break: break-all;
     }
     .feed-card {
       flex: 1;
@@ -702,11 +778,17 @@
     <!-- Right Sidebar: Join QR Code Parchment Scroll + Live Event Stream Parchment Scroll -->
     <aside class="side-col">
       <div class="qr-card parchment-scroll">
-        <img id="qrImage" class="qr-img" src="/api/qr.svg" alt="Join QR Code" />
+        <div class="qr-img-wrap" onclick="openQrModal()" title="Click to enlarge QR code for stage scanning" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openQrModal();}">
+          <img id="qrImage" class="qr-img" src="/api/qr.svg" alt="Join QR Code (Click to Enlarge)" />
+          <span class="qr-zoom-pill">
+            <svg class="icon" style="width:11px;height:11px;" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>
+            Enlarge
+          </span>
+        </div>
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <div style="font-size:13px;font-weight:900;color:#231709;text-transform:uppercase;">Scan to Enter Dungeon</div>
+          <div style="font-size:13px;font-weight:900;color:#231709;text-transform:uppercase;cursor:pointer;" onclick="openQrModal()">Scan to Enter Dungeon</div>
           <div style="font-size:11px;font-weight:700;color:#4a3519;line-height:1.38;">
-            Each player spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods.
+            Each player spawns an isolated gVisor Actor multiplexed across the 3 WorkerPool pods. Click QR to enlarge for the audience.
           </div>
           <a id="joinLinkText" href="/play" target="_blank" style="font-size:11px;font-weight:900;color:#1e3a8a;word-break:break-all;">/play</a>
         </div>
@@ -723,6 +805,26 @@
       </div>
     </aside>
   </main>
+
+  <!-- Stage QR Code Lightbox Modal -->
+  <div id="qrModal" class="qr-modal-backdrop hidden" onclick="if(event.target===this)closeQrModal()">
+    <div class="qr-modal-card parchment-scroll">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;border-bottom:2px solid #8c6f3e;padding-bottom:8px;">
+        <div style="font-size:18px;font-weight:900;color:#231709;text-transform:uppercase;letter-spacing:0.05em;">
+          Scan to Join Substrate Dungeon
+        </div>
+        <button class="btn" onclick="closeQrModal()" aria-label="Close QR Modal">
+          <svg class="icon" viewBox="0 0 24 24"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+          Close (Esc)
+        </button>
+      </div>
+      <img id="qrModalImage" class="qr-modal-img" src="/api/qr.svg" alt="Large Stage Join QR Code" />
+      <a id="qrModalLink" class="qr-modal-url" href="/play" target="_blank">/play</a>
+      <div style="font-size:12px;font-weight:800;color:#4a3519;">
+        Every phone spawns an isolated gVisor Actor multiplexed across the 3-replica <code>WorkerPool</code>
+      </div>
+    </div>
+  </div>
 
   <script>
     const PALETTE = {
@@ -826,6 +928,20 @@
       if (l) l.classList.toggle("active", isLight);
     }
 
+    function openQrModal() {
+      const m = document.getElementById("qrModal");
+      if (m) m.classList.remove("hidden");
+    }
+
+    function closeQrModal() {
+      const m = document.getElementById("qrModal");
+      if (m) m.classList.add("hidden");
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeQrModal();
+    });
+
     const SVG_ICONS = {
       key: `<svg class="icon" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
       sword: `<svg class="icon" viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></svg>`,
@@ -849,9 +965,17 @@
       document.getElementById("kpiVictories").textContent = snap.stats.victories;
 
       const playURL = (snap.public_url || window.location.origin) + "/play";
+      const qrSrc = "/api/qr.svg?url=" + encodeURIComponent(playURL);
       document.getElementById("joinLinkText").textContent = playURL;
       document.getElementById("joinLinkText").href = playURL;
-      document.getElementById("qrImage").src = "/api/qr.svg?url=" + encodeURIComponent(playURL);
+      document.getElementById("qrImage").src = qrSrc;
+      const modalImg = document.getElementById("qrModalImage");
+      if (modalImg) modalImg.src = qrSrc;
+      const modalLink = document.getElementById("qrModalLink");
+      if (modalLink) {
+        modalLink.textContent = playURL;
+        modalLink.href = playURL;
+      }
 
       const workersEl = document.getElementById("workersRow");
       workersEl.innerHTML = (snap.workers || []).map(w => {
