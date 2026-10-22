@@ -105,6 +105,7 @@ spec:
         - --router-url=http://atenet-router.ate-system.svc.cluster.local:80
         - --ate-endpoint=api.ate-system.svc:443
         - --kubectl-ate-bin=/tools/kubectl-ate
+        - --public-url=https://dungeon.${DEMO_DOMAIN}
         env:
         - name: PRESENTER_TOKEN
           valueFrom:

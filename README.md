@@ -28,6 +28,8 @@ manifests/
   honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
   honeypot-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Split-Screen Honeypot UI
   timewarp-template.yaml.tmpl   # ActorTemplate (heartbeat + lease loop for split-brain demo)
+  timewarp-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Chronos Split-Brain Lab UI
+  gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # Interactive live-stage deployer & act-by-act demo runner
 docs/
@@ -223,6 +225,8 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh act5-timewarp         # Act V: 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab (:8085)
 ./hack/stage-demo.sh deploy-timewarp       # Deploy in-cluster Time-Warp Split-Brain Lab Gateway + LoadBalancer
 ./hack/stage-demo.sh cleanup-timewarp      # Clean up in-cluster Time-Warp Gateway & raft-node-* actors
+./hack/stage-demo.sh deploy-gateway-tls    # Deploy GKE Gateway API + Certificate Manager TLS routes (*.substrate.learngke.dev)
+./hack/stage-demo.sh cleanup-gateway-tls   # Clean up GKE Gateway API + HTTPRoute + HealthCheckPolicy resources
 ```
 
 ### 4. Cleanup

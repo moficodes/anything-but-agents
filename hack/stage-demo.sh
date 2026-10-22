@@ -66,6 +66,9 @@ apply_env_defaults() {
   export SUBNETWORK="${SUBNETWORK:-default}"
   export BUCKET_NAME="${BUCKET_NAME:-ate-snapshots-${PROJECT_ID}-${GCE_REGION}}"
   export KO_DOCKER_REPO="${KO_DOCKER_REPO:-gcr.io/${PROJECT_ID}/anything-but-agents}"
+  export DEMO_DOMAIN="${DEMO_DOMAIN:-substrate.learngke.dev}"
+  export GATEWAY_IP_NAME="${GATEWAY_IP_NAME:-substrate-learngke-ip}"
+  export CERT_MAP_NAME="${CERT_MAP_NAME:-substrate-learngke-map}"
   if [[ -z "${ATE_CREDENTIAL_PROVIDER:-}" ]]; then
     export ATE_CREDENTIAL_PROVIDER='{"name":"k8s.io"}'
   fi
@@ -218,7 +221,10 @@ detect_cluster_defaults() {
       ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateom-gvisor)"
     fi
   fi
-  export BUCKET_NAME SUBSTRATE_VERSION ATEOM_GVISOR_IMAGE
+  export DEMO_DOMAIN="${DEMO_DOMAIN:-substrate.learngke.dev}"
+  export GATEWAY_IP_NAME="${GATEWAY_IP_NAME:-substrate-learngke-ip}"
+  export CERT_MAP_NAME="${CERT_MAP_NAME:-substrate-learngke-map}"
+  export BUCKET_NAME SUBSTRATE_VERSION ATEOM_GVISOR_IMAGE DEMO_DOMAIN GATEWAY_IP_NAME CERT_MAP_NAME
 }
 
 wait_for_template_golden_snapshot() {
@@ -517,8 +523,9 @@ deploy_dungeon2d_gateway() {
   done
 
   echo ""
-  echo "  Player 2D Game URL (Public) : http://${lb_ip:-<pending>}/play"
-  echo "  Presenter Dashboard Unlock  : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Player 2D Game URL (HTTPS)   : https://dungeon.${DEMO_DOMAIN}/play"
+  echo "  Presenter Dashboard (HTTPS)  : https://dungeon.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Player 2D Game URL (LB IP)   : http://${lb_ip:-<pending>}/play"
   echo ""
 }
 
@@ -597,7 +604,8 @@ deploy_coldstart_hpa() {
   done
 
   echo ""
-  echo "  Cold-Start HPA & QPS Race Dashboard : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Cold-Start HPA Dashboard (HTTPS) : https://coldstart.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Cold-Start HPA Dashboard (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
   kubectl get hpa -n anything-but-agents
 }
@@ -872,7 +880,8 @@ deploy_tenantdb_gateway() {
   done
 
   echo ""
-  echo "  TenantDB Storage & Memory Tiering Console : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  TenantDB Storage X-Ray Console (HTTPS) : https://tenantdb.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  TenantDB Storage X-Ray Console (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
 }
 
@@ -990,7 +999,8 @@ deploy_honeypot_gateway() {
   done
 
   echo ""
-  echo "  Truman Show Honeypot Split-Screen UI (Public) : http://${lb_ip:-<pending>}/"
+  echo "  Truman Show Honeypot UI (HTTPS) : https://honeypot.${DEMO_DOMAIN}/"
+  echo "  Truman Show Honeypot UI (LB IP) : http://${lb_ip:-<pending>}/"
   echo ""
 }
 
@@ -1118,8 +1128,40 @@ deploy_timewarp_gateway() {
   done
 
   echo ""
-  echo "  Chronos Split-Brain & Dual-Clock Lab UI (Public) : http://${lb_ip:-<pending>}/dashboard"
+  echo "  Chronos Split-Brain Lab UI (HTTPS) : https://timewarp.${DEMO_DOMAIN}/dashboard"
+  echo "  Chronos Split-Brain Lab UI (LB IP) : http://${lb_ip:-<pending>}/dashboard"
   echo ""
+}
+
+deploy_gateway_tls() {
+  detect_cluster_defaults
+  banner "Deploying GKE Gateway API + Certificate Manager TLS (*.${DEMO_DOMAIN})"
+
+  envsubst < "${REPO_ROOT}/manifests/gateway-tls.yaml.tmpl" | kubectl apply -f -
+
+  local gw_ip=""
+  for _ in {1..45}; do
+    gw_ip="$(kubectl get gateway anything-but-agents-gateway -n anything-but-agents -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || true)"
+    if [[ -n "${gw_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Gateway IP (${GATEWAY_IP_NAME}) : ${gw_ip:-<provisioning>}"
+  echo "  1. Dungeon 2D Roguelike      : https://dungeon.${DEMO_DOMAIN}/play"
+  echo "     Dungeon 2D Dashboard      : https://dungeon.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  2. Cold-Start HPA Race       : https://coldstart.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  3. TenantDB Storage X-Ray    : https://tenantdb.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  4. Truman Show Honeypot      : https://honeypot.${DEMO_DOMAIN}/"
+  echo "  5. Chronos Time-Warp Lab     : https://timewarp.${DEMO_DOMAIN}/dashboard"
+  echo ""
+}
+
+cleanup_gateway_tls() {
+  banner "Cleaning up GKE Gateway API + HTTPRoutes"
+  envsubst < "${REPO_ROOT}/manifests/gateway-tls.yaml.tmpl" | kubectl delete --ignore-not-found -f -
 }
 
 cleanup_timewarp_gateway() {
@@ -1150,6 +1192,7 @@ cleanup_all() {
   cleanup_tenantdb_gateway
   cleanup_honeypot_gateway
   cleanup_timewarp_gateway
+  cleanup_gateway_tls
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
   done
@@ -1175,6 +1218,8 @@ case "${1:-}" in
   cleanup-honeypot)      cleanup_honeypot_gateway ;;
   deploy-timewarp)       deploy_timewarp_gateway ;;
   cleanup-timewarp)      cleanup_timewarp_gateway ;;
+  deploy-gateway-tls)    deploy_gateway_tls ;;
+  cleanup-gateway-tls)   cleanup_gateway_tls ;;
   run-all)               run_all_acts ;;
   act1-dungeon)          act1_dungeon ;;
   act1b-dungeon2d)       act1b_dungeon2d ;;
@@ -1184,7 +1229,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

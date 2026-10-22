@@ -38,6 +38,7 @@ manifests/
   honeypot-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for honeypot-gateway
   timewarp-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, heartbeat/lease anti-pattern)
   timewarp-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for timewarp-gateway
+  gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
 docs/
@@ -78,6 +79,8 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh cleanup-honeypot      # Clean up Honeypot Gateway deployment/service/actors/tags
    ./hack/stage-demo.sh deploy-timewarp       # Deploy interactive Time-Warp Split-Brain Lab Gateway & LoadBalancer
    ./hack/stage-demo.sh cleanup-timewarp      # Clean up Time-Warp Gateway deployment/service/actors
+   ./hack/stage-demo.sh deploy-gateway-tls    # Deploy GKE Gateway API + Certificate Manager TLS routes
+   ./hack/stage-demo.sh cleanup-gateway-tls   # Clean up GKE Gateway API + HTTPRoute + HealthCheckPolicy resources
    ./hack/stage-demo.sh run-all               # Run all 5 live demos interactively
    PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
    ./hack/stage-demo.sh act1-dungeon          # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)
