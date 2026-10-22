@@ -38,8 +38,6 @@ spec:
   workerImage: ${ATEOM_GVISOR_IMAGE}
   sandboxClasses:
   - name: gvisor
-    configRef:
-      name: gvisor-default
   template:
     resources:
       limits:

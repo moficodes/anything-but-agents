@@ -17,11 +17,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"slices"
@@ -621,6 +624,47 @@ type ClusterAteBackend struct {
 	hub         *eventHub
 }
 
+func normalizeRouterURL(raw string) string {
+	trimmed := strings.TrimRight(raw, "/")
+	if _, err := os.Stat("/run/router-client/credential-bundle.pem"); err == nil {
+		trimmed = strings.ReplaceAll(trimmed, "atenet-router.ate-system.svc.cluster.local", "atenet-router.ate-system.svc")
+		if strings.HasPrefix(trimmed, "http://atenet-router.") {
+			trimmed = "https://" + strings.TrimPrefix(trimmed, "http://")
+			trimmed = strings.TrimSuffix(trimmed, ":80")
+			if !strings.HasSuffix(trimmed, ":443") {
+				trimmed += ":443"
+			}
+		}
+	}
+	return trimmed
+}
+
+func newRouterHTTPClient(timeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		MaxIdleConns:        128,
+		MaxIdleConnsPerHost: 32,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	credPath := "/run/router-client/credential-bundle.pem"
+	caPath := "/run/router-client/trust-bundle.pem"
+	if cert, err := tls.LoadX509KeyPair(credPath, credPath); err == nil {
+		pool := x509.NewCertPool()
+		if caBytes, caErr := os.ReadFile(caPath); caErr == nil {
+			pool.AppendCertsFromPEM(caBytes)
+		}
+		tr.TLSClientConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      pool,
+			ServerName:   "atenet-router.ate-system.svc",
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
+}
+
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
 	if kubectlAteBin == "" {
 		kubectlAteBin = "kubectl-ate"
@@ -628,13 +672,11 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 	return &ClusterAteBackend{
 		atespace:    atespace,
 		template:    template,
-		routerURL:   strings.TrimRight(routerURL, "/"),
+		routerURL:   normalizeRouterURL(routerURL),
 		ateEndpoint: ateEndpoint,
 		kubectlAte:  kubectlAteBin,
-		httpClient: &http.Client{
-			Timeout: 25 * time.Second,
-		},
-		records: make(map[string]*SessionRecord),
+		httpClient:  newRouterHTTPClient(25 * time.Second),
+		records:     make(map[string]*SessionRecord),
 		workers: []WorkerSlot{
 			{Index: 1, WorkerPod: "worker-slot-1", IP: "10.120.1.22", State: "WORKER_STATE_ACTIVE"},
 			{Index: 2, WorkerPod: "worker-slot-2", IP: "10.120.0.11", State: "WORKER_STATE_ACTIVE"},
@@ -642,6 +684,39 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 		},
 		hub: newEventHub(),
 	}
+}
+
+// StartLocalRouterProxy binds 127.0.0.1:8000 inside the pod so `kubectl port-forward`
+// from `hack/stage-demo.sh` can send plain HTTP requests that are forwarded over the
+// pod's SPIFFE mTLS credential to atenet-router.
+func (c *ClusterAteBackend) StartLocalRouterProxy(listenAddr string) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetURL := c.routerURL + r.URL.RequestURI()
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		for k, vals := range r.Header {
+			for _, v := range vals {
+				req.Header.Add(k, v)
+			}
+		}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		for k, vals := range resp.Header {
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	})
+	_ = http.ListenAndServe(listenAddr, handler)
 }
 
 func (c *ClusterAteBackend) runAte(ctx context.Context, args ...string) ([]byte, error) {
@@ -809,7 +884,7 @@ func (c *ClusterAteBackend) StartSession(ctx context.Context, heroName, charClas
 	}
 
 	// Immediately suspend actor to GCS to persist initial Go heap and free the worker pod!
-	if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace); err != nil {
+	if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace, "--mode=sync"); err != nil {
 		slog.Warn("Failed to suspend actor after StartSession", slog.String("actor", actorName), slog.Any("err", err))
 	}
 
@@ -893,7 +968,7 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 		newState = "ACTOR_STATE_RUNNING"
 		evType = "DEATH"
 	} else {
-		if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace); err != nil {
+		if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace, "--mode=sync"); err != nil {
 			slog.Warn("Failed to suspend actor after milestone", slog.String("actor", actorName), slog.Any("err", err))
 		}
 		if req.Action == "quicksave" || req.Action == "save_world" || actorResp.EventType == "FLOOR_CHANGE" {
@@ -1027,7 +1102,7 @@ func (c *ClusterAteBackend) RevertSession(ctx context.Context, actorName string,
 	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, actorName)
 
 	// Suspend it back to GCS so the worker pod is freed
-	_, _ = c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace)
+	_, _ = c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace, "--mode=sync")
 
 	c.mu.Lock()
 	rec := c.records[actorName]
@@ -1082,7 +1157,7 @@ func (c *ClusterAteBackend) ForkSession(ctx context.Context, sourceActor, newAct
 	newActor = sanitizeActorName(newActor)
 
 	// Ensure source actor is suspended before creating tag
-	_, _ = c.runAte(ctx, "suspend", "actor", sourceActor, "-a", c.atespace)
+	_, _ = c.runAte(ctx, "suspend", "actor", sourceActor, "-a", c.atespace, "--mode=sync")
 	tagName := fmt.Sprintf("tag-%s-%d", sourceActor, time.Now().Unix()%10000)
 	if _, err := c.runAte(ctx, "create", "tag", tagName, "-a", c.atespace, "--actor", sourceActor); err != nil {
 		return SessionRecord{}, err
@@ -1096,7 +1171,7 @@ func (c *ClusterAteBackend) ForkSession(ctx context.Context, sourceActor, newAct
 		return SessionRecord{}, err
 	}
 	workerIP, workerPodName, snapURI := c.inspectRunningActor(ctx, newActor)
-	_, _ = c.runAte(ctx, "suspend", "actor", newActor, "-a", c.atespace)
+	_, _ = c.runAte(ctx, "suspend", "actor", newActor, "-a", c.atespace, "--mode=sync")
 
 	c.mu.Lock()
 	var baseHops []string
@@ -1151,7 +1226,7 @@ func (c *ClusterAteBackend) ForkSession(ctx context.Context, sourceActor, newAct
 
 func (c *ClusterAteBackend) DeleteSession(ctx context.Context, actorName string) error {
 	actorName = sanitizeActorName(actorName)
-	_, _ = c.runAte(ctx, "delete", "actor", actorName, "-a", c.atespace, "--any-state")
+	_, _ = c.runAte(ctx, "delete", "actor", actorName, "-a", c.atespace)
 	c.mu.Lock()
 	delete(c.records, actorName)
 	c.mu.Unlock()

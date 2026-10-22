@@ -32,13 +32,8 @@ containers:
       port: 80
 resources:
   limits:
-  - name: cpu
-    quantity: "1"
-  - name: memory
-    quantity: 512Mi
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512Mi
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
   storageLocation: gs://${BUCKET_NAME}/anything-but-agents/timewarp/
-sandboxConfig:
-  sandboxClass: gvisor
-  configName: gvisor-default

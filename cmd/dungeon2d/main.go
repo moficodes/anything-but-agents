@@ -49,6 +49,7 @@ func main() {
 
 	case "gateway":
 		backend := NewClusterAteBackend(*atespace, *template, *routerURL, *ateEndpoint, *kubectlAteBin)
+		go backend.StartLocalRouterProxy("127.0.0.1:8000")
 		gw := NewGatewayServer(backend, *publicURL, *presenterToken)
 		slog.Info("Starting dungeon2d Gateway & Live Dashboard (cluster-ate mode)",
 			slog.String("addr", *addr),

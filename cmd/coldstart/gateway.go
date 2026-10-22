@@ -444,7 +444,19 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		cfg.K8sServiceURL = fmt.Sprintf("http://coldstart-k8s.%s.svc.cluster.local:80", cfg.Namespace)
 	}
 	if cfg.RouterURL == "" {
-		cfg.RouterURL = "http://atenet-router.ate-system.svc.cluster.local:80"
+		cfg.RouterURL = "http://atenet-router.ate-system.svc:80"
+	}
+	if _, err := os.Stat("/run/router-client/credential-bundle.pem"); err == nil {
+		trimmed := strings.TrimRight(cfg.RouterURL, "/")
+		trimmed = strings.ReplaceAll(trimmed, "atenet-router.ate-system.svc.cluster.local", "atenet-router.ate-system.svc")
+		if strings.HasPrefix(trimmed, "http://atenet-router.") {
+			trimmed = "https://" + strings.TrimPrefix(trimmed, "http://")
+			trimmed = strings.TrimSuffix(trimmed, ":80")
+			if !strings.HasSuffix(trimmed, ":443") {
+				trimmed += ":443"
+			}
+		}
+		cfg.RouterURL = trimmed
 	}
 	if cfg.KubectlAteBin == "" {
 		cfg.KubectlAteBin = "kubectl-ate"
@@ -479,17 +491,31 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		presenterKey = randomPresenterKey()
 	}
 
+	httpTransport := &http.Transport{
+		MaxIdleConns:        256,
+		MaxIdleConnsPerHost: 64,
+		MaxConnsPerHost:     128,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if cert, err := tls.LoadX509KeyPair("/run/router-client/credential-bundle.pem", "/run/router-client/credential-bundle.pem"); err == nil {
+		pool := x509.NewCertPool()
+		if caBytes, caErr := os.ReadFile("/run/router-client/trust-bundle.pem"); caErr == nil {
+			pool.AppendCertsFromPEM(caBytes)
+		}
+		httpTransport.TLSClientConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      pool,
+			ServerName:   "atenet-router.ate-system.svc",
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+
 	g := &GatewayServer{
 		cfg:          cfg,
 		presenterKey: presenterKey,
 		httpClient: &http.Client{
-			Timeout: 4 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        256,
-				MaxIdleConnsPerHost: 64,
-				MaxConnsPerHost:     128,
-				IdleConnTimeout:     90 * time.Second,
-			},
+			Timeout:   4 * time.Second,
+			Transport: httpTransport,
 		},
 		k8sDesired:    defaultMinReplicas,
 		subDesired:    defaultMinReplicas,

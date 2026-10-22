@@ -17,6 +17,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -574,7 +576,7 @@ func (b *LocalSimulatorBackend) GDPRDeleteTenant(_ context.Context, actorName st
 	receipt := &GDPRDeleteReceipt{
 		ActorName:             actorName,
 		CompanyName:           node.tracker.CompanyName,
-		CommandExecuted:       fmt.Sprintf("kubectl ate delete actor %s -a %s --any-state", actorName, b.atespace),
+		CommandExecuted:       fmt.Sprintf("kubectl ate delete actor %s -a %s", actorName, b.atespace),
 		ComputeShredded:       true,
 		RAMSnapshotsPurged:    true,
 		DurableDirShredded:    true,
@@ -695,18 +697,55 @@ type ClusterAteBackend struct {
 	auditLog       []FleetAuditEvent
 }
 
+func normalizeRouterURL(raw string) string {
+	trimmed := strings.TrimRight(raw, "/")
+	if _, err := os.Stat("/run/router-client/credential-bundle.pem"); err == nil {
+		trimmed = strings.ReplaceAll(trimmed, "atenet-router.ate-system.svc.cluster.local", "atenet-router.ate-system.svc")
+		if strings.HasPrefix(trimmed, "http://atenet-router.") {
+			trimmed = "https://" + strings.TrimPrefix(trimmed, "http://")
+			trimmed = strings.TrimSuffix(trimmed, ":80")
+			if !strings.HasSuffix(trimmed, ":443") {
+				trimmed += ":443"
+			}
+		}
+	}
+	return trimmed
+}
+
+func newRouterHTTPClient(timeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		MaxIdleConns:        128,
+		MaxIdleConnsPerHost: 32,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if cert, err := tls.LoadX509KeyPair("/run/router-client/credential-bundle.pem", "/run/router-client/credential-bundle.pem"); err == nil {
+		pool := x509.NewCertPool()
+		if caBytes, caErr := os.ReadFile("/run/router-client/trust-bundle.pem"); caErr == nil {
+			pool.AppendCertsFromPEM(caBytes)
+		}
+		tr.TLSClientConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      pool,
+			ServerName:   "atenet-router.ate-system.svc",
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
+}
+
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
 	b := &ClusterAteBackend{
 		atespace:      atespace,
 		template:      template,
-		routerURL:     strings.TrimRight(routerURL, "/"),
+		routerURL:     normalizeRouterURL(routerURL),
 		ateEndpoint:   ateEndpoint,
 		kubectlAteBin: kubectlAteBin,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		trackers:   make(map[string]*TenantTracker),
-		podHistory: make(map[string][]string),
+		httpClient:    newRouterHTTPClient(30 * time.Second),
+		trackers:      make(map[string]*TenantTracker),
+		podHistory:    make(map[string][]string),
 	}
 	b.initTrackersLocked()
 	return b
@@ -1063,8 +1102,8 @@ func (b *ClusterAteBackend) QueryTenant(ctx context.Context, actorName, table, k
 }
 
 func (b *ClusterAteBackend) PauseTenant(ctx context.Context, actorName string) (*TenantTracker, error) {
-	if out, err := b.runKubectlAte(ctx, "pause", "actor", actorName, "-a", b.atespace); err != nil {
-		return nil, fmt.Errorf("kubectl-ate pause actor %s: %w (%s)", actorName, err, out)
+	if out, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace, "--mode=async"); err != nil {
+		return nil, fmt.Errorf("kubectl-ate suspend --mode=async actor %s: %w (%s)", actorName, err, out)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -1072,13 +1111,13 @@ func (b *ClusterAteBackend) PauseTenant(ctx context.Context, actorName string) (
 	tr.Status = "PAUSED_FULL"
 	tr.UpdatedAt = time.Now().UTC()
 	b.appendAuditLocked(actorName, "PAUSE_ACTOR", "SNAPSHOT_CONTENT_SCOPE_FULL",
-		fmt.Sprintf("kubectl ate pause actor %s -> 16.0 MB RAM Buffer Pool & /data/wal.jsonl frozen on node", actorName))
+		fmt.Sprintf("kubectl ate suspend actor %s --mode=async -> 16.0 MB RAM Buffer Pool & /data/wal.jsonl frozen on node", actorName))
 	cp := *tr
 	return &cp, nil
 }
 
 func (b *ClusterAteBackend) SuspendTenant(ctx context.Context, actorName string) (*TenantTracker, error) {
-	if out, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace); err != nil {
+	if out, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace, "--mode=sync"); err != nil {
 		return nil, fmt.Errorf("kubectl-ate suspend actor %s: %w (%s)", actorName, err, out)
 	}
 	b.mu.Lock()
@@ -1099,13 +1138,13 @@ func (b *ClusterAteBackend) SuspendTenant(ctx context.Context, actorName string)
 	}
 	tr.UpdatedAt = time.Now().UTC()
 	b.appendAuditLocked(actorName, "SUSPEND_ACTOR", "SNAPSHOT_CONTENT_SCOPE_DATA",
-		fmt.Sprintf("kubectl ate suspend actor %s -> Discarded 16.0 MB RAM heap; committed ONLY /data/wal.jsonl (%d B) to GCS", actorName, walBytes))
+		fmt.Sprintf("kubectl ate suspend actor %s --mode=sync -> Discarded 16.0 MB RAM heap; committed ONLY /data/wal.jsonl (%d B) to GCS", actorName, walBytes))
 	cp := *tr
 	return &cp, nil
 }
 
 func (b *ClusterAteBackend) GDPRDeleteTenant(ctx context.Context, actorName string) (*GDPRDeleteReceipt, error) {
-	if out, err := b.runKubectlAte(ctx, "delete", "actor", actorName, "-a", b.atespace, "--any-state"); err != nil && !strings.Contains(strings.ToLower(out), "not found") {
+	if out, err := b.runKubectlAte(ctx, "delete", "actor", actorName, "-a", b.atespace); err != nil && !strings.Contains(strings.ToLower(out), "not found") {
 		return nil, fmt.Errorf("kubectl-ate delete actor %s: %w (%s)", actorName, err, out)
 	}
 
@@ -1122,7 +1161,7 @@ func (b *ClusterAteBackend) GDPRDeleteTenant(ctx context.Context, actorName stri
 	receipt := &GDPRDeleteReceipt{
 		ActorName:             actorName,
 		CompanyName:           tr.CompanyName,
-		CommandExecuted:       fmt.Sprintf("kubectl ate delete actor %s -a %s --any-state", actorName, b.atespace),
+		CommandExecuted:       fmt.Sprintf("kubectl ate delete actor %s -a %s", actorName, b.atespace),
 		ComputeShredded:       true,
 		RAMSnapshotsPurged:    true,
 		DurableDirShredded:    true,
@@ -1144,7 +1183,7 @@ func (b *ClusterAteBackend) GDPRDeleteTenant(ctx context.Context, actorName stri
 
 func (b *ClusterAteBackend) ResetFleet(ctx context.Context) (*FleetStateResponse, error) {
 	for _, c := range defaultTenantCatalog {
-		_, _ = b.runKubectlAte(ctx, "delete", "actor", c.ActorName, "-a", b.atespace, "--any-state")
+		_, _ = b.runKubectlAte(ctx, "delete", "actor", c.ActorName, "-a", b.atespace)
 	}
 	b.mu.Lock()
 	b.initTrackersLocked()

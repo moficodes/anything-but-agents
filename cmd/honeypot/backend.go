@@ -17,6 +17,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -385,18 +387,55 @@ type ClusterAteBackend struct {
 	order         []string
 }
 
+func normalizeRouterURL(raw string) string {
+	trimmed := strings.TrimRight(raw, "/")
+	if _, err := os.Stat("/run/router-client/credential-bundle.pem"); err == nil {
+		trimmed = strings.ReplaceAll(trimmed, "atenet-router.ate-system.svc.cluster.local", "atenet-router.ate-system.svc")
+		if strings.HasPrefix(trimmed, "http://atenet-router.") {
+			trimmed = "https://" + strings.TrimPrefix(trimmed, "http://")
+			trimmed = strings.TrimSuffix(trimmed, ":80")
+			if !strings.HasSuffix(trimmed, ":443") {
+				trimmed += ":443"
+			}
+		}
+	}
+	return trimmed
+}
+
+func newRouterHTTPClient(timeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		MaxIdleConns:        128,
+		MaxIdleConnsPerHost: 32,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if cert, err := tls.LoadX509KeyPair("/run/router-client/credential-bundle.pem", "/run/router-client/credential-bundle.pem"); err == nil {
+		pool := x509.NewCertPool()
+		if caBytes, caErr := os.ReadFile("/run/router-client/trust-bundle.pem"); caErr == nil {
+			pool.AppendCertsFromPEM(caBytes)
+		}
+		tr.TLSClientConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      pool,
+			ServerName:   "atenet-router.ate-system.svc",
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
+}
+
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
 	b := &ClusterAteBackend{
 		atespace:      atespace,
 		template:      template,
-		routerURL:     strings.TrimRight(routerURL, "/"),
+		routerURL:     normalizeRouterURL(routerURL),
 		ateEndpoint:   ateEndpoint,
 		kubectlAteBin: kubectlAteBin,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-		trackers: make(map[string]*ActorTrackerState),
-		created:  make(map[string]bool),
+		httpClient:    newRouterHTTPClient(15 * time.Second),
+		trackers:      make(map[string]*ActorTrackerState),
+		created:       make(map[string]bool),
 	}
 	for _, name := range []string{"honeypot-203-0-113-5", "honeypot-198-51-100-9"} {
 		ip, label, isClone := defaultActorMetadata(name)
@@ -617,7 +656,7 @@ func (b *ClusterAteBackend) SaveActor(ctx context.Context, actorName, reason str
 	}, nil)
 
 	// Commit SNAPSHOT_CONTENT_SCOPE_FULL (rootfs overlay + Go heap RAM) to GCS via suspend
-	if _, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace); err != nil {
+	if _, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace, "--mode=sync"); err != nil {
 		return 0, err
 	}
 
@@ -635,7 +674,7 @@ func (b *ClusterAteBackend) SaveActor(ctx context.Context, actorName, reason str
 }
 
 func (b *ClusterAteBackend) SuspendActor(ctx context.Context, actorName string) error {
-	if _, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace); err != nil {
+	if _, err := b.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", b.atespace, "--mode=sync"); err != nil {
 		return err
 	}
 	b.mu.Lock()
@@ -684,7 +723,7 @@ func (b *ClusterAteBackend) CloneActor(ctx context.Context, sourceActor, newActo
 	if _, err := b.runKubectlAte(ctx, "create", "tag", tagName, "-a", b.atespace, "--actor", sourceActor); err != nil {
 		return nil, err
 	}
-	_, _ = b.runKubectlAte(ctx, "delete", "actor", newActor, "-a", b.atespace, "--any-state")
+	_, _ = b.runKubectlAte(ctx, "delete", "actor", newActor, "-a", b.atespace)
 	if _, err := b.runKubectlAte(ctx, "create", "actor", newActor, "-a", b.atespace, "--template", b.template, "--tag", tagName); err != nil {
 		return nil, err
 	}

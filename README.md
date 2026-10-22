@@ -109,7 +109,7 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 * **Why is this cool (The Stage "Wow" Factors):**
   1. **Two-Tier Storage vs. RAM X-Ray Inspector (`/dashboard`):** Watch 16 x `1 MB` RAM Buffer Pool pages stay hot on `Pause (FULL)`, visibly evaporate (`0 B uploaded`) on `Suspend (DATA)` with a live **`99.997%` GCS Snapshot Bandwidth Saved** meter, and auto-rehydrate from `/data/wal.jsonl` on the next query.
   2. **4 Customer Databases on 3 Worker Pods (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`):** Every query executes `SELECT * FROM tenant_records` with **zero `WHERE tenant_id = ?` clauses** because each customer has a dedicated gVisor sandbox and `/data` volume.
-  3. **1-Command GDPR Article 17 Shredder:** Deleting a customer's entire compute environment, memory checkpoints, and durable storage is literally `kubectl ate delete actor db-acme -a anything-but-agents --any-state` (`404 TENANT_SHREDDED`), while sibling `db-globex` stays 100% online and intact.
+  3. **1-Command GDPR Article 17 Shredder:** Deleting a customer's entire compute environment, memory checkpoints, and durable storage is literally `kubectl ate delete actor db-acme -a anything-but-agents` (`404 TENANT_SHREDDED`), while sibling `db-globex` stays 100% online and intact.
 * **How does Substrate fit into this:**
   * **`DurableDir` volume (`volumes: [{name: data, durableDir: {}}]`)** provides a snapshot-backed per-actor filesystem directory (`/data`).
   * **Split `snapshotConfig` (`onPause: FULL`, `onCommit: DATA`)** gives hot-RAM latency for bursty sessions and `99.997%` smaller data-only storage for long-term hibernation.

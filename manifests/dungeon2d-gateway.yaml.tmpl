@@ -102,7 +102,7 @@ spec:
         - --addr=:8080
         - --atespace=anything-but-agents
         - --template=dungeon2d
-        - --router-url=http://atenet-router.ate-system.svc.cluster.local:80
+        - --router-url=https://atenet-router.ate-system.svc:443
         - --ate-endpoint=api.ate-system.svc:443
         - --kubectl-ate-bin=/tools/kubectl-ate
         - --public-url=https://dungeon.${DEMO_DOMAIN}
@@ -116,6 +116,9 @@ spec:
         volumeMounts:
         - name: tools
           mountPath: /tools
+        - name: router-client
+          mountPath: /run/router-client
+          readOnly: true
         ports:
         - containerPort: 8080
           name: http
@@ -126,6 +129,19 @@ spec:
       volumes:
       - name: tools
         emptyDir: {}
+      - name: router-client
+        projected:
+          sources:
+          - podCertificate:
+              signerName: podidentity.podcert.ate.dev/identity
+              keyType: ECDSAP256
+              credentialBundlePath: credential-bundle.pem
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: trust-bundle.pem
 ---
 apiVersion: v1
 kind: Service
