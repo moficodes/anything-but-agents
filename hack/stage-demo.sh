@@ -75,11 +75,11 @@ apply_env_defaults() {
   export KO_DEFAULTPLATFORMS="${KO_DEFAULTPLATFORMS:-linux/amd64}"
   if [[ -z "${SUBSTRATE_ROOT:-}" ]]; then
     for candidate in \
+      "${REPO_ROOT}/../../agent-substrate/b-substrate" \
+      "${REPO_ROOT}/../../../../agent-substrate/b-substrate" \
       "${REPO_ROOT}/.." \
       "${REPO_ROOT}/../../agent-substrate/substrate" \
-      "${REPO_ROOT}/../../agent-substrate/b-substrate" \
-      "${REPO_ROOT}/../../../../agent-substrate/substrate" \
-      "${REPO_ROOT}/../../../../agent-substrate/b-substrate"; do
+      "${REPO_ROOT}/../../../../agent-substrate/substrate"; do
       if [[ -d "${candidate}/tools/setup-gcp" ]]; then
         SUBSTRATE_ROOT="$(cd "${candidate}" && pwd)"
         break

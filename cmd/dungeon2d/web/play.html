@@ -1246,9 +1246,11 @@
         </div>
       </div>
 
-      <button class="btn btn-save" style="padding:11px;font-size:13px;" onclick="startGameSession()">
+      <div id="joinErrorBanner" style="display:none;padding:7px 9px;border-radius:4px;background:#450a0a;border:1px solid #f43f5e;color:#fecdd3;font-size:10px;font-weight:800;line-height:1.35;"></div>
+
+      <button id="btnStartSession" class="btn btn-save" style="padding:11px;font-size:13px;" onclick="startGameSession()">
         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Spawn Actor &amp; Begin 8-Floor Campaign
+        <span id="btnStartSessionLabel">Spawn Actor &amp; Begin 8-Floor Campaign</span>
       </button>
     </div>
   </div>
@@ -3428,6 +3430,15 @@
 
     async function startGameSession() {
       const rawName = document.getElementById("heroNameInput").value.trim() || ("hero-" + Math.floor(100 + Math.random() * 900));
+      const startBtn = document.getElementById("btnStartSession");
+      const startLbl = document.getElementById("btnStartSessionLabel");
+      const errBanner = document.getElementById("joinErrorBanner");
+      if (errBanner) {
+        errBanner.style.display = "none";
+        errBanner.textContent = "";
+      }
+      if (startBtn) startBtn.disabled = true;
+      if (startLbl) startLbl.textContent = "Spawning Actor on GKE...";
       setActorWaking("SPAWNING ACTOR...");
       try {
         initFreshFloors();
@@ -3460,10 +3471,18 @@
         localStorage.setItem("d2d_v2_actor", rec.actor_name);
         localStorage.setItem("d2d_v2_hero", rec.session.hero_name);
         localStorage.setItem("d2d_v2_class", state.charClass);
+        if (startBtn) startBtn.disabled = false;
+        if (startLbl) startLbl.textContent = "Spawn Actor & Begin 8-Floor Campaign";
         document.getElementById("joinModal").classList.add("hidden");
         markFogAroundHero();
       } catch (err) {
         state.busy = false;
+        if (startBtn) startBtn.disabled = false;
+        if (startLbl) startLbl.textContent = "Spawn Actor & Begin 8-Floor Campaign";
+        if (errBanner) {
+          errBanner.textContent = "Failed to start session: " + err.message;
+          errBanner.style.display = "block";
+        }
         resetPillAfterError();
         setToast("Failed to start session: " + err.message);
       }

@@ -866,7 +866,12 @@ func (c *ClusterAteBackend) StartSession(ctx context.Context, heroName, charClas
 	}
 
 	// Ensure actor exists (ignore AlreadyExists error)
-	_, _ = c.runAte(ctx, "create", "actor", actorName, "-a", c.atespace, "--template", c.template)
+	if out, err := c.runAte(ctx, "create", "actor", actorName, "-a", c.atespace, "--template", c.template); err != nil {
+		msg := strings.ToLower(string(out) + " " + err.Error())
+		if !strings.Contains(msg, "already exists") && !strings.Contains(msg, "alreadyexists") {
+			slog.Warn("kubectl-ate create actor returned error", slog.String("actor", actorName), slog.Any("err", err))
+		}
+	}
 
 	actorResp, latencyMs, err := c.callActorHTTP(ctx, actorName, http.MethodPost, "/mutate", MutateRequest{
 		Action:         "init",
