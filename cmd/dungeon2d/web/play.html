@@ -119,7 +119,7 @@
       display: flex;
       align-items: stretch;
       justify-content: space-between;
-      gap: 5px;
+      gap: 4px;
       z-index: 30;
       flex-shrink: 0;
     }
@@ -128,13 +128,14 @@
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 7px;
-      padding: 4px 7px;
+      gap: 5px;
+      padding: 3px 5px;
       border-radius: 5px;
+      overflow: hidden;
     }
     .portrait-frame {
-      width: 34px;
-      height: 34px;
+      width: 28px;
+      height: 28px;
       border-radius: 4px;
       display: flex;
       align-items: center;
@@ -142,10 +143,11 @@
       flex-shrink: 0;
       border: 1.5px solid var(--amber-border);
       position: relative;
+      overflow: hidden;
     }
     .portrait-frame canvas {
-      width: 26px;
-      height: 26px;
+      width: 24px;
+      height: 24px;
       image-rendering: pixelated;
     }
     .hero-bars {
@@ -153,11 +155,12 @@
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2px;
+      overflow: hidden;
     }
     .hp-bar-outer {
       position: relative;
-      height: 14px;
+      height: 15px;
       background: #140f0c;
       border-top: 1.5px solid #090705;
       border-left: 1.5px solid #090705;
@@ -190,30 +193,40 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 5px;
-      font-size: 9px;
+      gap: 3px;
+      padding: 0 3px;
+      font-size: 7.5px;
       font-weight: 900;
+      line-height: 1;
       color: #fff;
       text-shadow: 1px 1px 0 #000;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .hp-text span {
+      white-space: nowrap;
+      overflow: hidden;
     }
     .meta-badges {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       overflow: hidden;
+      flex-wrap: nowrap;
     }
     .meta-tag {
       display: inline-flex;
       align-items: center;
-      gap: 3px;
-      font-size: 9px;
+      gap: 2px;
+      font-size: 7.5px;
       font-weight: 900;
-      padding: 1px 5px;
+      padding: 1px 3px;
       border-radius: 2px;
       background: #17130e;
       border: 1px solid #4a3e2e;
       color: #e7d8b9;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .meta-tag .lbl { color: #a89472; }
 
@@ -221,13 +234,13 @@
       position: relative;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       flex-shrink: 0;
     }
     .icon-btn {
       position: relative;
-      width: 36px;
-      height: 40px;
+      width: 30px;
+      height: 34px;
       border-radius: 5px;
       display: inline-flex;
       align-items: center;
@@ -235,6 +248,7 @@
       cursor: pointer;
       color: var(--text);
       padding: 0;
+      overflow: hidden;
       background: linear-gradient(180deg, #473d31 0%, #2b251d 100%);
       border-top: 2px solid #786855;
       border-left: 2px solid #786855;
@@ -259,29 +273,34 @@
     .ver-pill-mini {
       position: absolute;
       bottom: 1px;
-      right: 2px;
-      font-size: 8px;
+      right: 1px;
+      font-size: 7.5px;
       font-weight: 900;
       color: #fde68a;
       background: rgba(20, 16, 12, 0.92);
-      padding: 0 3px;
+      padding: 0 2px;
       border-radius: 2px;
       border: 1px solid #926829;
-      line-height: 1.15;
+      line-height: 1.1;
     }
     .unsaved-dot {
       position: absolute;
-      top: 2px;
+      bottom: 1px;
+      left: 2px;
       right: 2px;
-      font-size: 7px;
+      font-size: 6.5px;
       font-weight: 900;
-      padding: 0 3px;
+      padding: 0 1px;
       border-radius: 2px;
       background: #d97706;
       color: #fff;
+      text-align: center;
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
       display: none;
     }
-    .unsaved-dot.visible { display: inline-block; }
+    .unsaved-dot.visible { display: block; }
 
     .revert-popover {
       position: absolute;
@@ -383,89 +402,150 @@
     #gameCanvas {
       width: 100%;
       height: 100%;
-      object-fit: contain;
       image-rendering: pixelated;
       touch-action: none;
       display: block;
     }
     .viewport-overlay-top {
       position: absolute;
-      top: 6px;
-      left: 6px;
-      right: 6px;
+      top: 5px;
+      left: 5px;
+      right: 5px;
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
+      gap: 6px;
       pointer-events: none;
       z-index: 10;
     }
     .floor-banner-pill {
-      background: rgba(18, 14, 10, 0.88);
+      background: rgba(18, 14, 10, 0.9);
       border: 1px solid #8c6f3e;
       border-radius: 4px;
-      padding: 3px 8px;
-      font-size: 10px;
+      padding: 3px 7px;
+      font-size: 9.5px;
       font-weight: 900;
       color: #fde68a;
       text-shadow: 1px 1px 0 #000;
       display: flex;
       flex-direction: column;
       gap: 1px;
+      min-width: 0;
+      flex: 1;
+      max-width: calc(100% - 88px);
+      overflow: hidden;
+    }
+    .floor-banner-pill > span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .floor-sub-hint {
-      font-size: 8px;
+      font-size: 7.5px;
       color: #cbd5e1;
       font-weight: 700;
     }
     #minimapCanvas {
-      width: 84px;
-      height: 60px;
-      background: rgba(12, 9, 6, 0.88);
+      width: 82px;
+      height: 58px;
+      flex-shrink: 0;
+      background: rgba(12, 9, 6, 0.9);
       border: 1.5px solid #8c6f3e;
       border-radius: 4px;
       image-rendering: pixelated;
     }
 
+    /* Floating Touch-Drag Joystick on Viewport */
+    .floating-joystick {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      margin-left: -38px;
+      margin-top: -38px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(251, 191, 36, 0.14) 0%, rgba(18, 14, 10, 0.68) 75%);
+      border: 2px solid rgba(251, 191, 36, 0.65);
+      box-shadow: 0 0 14px rgba(0, 0, 0, 0.75);
+      pointer-events: none;
+      z-index: 16;
+      display: none;
+    }
+    .floating-joystick.active {
+      display: block;
+    }
+    .floating-joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 30px;
+      height: 30px;
+      margin-left: -15px;
+      margin-top: -15px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fde68a 0%, #d97706 68%, #78350f 100%);
+      border: 2px solid #fffbeb;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+    }
+
     .telemetry-strip {
       width: 100%;
-      padding: 4px 9px;
-      min-height: 38px;
+      padding: 4px 8px;
+      min-height: 40px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 1px;
+      gap: 2px;
       flex-shrink: 0;
+      overflow: hidden;
     }
     .scroll-top-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
+      min-width: 0;
+      overflow: hidden;
     }
     .actor-pill {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      font-size: 9px;
+      gap: 4px;
+      font-size: 8.5px;
       font-weight: 900;
-      padding: 1px 6px;
+      padding: 1px 5px;
       border-radius: 3px;
       background: #261e15;
       border: 1px solid #6e5839;
       color: #fde68a;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 64%;
+      flex-shrink: 0;
     }
     .actor-pill.waking { background: #78350f; border-color: #f59e0b; color: #fef3c7; }
     .actor-pill.reverted { background: #064e3b; border-color: #10b981; color: #a7f3d0; }
     .actor-pill.dead { background: #7f1d1d; border-color: #f43f5e; color: #fecdd3; }
-    .telemetry-msg {
-      font-size: 10.5px;
-      font-weight: 800;
-      line-height: 1.25;
-      color: var(--parchment-ink);
+    .scroll-mode-tag {
+      font-size: 8px;
+      font-weight: 900;
+      color: #5c431c;
+      text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .telemetry-msg {
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.24;
+      color: var(--parchment-ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
     }
 
     /* Bottom Dual-Thumb Mobile Control Dock */
@@ -473,37 +553,42 @@
       width: 100%;
       max-width: 560px;
       margin: 0 auto 4px;
-      padding: 5px 8px;
+      padding: 5px 7px;
       border-radius: 6px;
       display: flex;
       flex-direction: column;
       gap: 4px;
       flex-shrink: 0;
+      overflow: hidden;
     }
     .gear-strip {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 4px;
+      min-width: 0;
+      overflow: hidden;
     }
     .inv-slots {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
+      flex-shrink: 0;
     }
     .item-slot {
       position: relative;
-      width: 32px;
-      height: 30px;
+      width: 30px;
+      height: 28px;
       border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 0;
+      overflow: hidden;
     }
     .item-slot canvas {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       image-rendering: pixelated;
       opacity: 0.25;
       filter: grayscale(85%);
@@ -512,7 +597,7 @@
       position: absolute;
       bottom: 1px;
       right: 2px;
-      font-size: 7px;
+      font-size: 6.5px;
       font-weight: 900;
       color: #786a56;
       line-height: 1;
@@ -526,16 +611,19 @@
     .item-slot.owned .slot-tag { color: #fde68a; }
 
     .target-lock-pill {
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 900;
       color: #fca5a5;
       background: #241316;
       border: 1px solid #7f1d1d;
       border-radius: 3px;
-      padding: 3px 6px;
+      padding: 2px 5px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+      text-align: right;
       max-width: 190px;
     }
 
@@ -544,89 +632,171 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      min-width: 0;
     }
-    /* Left Thumb: Hold D-Pad */
-    .dpad {
-      display: grid;
-      grid-template-columns: repeat(3, 38px);
-      grid-template-rows: repeat(2, 34px);
-      gap: 3px;
+
+    /* Left Thumb: 360-Degree Virtual Analog Thumbstick + Cardinal Rim Ticks */
+    .joystick-zone {
+      position: relative;
+      width: 82px;
+      height: 82px;
       flex-shrink: 0;
-    }
-    .dpad-btn {
-      background: linear-gradient(180deg, #4f4436 0%, #342c22 100%);
-      border-top: 2px solid #7d6d58;
-      border-left: 2px solid #7d6d58;
-      border-right: 2px solid #14110d;
-      border-bottom: 2px solid #14110d;
-      border-radius: 4px;
-      color: #f5ebd6;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
       touch-action: none;
+      cursor: grab;
     }
-    .dpad-btn:active, .dpad-btn.active {
-      background: var(--amber-border);
-      color: #14110d;
+    .joystick-zone:active { cursor: grabbing; }
+    .joystick-base {
+      position: relative;
+      width: 78px;
+      height: 78px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, #110d09 0%, #1d1711 58%, #2e251c 100%);
+      border: 2px solid #786855;
+      box-shadow:
+        inset 0 3px 8px rgba(0, 0, 0, 0.85),
+        0 2px 6px rgba(0, 0, 0, 0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+    .joystick-zone.active .joystick-base {
+      border-color: var(--amber-border);
+      box-shadow:
+        inset 0 3px 8px rgba(0, 0, 0, 0.85),
+        0 0 12px rgba(245, 158, 11, 0.45);
+    }
+    .joystick-ring {
+      position: absolute;
+      inset: 11px;
+      border-radius: 50%;
+      border: 1px dashed rgba(200, 150, 62, 0.32);
+      pointer-events: none;
+    }
+    .joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 34px;
+      height: 34px;
+      margin-left: -17px;
+      margin-top: -17px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 30%, #fde68a 0%, #d97706 58%, #78350f 100%);
+      border: 2px solid #fef3c7;
+      box-shadow:
+        0 3px 8px rgba(0, 0, 0, 0.8),
+        inset 0 1px 2px rgba(255, 255, 255, 0.55);
+      pointer-events: none;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.04s linear;
+    }
+    .joystick-knob::after {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 251, 235, 0.45);
+    }
+    /* Cardinal rim ticks (also serve as accessible .dpad-btn click targets) */
+    .dpad {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .dpad-btn {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: rgba(245, 235, 214, 0.48);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .dpad-btn.dir-up { top: 1px; left: 50%; transform: translateX(-50%); }
+    .dpad-btn.dir-down { bottom: 1px; left: 50%; transform: translateX(-50%); }
+    .dpad-btn.dir-left { left: 1px; top: 50%; transform: translateY(-50%); }
+    .dpad-btn.dir-right { right: 1px; top: 50%; transform: translateY(-50%); }
+    .dpad-btn.active { color: #fde68a; }
 
     /* Right Thumb: Timed Primary Attack + Class Skill + Potion */
     .combat-cluster {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.28fr) minmax(0, 1.08fr) 54px;
+      align-items: stretch;
+      gap: 5px;
       flex: 1;
-      justify-content: flex-end;
+      min-width: 0;
     }
     .action-btn {
       position: relative;
-      height: 68px;
+      height: 76px;
       border-radius: 6px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 2px;
+      padding: 3px 4px;
       cursor: pointer;
       font-family: inherit;
       color: #fff;
       overflow: hidden;
+      min-width: 0;
+      width: 100%;
       touch-action: manipulation;
       box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
     }
     .action-btn:active { transform: scale(0.96); }
     .btn-primary-atk {
-      flex: 1;
-      max-width: 120px;
-      min-width: 88px;
       background: linear-gradient(180deg, #991b1b 0%, #5c0f0f 100%);
       border: 2px solid #f87171;
     }
     .btn-class-skill {
-      width: 78px;
       background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
       border: 2px solid #60a5fa;
     }
     .btn-potion-quick {
-      width: 54px;
       background: linear-gradient(180deg, #065f46 0%, #064e3b 100%);
       border: 2px solid #34d399;
     }
     .action-btn .btn-lbl {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 900;
+      line-height: 1.12;
+      text-align: center;
       text-transform: uppercase;
       text-shadow: 1px 1px 0 #000;
       z-index: 2;
+      max-width: 100%;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      word-break: break-word;
     }
     .action-btn .btn-sub {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 800;
+      line-height: 1.1;
       color: #fde68a;
       text-shadow: 1px 1px 0 #000;
       z-index: 2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
     .cd-overlay {
       position: absolute;
@@ -861,8 +1031,8 @@
           <div id="hudHpFill" class="hp-bar-fill" style="width:100%"></div>
           <div class="hp-bar-segments"></div>
           <div class="hp-text">
-            <span id="hudClassBadge">PALADIN (25% ARM)</span>
-            <span id="hudHP">140 / 140 HP</span>
+            <span id="hudClassBadge">PALADIN • 25%</span>
+            <span id="hudHP">140/140 HP</span>
           </div>
         </div>
         <div class="meta-badges">
@@ -886,7 +1056,7 @@
     <div class="hud-actions">
       <button id="btnSaveWorld" class="icon-btn btn-save" onclick="triggerQuicksave()" title="Save Full WorldState to Substrate Actor & GCS">
         <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        <span id="unsavedBadge" class="unsaved-dot">UNSAVED</span>
+        <span id="unsavedBadge" class="unsaved-dot">SAVE</span>
       </button>
       <button id="btnRevertToggle" class="icon-btn btn-revert" onclick="toggleRevertPopover(event)" title="Revert Actor to Snapshot Version (Save-Scum)">
         <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
@@ -899,10 +1069,10 @@
         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
       </button>
       <div class="theme-seg stone-socket" title="Projector Light / Dark Mode" style="display:inline-flex;align-items:center;border-radius:4px;padding:1px;gap:1px;">
-        <button id="btnDarkMode" class="icon-btn btn-theme" style="width:26px;height:28px;" onclick="toggleLightMode(false)" aria-label="Dark Mode">
+        <button id="btnDarkMode" class="icon-btn btn-theme" style="width:22px;height:26px;" onclick="toggleLightMode(false)" aria-label="Dark Mode">
           <svg id="iconMoon" class="icon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
         </button>
-        <button id="btnLightMode" class="icon-btn btn-theme" style="width:26px;height:28px;opacity:0.55;" onclick="toggleLightMode(true)" aria-label="Light Mode">
+        <button id="btnLightMode" class="icon-btn btn-theme" style="width:22px;height:26px;opacity:0.55;" onclick="toggleLightMode(true)" aria-label="Light Mode">
           <svg id="iconSun" class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
         </button>
       </div>
@@ -919,9 +1089,12 @@
 
   <!-- Main PixiJS / 2.5D Viewport + Minimap + Boss Banner + Parchment Chronicle -->
   <main class="stage-wrap">
-    <div class="canvas-box">
+    <div id="canvasBox" class="canvas-box">
       <div id="pixiMount"></div>
       <canvas id="gameCanvas" width="608" height="416"></canvas>
+      <div id="floatingJoystick" class="floating-joystick">
+        <div id="floatingJoystickKnob" class="floating-joystick-knob"></div>
+      </div>
       <div class="viewport-overlay-top">
         <div class="floor-banner-pill">
           <span id="floorTitleBanner">Floor 1: The Forgotten Crypt</span>
@@ -946,9 +1119,9 @@
         <div id="actorPill" class="actor-pill">
           <span id="actorStateText">CLIENT SIM • SAVED v1 IN GCS</span>
         </div>
-        <span style="font-size:8.5px;font-weight:900;color:#5c431c;text-transform:uppercase;">100% Client Gameplay • Substrate Actor on Save/Revert</span>
+        <span class="scroll-mode-tag">Client Sim • Save to GCS</span>
       </div>
-      <span id="eventToastText" class="telemetry-msg">Hold D-Pad or tap tiles to move. Tap Attack/Skill or Space/E to fight! Tap Save icon to commit WorldState to GCS.</span>
+      <span id="eventToastText" class="telemetry-msg">Drag the Thumbstick (or WASD) to move. Tap Attack/Skill or tap an enemy to fight! Tap Save to checkpoint WorldState to GCS.</span>
     </div>
   </main>
 
@@ -981,21 +1154,25 @@
     </div>
 
     <div class="controls-row">
-      <div class="dpad">
-        <div></div>
-        <button class="dpad-btn" data-dx="0" data-dy="-1" aria-label="Move Up">
-          <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>
-        </button>
-        <div></div>
-        <button class="dpad-btn" data-dx="-1" data-dy="0" aria-label="Move Left">
-          <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <button class="dpad-btn" data-dx="0" data-dy="1" aria-label="Move Down">
-          <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <button class="dpad-btn" data-dx="1" data-dy="0" aria-label="Move Right">
-          <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-        </button>
+      <div id="joystickZone" class="joystick-zone" title="Drag Analog Thumbstick to Move 360°">
+        <div id="joystickBase" class="joystick-base">
+          <div class="joystick-ring"></div>
+          <div class="dpad">
+            <button class="dpad-btn dir-up" data-dx="0" data-dy="-1" aria-label="Move Up">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
+            <button class="dpad-btn dir-left" data-dx="-1" data-dy="0" aria-label="Move Left">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="dpad-btn dir-down" data-dx="0" data-dy="1" aria-label="Move Down">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <button class="dpad-btn dir-right" data-dx="1" data-dy="0" aria-label="Move Right">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div id="joystickKnob" class="joystick-knob"></div>
+        </div>
       </div>
 
       <div class="combat-cluster">
@@ -1136,8 +1313,8 @@
   </div>
   <script>
     const TILE = 38;
-    const VIEW_W = 608;
-    const VIEW_H = 416;
+    let VIEW_W = 608;
+    let VIEW_H = 416;
 
     const PALETTE = {
       ".": null,
@@ -1867,6 +2044,7 @@
       lockedTargetId: "",
       moveTarget: null,
       dpadDir: { dx: 0, dy: 0 },
+      joystickVec: { dx: 0, dy: 0, mag: 0 },
       keysDown: {},
       projectiles: [],
       slashArcs: [],
@@ -1886,6 +2064,31 @@
     const ctx = canvas.getContext("2d");
     const miniCanvas = document.getElementById("minimapCanvas");
     const miniCtx = miniCanvas.getContext("2d");
+
+    // Dynamically match #gameCanvas resolution & aspect ratio to .canvas-box so portrait phones have zero black letterbox bars
+    function syncCanvasViewportSize() {
+      const box = document.getElementById("canvasBox") || canvas.parentElement;
+      if (!box) return;
+      const bw = box.clientWidth || 360;
+      const bh = box.clientHeight || 360;
+      const maxMapH = 16 * TILE;
+      let targetW = Math.max(418, Math.min(646, Math.round(bw * 1.18)));
+      let targetH = Math.max(304, Math.round(targetW * (bh / Math.max(1, bw))));
+      if (targetH > maxMapH) {
+        targetH = maxMapH;
+        targetW = Math.max(320, Math.round(targetH * (bw / Math.max(1, bh))));
+      }
+      if (Math.abs(targetW - VIEW_W) > 2 || Math.abs(targetH - VIEW_H) > 2) {
+        VIEW_W = targetW;
+        VIEW_H = targetH;
+        canvas.width = VIEW_W;
+        canvas.height = VIEW_H;
+        if (pixiApp && pixiApp.renderer) {
+          try { pixiApp.renderer.resize(VIEW_W, VIEW_H); } catch (_) {}
+        }
+      }
+    }
+    window.addEventListener("resize", syncCanvasViewportSize);
 
     // PixiJS v8 WebGL ambient dungeon particle & lighting overlay stage
     let pixiApp = null;
@@ -2316,8 +2519,8 @@
     function updateHudUI() {
       const kit = currentKit();
       state.armor = computeHeroArmor();
-      document.getElementById("hudClassBadge").textContent = `${kit.label} (${state.armor}% ARM)`;
-      document.getElementById("hudHP").textContent = `${Math.max(0, Math.round(state.hp))} / ${state.maxHp} HP`;
+      document.getElementById("hudClassBadge").textContent = `${kit.label}`;
+      document.getElementById("hudHP").textContent = `${Math.max(0, Math.round(state.hp))}/${state.maxHp} HP`;
       const hpPct = Math.max(0, Math.min(100, Math.round((state.hp / state.maxHp) * 100)));
       const hpFill = document.getElementById("hudHpFill");
       if (hpFill) {
@@ -2868,18 +3071,20 @@
       document.getElementById("atkCdBar").style.height = atkPct + "%";
       document.getElementById("skillCdBar").style.height = skillPct + "%";
 
-      // 1. Hero movement (Hold D-Pad / Keyboard / Tap-to-Path)
-      let moveX = state.dpadDir.dx;
-      let moveY = state.dpadDir.dy;
-      if (state.keysDown["ArrowUp"] || state.keysDown["w"] || state.keysDown["W"]) moveY -= 1;
-      if (state.keysDown["ArrowDown"] || state.keysDown["s"] || state.keysDown["S"]) moveY += 1;
-      if (state.keysDown["ArrowLeft"] || state.keysDown["a"] || state.keysDown["A"]) moveX -= 1;
-      if (state.keysDown["ArrowRight"] || state.keysDown["d"] || state.keysDown["D"]) moveX += 1;
+      // 1. Hero movement (360° Analog Thumbstick / Hold D-Pad / Keyboard)
+      let moveX = state.joystickVec.dx || state.dpadDir.dx;
+      let moveY = state.joystickVec.dy || state.dpadDir.dy;
+      let speedScale = state.joystickVec.mag > 0 ? Math.max(0.38, Math.min(1, state.joystickVec.mag)) : 1;
+      if (state.keysDown["ArrowUp"] || state.keysDown["w"] || state.keysDown["W"]) { moveY -= 1; speedScale = 1; }
+      if (state.keysDown["ArrowDown"] || state.keysDown["s"] || state.keysDown["S"]) { moveY += 1; speedScale = 1; }
+      if (state.keysDown["ArrowLeft"] || state.keysDown["a"] || state.keysDown["A"]) { moveX -= 1; speedScale = 1; }
+      if (state.keysDown["ArrowRight"] || state.keysDown["d"] || state.keysDown["D"]) { moveX += 1; speedScale = 1; }
 
       if (moveX !== 0 || moveY !== 0) {
         state.moveTarget = null;
         const len = Math.hypot(moveX, moveY) || 1;
-        tryStepHeroContinuous((moveX / len) * kit.moveSpeed * dtSec, (moveY / len) * kit.moveSpeed * dtSec);
+        const effSpeed = kit.moveSpeed * speedScale;
+        tryStepHeroContinuous((moveX / len) * effSpeed * dtSec, (moveY / len) * effSpeed * dtSec);
       } else if (state.moveTarget) {
         const dx = state.moveTarget.x - state.x;
         const dy = state.moveTarget.y - state.y;
@@ -3357,6 +3562,26 @@
       ctx2d.fillText(text, x, y);
     }
 
+    // Centered, pill-backed canvas label clamped within viewport & map boundaries so labels never clip off screen edges
+    function drawCenteredCanvasLabel(ctx2d, text, centerX, baselineY, color, font, withBackdrop = true) {
+      if (!text) return;
+      ctx2d.font = font || "bold 8px ui-monospace, monospace";
+      const tw = ctx2d.measureText(text).width;
+      const bp = FLOOR_BLUEPRINTS[state.floor] || FLOOR_BLUEPRINTS[1];
+      const mapW = bp.grid[0].length * TILE;
+      const minX = Math.max(4, camera.x + 4);
+      const maxX = Math.min(mapW - tw - 4, camera.x + VIEW_W - tw - 4);
+      let drawX = Math.round(centerX - tw / 2);
+      if (maxX >= minX) {
+        drawX = Math.max(minX, Math.min(maxX, drawX));
+      }
+      if (withBackdrop) {
+        ctx2d.fillStyle = "rgba(10, 8, 6, 0.78)";
+        ctx2d.fillRect(drawX - 3, baselineY - 8.5, tw + 6, 11);
+      }
+      drawShadowText(ctx2d, text, drawX, baselineY, color, font);
+    }
+
     let camera = { x: 0, y: 0 };
     let frame = 0;
 
@@ -3545,7 +3770,7 @@
           }
         }
         if (trapsHot) {
-          drawShadowText(ctx2d, "SPIKES!", px + 2, py - 2, "#fda4af", "bold 8px ui-monospace, monospace");
+          drawCenteredCanvasLabel(ctx2d, "SPIKES!", cx, py - 2, "#fda4af", "bold 8px ui-monospace, monospace");
         }
       } else if (ia.kind === "gate" || ia.kind === "vault") {
         if (ia.state === "open") {
@@ -3555,7 +3780,7 @@
           ctx2d.strokeStyle = "#34d399";
           ctx2d.lineWidth = 1.5;
           ctx2d.strokeRect(px + 4, py + 4, TILE - 8, TILE - 8);
-          drawShadowText(ctx2d, "OPEN", px + 7, py - 2, "#6ee7b7", "bold 8px ui-monospace, monospace");
+          drawCenteredCanvasLabel(ctx2d, "OPEN", cx, py - 2, "#6ee7b7", "bold 8px ui-monospace, monospace");
         } else {
           const isSealed = ia.state === "sealed";
           const isSun = ia.id && ia.id.includes("sun");
@@ -3572,7 +3797,7 @@
           }
           ctx2d.fillRect(px + 4, py + 12, TILE - 8, 2.5);
           ctx2d.fillRect(px + 4, py + 23, TILE - 8, 2.5);
-          drawShadowText(ctx2d, isSealed ? "SEALED" : ia.label.split(" ")[0].toUpperCase(), px - 2, py - 3, isSealed ? "#fda4af" : "#fde68a", "bold 8px ui-monospace, monospace");
+          drawCenteredCanvasLabel(ctx2d, isSealed ? "SEALED" : ia.label.split(" ")[0].toUpperCase(), cx, py - 3, isSealed ? "#fda4af" : "#fde68a", "bold 8px ui-monospace, monospace");
         }
       } else if (ia.kind === "lever") {
         const pulled = ia.state === "activated";
@@ -3593,7 +3818,7 @@
         ctx2d.beginPath();
         ctx2d.arc(pulled ? cx + 8 : cx - 8, cy - 10, 4.5, 0, Math.PI * 2);
         ctx2d.fill();
-        drawShadowText(ctx2d, pulled ? "GATE OPEN" : "PULL LEVER", px - 6, py - 3, pulled ? "#6ee7b7" : "#fde68a", "bold 8px ui-monospace, monospace");
+        drawCenteredCanvasLabel(ctx2d, pulled ? "GATE OPEN" : "PULL LEVER", cx, py - 3, pulled ? "#6ee7b7" : "#fde68a", "bold 8px ui-monospace, monospace");
       } else if (ia.kind === "shrine") {
         // Golden Radiant Save Shrine Pedestal + Floating Halo
         const pulse = 18 + Math.sin(frame * 0.14) * 4;
@@ -3612,7 +3837,7 @@
         ctx2d.beginPath();
         ctx2d.arc(cx, cy - 9 + Math.sin(frame * 0.12) * 1.5, 5.5, 0, Math.PI * 2);
         ctx2d.fill();
-        drawShadowText(ctx2d, "SAVE SHRINE", px - 10, py - 4, "#fef08a", "bold 8px ui-monospace, monospace");
+        drawCenteredCanvasLabel(ctx2d, "SAVE SHRINE", cx, py - 4, "#fef08a", "bold 8px ui-monospace, monospace");
       } else if (ia.kind === "stairs" || ia.kind === "stairs_up") {
         const isDown = ia.kind === "stairs";
         ctx2d.fillStyle = "#090705";
@@ -3625,7 +3850,7 @@
         ctx2d.strokeStyle = isDown ? "#38bdf8" : "#cbd5e1";
         ctx2d.lineWidth = 2;
         ctx2d.strokeRect(px + 4, py + 4, TILE - 8, TILE - 8);
-        drawShadowText(ctx2d, isDown ? `DOWN FL${state.floor + 1}` : `UP FL${state.floor - 1}`, px - 4, py - 3, isDown ? "#38bdf8" : "#cbd5e1", "bold 8px ui-monospace, monospace");
+        drawCenteredCanvasLabel(ctx2d, isDown ? `DOWN FL${state.floor + 1}` : `UP FL${state.floor - 1}`, cx, py - 3, isDown ? "#38bdf8" : "#cbd5e1", "bold 8px ui-monospace, monospace");
       } else if (ia.kind === "portal") {
         // Swirling Arcane Ascension Portal on Floor 8
         const pGlow = ctx2d.createRadialGradient(cx, cy, 3, cx, cy, 26);
@@ -3642,7 +3867,7 @@
         ctx2d.beginPath();
         ctx2d.arc(cx, cy, 13 + Math.sin(frame * 0.2) * 2, 0, Math.PI * 2);
         ctx2d.stroke();
-        drawShadowText(ctx2d, "EXIT PORTAL", px - 9, py - 4, "#fef08a", "bold 8px ui-monospace, monospace");
+        drawCenteredCanvasLabel(ctx2d, "EXIT PORTAL", cx, py - 4, "#fef08a", "bold 8px ui-monospace, monospace");
       }
     }
 
@@ -3664,7 +3889,13 @@
       ctx2d.fillRect(px, py, TILE, TILE);
 
       drawPixelSprite(ctx2d, SPRITES[it.sprite] || SPRITES.chest, px + 3, py + 3 + bob, 2);
-      drawShadowText(ctx2d, it.label, px - 6, py - 2, "#fde68a", "bold 8px ui-monospace, monospace");
+      const shortLabel = (it.label || "").split(" (")[0];
+      drawCenteredCanvasLabel(ctx2d, shortLabel, cx, py - 2, "#fde68a", "bold 8px ui-monospace, monospace");
+      const bonusIdx = (it.label || "").indexOf("(");
+      if (bonusIdx >= 0 && Math.hypot((it.x + 0.5) - state.x, (it.y + 0.5) - state.y) <= 4.0) {
+        const bonusText = it.label.slice(bonusIdx);
+        drawCenteredCanvasLabel(ctx2d, bonusText, cx, py + TILE + 9, "#6ee7b7", "bold 7.5px ui-monospace, monospace");
+      }
     }
 
     // Multi-Part 2.5D Animated Enemy & Boss Renderer
@@ -3816,7 +4047,8 @@
       ctx2d.fillRect(bx, by, Math.max(0, (en.hp / en.max_hp) * barW), 5);
       const aiTag = en.windupLeftMs > 0 ? "WINDUP!" : (en.ai_state === "chasing" ? "A* AGGRO" : (en.ai_state === "supporting" ? "HEAL AI" : "PATROL"));
       const aiColor = en.windupLeftMs > 0 ? "#fda4af" : (en.ai_state === "chasing" ? "#fde047" : "#cbd5e1");
-      drawShadowText(ctx2d, `${arch.name} [${aiTag}]`, bx - 6, by - 3, aiColor, "bold 7.5px ui-monospace, monospace");
+      const shortEnemyName = isBoss ? "HEAP DRAGON" : (arch.name || "Enemy");
+      drawCenteredCanvasLabel(ctx2d, `${shortEnemyName} [${aiTag}]`, cx, by - 3, aiColor, "bold 7.5px ui-monospace, monospace");
     }
 
     // Multi-Part 2.5D Hero Renderer (Paladin, Ranger, Wizard with Weapons, Shields & Stride)
@@ -3898,6 +4130,7 @@
     }
 
     function renderViewport() {
+      syncCanvasViewportSize();
       frame++;
       const bp = FLOOR_BLUEPRINTS[state.floor] || FLOOR_BLUEPRINTS[1];
       const fData = state.floors[String(state.floor)] || { enemies: [], items: [], interactables: [] };
@@ -3909,17 +4142,21 @@
       const activeBoss = fData.enemies.find(e => e.alive && e.hp > 0 && (ENEMY_ARCHETYPES[e.archetype] && ENEMY_ARCHETYPES[e.archetype].boss));
       if (bossBanner) {
         if (activeBoss) {
-          bossBanner.classList.add("visible");
+          bossBanner.classList.remove("hidden");
           document.getElementById("bossHudName").textContent = activeBoss.name.toUpperCase();
           document.getElementById("bossHudHpText").textContent = `${Math.ceil(activeBoss.hp)} / ${activeBoss.max_hp} HP`;
           document.getElementById("bossHudFill").style.width = `${Math.max(0, Math.min(100, (activeBoss.hp / activeBoss.max_hp) * 100))}%`;
         } else {
-          bossBanner.classList.remove("visible");
+          bossBanner.classList.add("hidden");
         }
       }
 
-      const targetCamX = Math.max(0, Math.min(mapW - VIEW_W, state.x * TILE - VIEW_W / 2));
-      const targetCamY = Math.max(0, Math.min(mapH - VIEW_H, state.y * TILE - VIEW_H / 2));
+      const targetCamX = mapW <= VIEW_W
+        ? (mapW - VIEW_W) / 2
+        : Math.max(0, Math.min(mapW - VIEW_W, state.x * TILE - VIEW_W / 2));
+      const targetCamY = mapH <= VIEW_H
+        ? (mapH - VIEW_H) / 2
+        : Math.max(0, Math.min(mapH - VIEW_H, state.y * TILE - VIEW_H / 2));
       camera.x += (targetCamX - camera.x) * 0.22;
       camera.y += (targetCamY - camera.y) * 0.22;
 
@@ -4194,7 +4431,7 @@
       if (!c) return;
       const pctx = c.getContext("2d");
       pctx.clearRect(0, 0, c.width, c.height);
-      drawPixelSprite(pctx, SPRITES[state.charClass] || SPRITES.paladin, 0, 0, 1);
+      drawPixelSprite(pctx, SPRITES[state.charClass] || SPRITES.paladin, 0, 0, 2);
     }
 
     function selectClass(el) {
@@ -4277,24 +4514,82 @@
       document.getElementById("joinModal").classList.remove("hidden");
     }
 
-    // Bind Hold-to-Move D-Pad, Canvas Tap-to-Move / Tap-Enemy-Target, and Keyboard
-    document.querySelectorAll(".dpad-btn").forEach(btn => {
-      const dx = parseFloat(btn.dataset.dx || "0");
-      const dy = parseFloat(btn.dataset.dy || "0");
-      const startHold = (e) => {
+    // Bind 360-Degree Virtual Analog Thumbstick (#joystickZone) + Cardinal Rim Ticks
+    const joystickZone = document.getElementById("joystickZone");
+    const joystickKnob = document.getElementById("joystickKnob");
+    let activeStickPointerId = null;
+    const MAX_STICK_RADIUS = 24;
+
+    function updateDockJoystickFromEvent(e) {
+      if (!joystickZone || !joystickKnob) return;
+      const rect = joystickZone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const rawDx = e.clientX - cx;
+      const rawDy = e.clientY - cy;
+      const dist = Math.hypot(rawDx, rawDy);
+      const clampedDist = Math.min(MAX_STICK_RADIUS, dist);
+      const nx = dist > 0.001 ? rawDx / dist : 0;
+      const ny = dist > 0.001 ? rawDy / dist : 0;
+      const kx = nx * clampedDist;
+      const ky = ny * clampedDist;
+      joystickKnob.style.transform = `translate(${kx.toFixed(1)}px, ${ky.toFixed(1)}px)`;
+
+      if (dist < 4) {
+        state.joystickVec = { dx: 0, dy: 0, mag: 0 };
+      } else {
+        state.joystickVec = {
+          dx: nx,
+          dy: ny,
+          mag: Math.min(1, dist / MAX_STICK_RADIUS)
+        };
+      }
+      // Highlight matching cardinal tick for visual feedback
+      document.querySelectorAll(".dpad-btn").forEach(btn => {
+        const bdx = parseFloat(btn.dataset.dx || "0");
+        const bdy = parseFloat(btn.dataset.dy || "0");
+        const dot = nx * bdx + ny * bdy;
+        btn.classList.toggle("active", dist >= 6 && dot > 0.55);
+      });
+    }
+
+    function resetDockJoystick() {
+      activeStickPointerId = null;
+      state.joystickVec = { dx: 0, dy: 0, mag: 0 };
+      if (joystickZone) joystickZone.classList.remove("active");
+      if (joystickKnob) joystickKnob.style.transform = "translate(0px, 0px)";
+      document.querySelectorAll(".dpad-btn").forEach(btn => btn.classList.remove("active"));
+    }
+
+    if (joystickZone) {
+      joystickZone.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        state.dpadDir = { dx, dy };
-        btn.classList.add("active");
-      };
-      const endHold = () => {
-        state.dpadDir = { dx: 0, dy: 0 };
-        btn.classList.remove("active");
-      };
-      btn.addEventListener("pointerdown", startHold);
-      btn.addEventListener("pointerup", endHold);
-      btn.addEventListener("pointerleave", endHold);
-      btn.addEventListener("pointercancel", endHold);
-    });
+        activeStickPointerId = e.pointerId;
+        try { joystickZone.setPointerCapture(e.pointerId); } catch (_) {}
+        joystickZone.classList.add("active");
+        updateDockJoystickFromEvent(e);
+      });
+      joystickZone.addEventListener("pointermove", (e) => {
+        if (activeStickPointerId !== e.pointerId) return;
+        e.preventDefault();
+        updateDockJoystickFromEvent(e);
+      });
+      joystickZone.addEventListener("pointerup", (e) => {
+        if (activeStickPointerId !== e.pointerId) return;
+        resetDockJoystick();
+      });
+      joystickZone.addEventListener("pointercancel", (e) => {
+        if (activeStickPointerId !== e.pointerId) return;
+        resetDockJoystick();
+      });
+    }
+
+    // Canvas Touch Interaction:
+    // - Tapping an enemy locks target & triggers attack (no accidental tap-to-walk into walls!)
+    // - Dragging on the canvas spawns a Floating Virtual Thumbstick under your finger for smooth 360° steering
+    const floatingJoy = document.getElementById("floatingJoystick");
+    const floatingKnob = document.getElementById("floatingJoystickKnob");
+    let canvasDragState = null;
 
     canvas.addEventListener("pointerdown", (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -4305,15 +4600,65 @@
 
       const fData = state.floors[String(state.floor)];
       if (fData) {
-        const tappedEnemy = fData.enemies.find(en => en.alive && Math.hypot(en.x - wx, en.y - wy) <= 1.0);
+        const tappedEnemy = fData.enemies.find(en => en.alive && Math.hypot(en.x - wx, en.y - wy) <= 1.25);
         if (tappedEnemy) {
           state.lockedTargetId = tappedEnemy.id;
           triggerPrimaryAttack();
           return;
         }
       }
-      state.moveTarget = { x: wx, y: wy };
+
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      canvasDragState = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        localX: e.clientX - rect.left,
+        localY: e.clientY - rect.top,
+        dragging: false
+      };
     });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!canvasDragState || canvasDragState.pointerId !== e.pointerId) return;
+      const dx = e.clientX - canvasDragState.startX;
+      const dy = e.clientY - canvasDragState.startY;
+      const dist = Math.hypot(dx, dy);
+      if (!canvasDragState.dragging && dist >= 7) {
+        canvasDragState.dragging = true;
+        if (floatingJoy) {
+          floatingJoy.style.left = `${canvasDragState.localX}px`;
+          floatingJoy.style.top = `${canvasDragState.localY}px`;
+          floatingJoy.classList.add("active");
+        }
+      }
+      if (canvasDragState.dragging) {
+        const maxR = 26;
+        const clamped = Math.min(maxR, dist);
+        const nx = dist > 0.001 ? dx / dist : 0;
+        const ny = dist > 0.001 ? dy / dist : 0;
+        if (floatingKnob) {
+          floatingKnob.style.transform = `translate(${(nx * clamped).toFixed(1)}px, ${(ny * clamped).toFixed(1)}px)`;
+        }
+        state.joystickVec = {
+          dx: nx,
+          dy: ny,
+          mag: Math.min(1, dist / maxR)
+        };
+      }
+    });
+
+    function endCanvasDrag(e) {
+      if (!canvasDragState || (e && canvasDragState.pointerId !== e.pointerId)) return;
+      if (canvasDragState.dragging) {
+        state.joystickVec = { dx: 0, dy: 0, mag: 0 };
+      }
+      canvasDragState = null;
+      if (floatingJoy) floatingJoy.classList.remove("active");
+      if (floatingKnob) floatingKnob.style.transform = "translate(0px, 0px)";
+    }
+    canvas.addEventListener("pointerup", endCanvasDrag);
+    canvas.addEventListener("pointercancel", endCanvasDrag);
 
     window.addEventListener("keydown", (e) => {
       if (document.activeElement && document.activeElement.tagName === "INPUT") return;
