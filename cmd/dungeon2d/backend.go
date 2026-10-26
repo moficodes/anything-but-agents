@@ -739,36 +739,70 @@ func (c *ClusterAteBackend) runAte(ctx context.Context, args ...string) ([]byte,
 	return out, nil
 }
 
-func (c *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName string, method, path string, payload any) (ActorResponse, int64, error) {
-	start := time.Now()
-	var bodyReader io.Reader
-	if payload != nil {
-		raw, _ := json.Marshal(payload)
-		bodyReader = bytes.NewReader(raw)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.routerURL+path, bodyReader)
+func (c *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor string) {
+	raw, err := c.runAte(ctx, "get", "actors", "-a", c.atespace)
 	if err != nil {
-		return ActorResponse{}, 0, err
+		return
 	}
-	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", c.atespace, actorName))
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[0] == "ATESPACE" || strings.HasPrefix(fields[0], "Warning:") {
+			continue
+		}
+		name := fields[1]
+		state := fields[3]
+		if name != keepActor && strings.Contains(state, "RUNNING") {
+			_, _ = c.runAte(ctx, "suspend", "actor", name, "-a", c.atespace, "--mode=async")
+		}
+	}
+}
+
+func (c *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName string, method, path string, payload any) (ActorResponse, int64, error) {
+	var rawPayload []byte
 	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
+		rawPayload, _ = json.Marshal(payload)
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return ActorResponse{}, 0, fmt.Errorf("atenet-router call failed: %w", err)
+	for attempt := 0; attempt < 2; attempt++ {
+		start := time.Now()
+		var bodyReader io.Reader
+		if rawPayload != nil {
+			bodyReader = bytes.NewReader(rawPayload)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, c.routerURL+path, bodyReader)
+		if err != nil {
+			return ActorResponse{}, 0, err
+		}
+		req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", c.atespace, actorName))
+		if rawPayload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			if attempt == 0 {
+				c.httpClient.CloseIdleConnections()
+				continue
+			}
+			return ActorResponse{}, 0, fmt.Errorf("atenet-router call failed: %w", err)
+		}
+		rawResp, _ := io.ReadAll(io.LimitReader(resp.Body, 524288))
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusServiceUnavailable && attempt == 0 && strings.Contains(string(rawResp), "no worker has room") {
+			c.reclaimWorkerSlots(ctx, actorName)
+			continue
+		}
+		if resp.StatusCode >= 300 {
+			return ActorResponse{}, 0, fmt.Errorf("actor returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(rawResp)))
+		}
+		var actorResp ActorResponse
+		if err := json.Unmarshal(rawResp, &actorResp); err != nil {
+			return ActorResponse{}, 0, fmt.Errorf("failed to decode actor JSON: %w", err)
+		}
+		return actorResp, time.Since(start).Milliseconds(), nil
 	}
-	defer resp.Body.Close()
-	rawResp, _ := io.ReadAll(io.LimitReader(resp.Body, 524288))
-	if resp.StatusCode >= 300 {
-		return ActorResponse{}, 0, fmt.Errorf("actor returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(rawResp)))
-	}
-	var actorResp ActorResponse
-	if err := json.Unmarshal(rawResp, &actorResp); err != nil {
-		return ActorResponse{}, 0, fmt.Errorf("failed to decode actor JSON: %w", err)
-	}
-	return actorResp, time.Since(start).Milliseconds(), nil
+	return ActorResponse{}, 0, fmt.Errorf("atenet-router call failed after retry")
 }
 
 func (c *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName string) (workerIP, workerPod, snapshotURI string) {
