@@ -935,24 +935,65 @@ func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeD
 	}
 }
 
+func (g *GatewayServer) reclaimForeignWorkers(ctx context.Context) {
+	cmdArgs := []string{"get", "actors", "-a", g.cfg.Atespace}
+	if g.cfg.AteEndpoint != "" {
+		cmdArgs = append(cmdArgs, "--endpoint", g.cfg.AteEndpoint)
+	}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cctx, g.cfg.KubectlAteBin, cmdArgs...).CombinedOutput()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[0] == "NAMESPACE" {
+			continue
+		}
+		name := fields[1]
+		state := fields[3]
+		if strings.HasPrefix(name, "coldstart-") {
+			continue
+		}
+		if state == "ACTOR_STATE_RUNNING" || state == "ACTOR_STATE_PAUSED" {
+			_ = g.runKubectlAte(ctx, "suspend", "actor", name, "-a", g.cfg.Atespace, "--mode=async")
+		}
+	}
+}
+
 func (g *GatewayServer) wakeSubstrateActorSync(index int) (*WorkerStatusResponse, int64, bool) {
 	start := time.Now()
 	actorName := fmt.Sprintf("coldstart-%d", index)
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(g.cfg.RouterURL, "/")+"/statusz", nil)
-	if err != nil {
-		return nil, 0, false
+	for attempt := 0; attempt < 2; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, strings.TrimRight(g.cfg.RouterURL, "/")+"/statusz", nil)
+		if err != nil {
+			return nil, 0, false
+		}
+		req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", g.cfg.Atespace, actorName))
+		resp, err := g.httpClient.Do(req)
+		if err != nil {
+			if attempt == 0 {
+				g.httpClient.CloseIdleConnections()
+				continue
+			}
+			return nil, 0, false
+		}
+		if resp.StatusCode == http.StatusServiceUnavailable && attempt == 0 {
+			_ = resp.Body.Close()
+			g.reclaimForeignWorkers(context.Background())
+			time.Sleep(250 * time.Millisecond)
+			continue
+		}
+		var ws WorkerStatusResponse
+		decErr := json.NewDecoder(resp.Body).Decode(&ws)
+		_ = resp.Body.Close()
+		if decErr != nil {
+			return nil, time.Since(start).Milliseconds(), resp.StatusCode == http.StatusOK
+		}
+		return &ws, time.Since(start).Milliseconds(), resp.StatusCode == http.StatusOK
 	}
-	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", g.cfg.Atespace, actorName))
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return nil, 0, false
-	}
-	defer resp.Body.Close()
-	var ws WorkerStatusResponse
-	if json.NewDecoder(resp.Body).Decode(&ws) != nil {
-		return nil, time.Since(start).Milliseconds(), true
-	}
-	return &ws, time.Since(start).Milliseconds(), true
+	return nil, 0, false
 }
 
 func (g *GatewayServer) syncClusterScales(desired int) {
@@ -1274,6 +1315,7 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 		resp, err := g.httpClient.Do(req)
 		latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
 		if err != nil {
+			g.httpClient.CloseIdleConnections()
 			slot.shedTotal.Add(1)
 			g.subStats.record(false, latMs)
 			return
@@ -1281,6 +1323,9 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 		defer resp.Body.Close()
 		var body map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&body)
+		if resp.StatusCode == http.StatusServiceUnavailable && body["status"] != "overloaded" {
+			go g.reclaimForeignWorkers(context.Background())
+		}
 		if fp, ok := body["golden_heap_fingerprint"].(string); ok && fp != "" {
 			slot.engine.GoldenHeapFingerprint = fp
 		}

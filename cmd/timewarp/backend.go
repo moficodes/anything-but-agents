@@ -813,11 +813,11 @@ func (b *ClusterAteBackend) freeWorkerSlotFor(ctx context.Context, keepActors ..
 		}
 	}
 	for _, name := range nonTimewarp {
-		_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace)
+		_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace, "--mode=async")
 	}
 	if len(nonTimewarp) == 0 && len(timewarpCandidates) > 0 {
 		victim := timewarpCandidates[len(timewarpCandidates)-1]
-		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim, "-a", b.atespace)
+		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim, "-a", b.atespace, "--mode=async")
 	}
 }
 
@@ -849,6 +849,10 @@ func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method
 		}
 		resp, err := b.httpClient.Do(req)
 		if err != nil {
+			if attempt == 0 {
+				b.httpClient.CloseIdleConnections()
+				continue
+			}
 			return 0, err
 		}
 		rawResp, _ := io.ReadAll(resp.Body)

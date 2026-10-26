@@ -871,7 +871,7 @@ func (b *ClusterAteBackend) ensureWorkerSlotForActor(ctx context.Context, target
 		}
 		if !strings.HasPrefix(a.Name, "db-") {
 			// Suspend any active foreign demo actor so the shared 3-worker pool has capacity.
-			_, _ = b.runKubectlAte(ctx, "suspend", "actor", a.Name, "-a", b.atespace)
+			_, _ = b.runKubectlAte(ctx, "suspend", "actor", a.Name, "-a", b.atespace, "--mode=async")
 			continue
 		}
 		if a.Name == targetActor {
@@ -985,6 +985,10 @@ func (b *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName, table,
 
 		resp, doErr := b.httpClient.Do(req)
 		if doErr != nil {
+			if attempt == 0 {
+				b.httpClient.CloseIdleConnections()
+				continue
+			}
 			return nil, doErr
 		}
 		body, _ = io.ReadAll(resp.Body)

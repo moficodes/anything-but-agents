@@ -562,40 +562,90 @@ func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 	return ip, parsed.Status.WorkerAssignment.WorkerPod, uri
 }
 
+func (b *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor string) {
+	out, err := b.runKubectlAte(ctx, "get", "actors", "-a", b.atespace)
+	if err != nil {
+		return
+	}
+	var foreignActors []string
+	var honeypotActors []string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[0] == "NAMESPACE" {
+			continue
+		}
+		name := fields[1]
+		state := fields[3]
+		if name == keepActor {
+			continue
+		}
+		if state != "ACTOR_STATE_RUNNING" && state != "ACTOR_STATE_PAUSED" {
+			continue
+		}
+		if strings.HasPrefix(name, "honeypot-") {
+			honeypotActors = append(honeypotActors, name)
+		} else {
+			foreignActors = append(foreignActors, name)
+		}
+	}
+	for _, name := range foreignActors {
+		_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace, "--mode=async")
+	}
+	if len(foreignActors) == 0 && len(honeypotActors) > 0 {
+		victim := honeypotActors[0]
+		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim, "-a", b.atespace, "--mode=async")
+	}
+}
+
 func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method, path, workerPodIP string, body any, out any) error {
-	var bodyReader io.Reader
+	var rawBody []byte
 	if body != nil {
-		raw, err := json.Marshal(body)
+		var err error
+		rawBody, err = json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		bodyReader = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, b.routerURL+path, bodyReader)
-	if err != nil {
-		return err
+	for attempt := 0; attempt < 2; attempt++ {
+		var bodyReader io.Reader
+		if rawBody != nil {
+			bodyReader = bytes.NewReader(rawBody)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, b.routerURL+path, bodyReader)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("ate-target-actor", b.atespace+"/"+actorName)
+		if workerPodIP != "" {
+			req.Header.Set("X-Worker-Pod-IP", workerPodIP)
+		}
+		if rawBody != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := b.httpClient.Do(req)
+		if err != nil {
+			if attempt == 0 {
+				b.httpClient.CloseIdleConnections()
+				continue
+			}
+			return err
+		}
+		rawResp, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusServiceUnavailable && attempt == 0 {
+			b.reclaimWorkerSlots(ctx, actorName)
+			time.Sleep(250 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode >= 300 {
+			return fmt.Errorf("actor %s %s returned %d: %s", actorName, path, resp.StatusCode, string(rawResp))
+		}
+		if out == nil || len(rawResp) == 0 {
+			return nil
+		}
+		return json.Unmarshal(rawResp, out)
 	}
-	req.Header.Set("ate-target-actor", b.atespace+"/"+actorName)
-	if workerPodIP != "" {
-		req.Header.Set("X-Worker-Pod-IP", workerPodIP)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := b.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("actor %s %s returned %d: %s", actorName, path, resp.StatusCode, string(msg))
-	}
-	if out == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return fmt.Errorf("actor %s %s failed after retries", actorName, path)
 }
 
 func (b *ClusterAteBackend) ExecShell(ctx context.Context, actorName, cmd, dropFile, content string) (*AttackerShellResponse, *ForensicsResponse, error) {
