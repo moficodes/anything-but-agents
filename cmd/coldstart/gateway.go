@@ -497,16 +497,24 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		MaxConnsPerHost:     128,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	if cert, err := tls.LoadX509KeyPair("/run/router-client/credential-bundle.pem", "/run/router-client/credential-bundle.pem"); err == nil {
+	credPath := "/run/router-client/credential-bundle.pem"
+	caPath := "/run/router-client/trust-bundle.pem"
+	if _, err := os.Stat(credPath); err == nil {
 		pool := x509.NewCertPool()
-		if caBytes, caErr := os.ReadFile("/run/router-client/trust-bundle.pem"); caErr == nil {
+		if caBytes, caErr := os.ReadFile(caPath); caErr == nil {
 			pool.AppendCertsFromPEM(caBytes)
 		}
 		httpTransport.TLSClientConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			RootCAs:      pool,
-			ServerName:   "atenet-router.ate-system.svc",
-			MinVersion:   tls.VersionTLS12,
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				cert, err := tls.LoadX509KeyPair(credPath, credPath)
+				if err != nil {
+					return nil, err
+				}
+				return &cert, nil
+			},
+			RootCAs:    pool,
+			ServerName: "atenet-router.ate-system.svc",
+			MinVersion: tls.VersionTLS12,
 		}
 	}
 

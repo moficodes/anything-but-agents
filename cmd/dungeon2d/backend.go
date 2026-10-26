@@ -643,20 +643,26 @@ func newRouterHTTPClient(timeout time.Duration) *http.Client {
 	tr := &http.Transport{
 		MaxIdleConns:        128,
 		MaxIdleConnsPerHost: 32,
-		IdleConnTimeout:     90 * time.Second,
+		IdleConnTimeout:     60 * time.Second,
 	}
 	credPath := "/run/router-client/credential-bundle.pem"
 	caPath := "/run/router-client/trust-bundle.pem"
-	if cert, err := tls.LoadX509KeyPair(credPath, credPath); err == nil {
+	if _, err := os.Stat(credPath); err == nil {
 		pool := x509.NewCertPool()
 		if caBytes, caErr := os.ReadFile(caPath); caErr == nil {
 			pool.AppendCertsFromPEM(caBytes)
 		}
 		tr.TLSClientConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			RootCAs:      pool,
-			ServerName:   "atenet-router.ate-system.svc",
-			MinVersion:   tls.VersionTLS12,
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				cert, err := tls.LoadX509KeyPair(credPath, credPath)
+				if err != nil {
+					return nil, err
+				}
+				return &cert, nil
+			},
+			RootCAs:    pool,
+			ServerName: "atenet-router.ate-system.svc",
+			MinVersion: tls.VersionTLS12,
 		}
 	}
 	return &http.Client{
