@@ -44,7 +44,7 @@ type SlideResponse struct {
 	PodIPHistory  []string  `json:"pod_ip_history"`
 }
 
-// SlidesBackend abstracts access to the 12 slide actors.
+// SlidesBackend abstracts access to the 15 slide actors.
 type SlidesBackend interface {
 	GetSlide(ctx context.Context, id string, previousID string) (*SlideResponse, error)
 	UpdateSlideNote(ctx context.Context, id string, note string) (*SlideResponse, error)
@@ -53,7 +53,7 @@ type SlidesBackend interface {
 	ListSlides(ctx context.Context) ([]SlideSummary, error)
 }
 
-// LocalSimulatorBackend provides an in-memory simulation of all 12 slide actors.
+// LocalSimulatorBackend provides an in-memory simulation of all 15 slide actors.
 type LocalSimulatorBackend struct {
 	mu           sync.Mutex
 	actors       map[string]*SlideActor
@@ -62,7 +62,7 @@ type LocalSimulatorBackend struct {
 	podHistories map[string][]string
 }
 
-// NewLocalSimulatorBackend creates a local simulator with all 12 slide actors.
+// NewLocalSimulatorBackend creates a local simulator with all 15 slide actors.
 func NewLocalSimulatorBackend() *LocalSimulatorBackend {
 	defs := AllSlideDefs()
 	actors := make(map[string]*SlideActor, len(defs))

@@ -44,34 +44,51 @@ type SlideAgendaItem struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+// SlidePuzzlePiece defines one slot in the 3x3 interlocking Agent Substrate jigsaw puzzle.
+type SlidePuzzlePiece struct {
+	Slot        int    `json:"slot"` // 0..8 in row-major 3x3 order (4 is the center keystone)
+	Code        string `json:"code"`
+	Kind        string `json:"kind"` // "demo" | "substrate" | "keystone"
+	Filled      bool   `json:"filled"`
+	Face        string `json:"face"` // "rebel" | "agent" | "extra" | "keystone"
+	Badge       string `json:"badge"`
+	RebelTitle  string `json:"rebel_title,omitempty"`
+	RebelDetail string `json:"rebel_detail,omitempty"`
+	AgentTitle  string `json:"agent_title"`
+	AgentDetail string `json:"agent_detail"`
+	EmptyLabel  string `json:"empty_label,omitempty"`
+}
+
 // SlideDef defines the static metadata and Agent Substrate Day template content for a slide.
 type SlideDef struct {
-	ID                string            `json:"id"`
-	Index             int               `json:"index"`
-	Total             int               `json:"total"`
-	Layout            string            `json:"layout"` // "asd-title" | "asd-demo" | "asd-cards" | "asd-two-col" | "asd-big-stat" | "asd-code" | "asd-closing"
-	Kicker            string            `json:"kicker"`
-	Chapter           string            `json:"chapter"`
-	Badge             string            `json:"badge"`
-	Title             string            `json:"title"`
-	Subtitle          string            `json:"subtitle"`
-	Kind              string            `json:"kind"` // "title" | "chapter" | "recap" | "closer"
-	HighlightPhrases  []string          `json:"highlight_phrases,omitempty"`
-	SpeakerByline     string            `json:"speaker_byline,omitempty"`
-	EventFooter       string            `json:"event_footer,omitempty"`
-	Points            []string          `json:"points"`
-	Cards             []SlideCard       `json:"cards,omitempty"`
-	Columns           []SlideColumn     `json:"columns,omitempty"`
-	StatValue         string            `json:"stat_value,omitempty"`
-	StatContext       string            `json:"stat_context,omitempty"`
-	CodeFilename      string            `json:"code_filename,omitempty"`
-	CodeLines         []string          `json:"code_lines,omitempty"`
-	AgendaItems       []SlideAgendaItem `json:"agenda_items,omitempty"`
-	SignOffLines      []string          `json:"sign_off_lines,omitempty"`
-	DemoName          string            `json:"demo_name,omitempty"`
-	DemoURL           string            `json:"demo_url,omitempty"`
-	SubstrateFeatures []string          `json:"substrate_features"`
-	SpeakerNotes      string            `json:"speaker_notes"`
+	ID                string             `json:"id"`
+	Index             int                `json:"index"`
+	Total             int                `json:"total"`
+	Layout            string             `json:"layout"` // "asd-title" | "asd-demo" | "asd-cards" | "asd-two-col" | "asd-big-stat" | "asd-code" | "asd-puzzle" | "asd-closing"
+	Kicker            string             `json:"kicker"`
+	Chapter           string             `json:"chapter"`
+	Badge             string             `json:"badge"`
+	Title             string             `json:"title"`
+	Subtitle          string             `json:"subtitle"`
+	Kind              string             `json:"kind"` // "title" | "chapter" | "recap" | "puzzle" | "closer"
+	HighlightPhrases  []string           `json:"highlight_phrases,omitempty"`
+	SpeakerByline     string             `json:"speaker_byline,omitempty"`
+	EventFooter       string             `json:"event_footer,omitempty"`
+	Points            []string           `json:"points"`
+	Cards             []SlideCard        `json:"cards,omitempty"`
+	Columns           []SlideColumn      `json:"columns,omitempty"`
+	StatValue         string             `json:"stat_value,omitempty"`
+	StatContext       string             `json:"stat_context,omitempty"`
+	CodeFilename      string             `json:"code_filename,omitempty"`
+	CodeLines         []string           `json:"code_lines,omitempty"`
+	PuzzleStage       string             `json:"puzzle_stage,omitempty"` // "loot" | "epiphany" | "complete"
+	PuzzlePieces      []SlidePuzzlePiece `json:"puzzle_pieces,omitempty"`
+	AgendaItems       []SlideAgendaItem  `json:"agenda_items,omitempty"`
+	SignOffLines      []string           `json:"sign_off_lines,omitempty"`
+	DemoName          string             `json:"demo_name,omitempty"`
+	DemoURL           string             `json:"demo_url,omitempty"`
+	SubstrateFeatures []string           `json:"substrate_features"`
+	SpeakerNotes      string             `json:"speaker_notes"`
 }
 
 // SlideData combines static slide metadata with live in-memory Go heap state.
@@ -96,10 +113,139 @@ type SlideSummary struct {
 	Kind    string `json:"kind"`
 }
 
-// AllSlideDefs returns the full 12-slide presentation deck definitions styled
+// buildPuzzlePieces returns the 9-slot (3x3) Agent Substrate jigsaw puzzle state for a finale stage.
+// Slots 0, 1, 2, 3, 5 are the 5 non-agent demo pieces; slots 6, 7, 8 are built-in Agent Substrate
+// security/platform pieces; slot 4 (center bullseye) is the Model + Agent Loop keystone.
+func buildPuzzlePieces(stage string) []SlidePuzzlePiece {
+	demoFace := "rebel"
+	if stage == "epiphany" || stage == "complete" {
+		demoFace = "agent"
+	}
+	fillExtras := stage == "complete"
+
+	emptyCenter := "Missing centerpiece"
+	emptyS1 := "Unclaimed slot"
+	emptyS2 := "Unclaimed slot"
+	emptyS3 := "Unclaimed slot"
+	if stage == "epiphany" {
+		emptyCenter = "What drives the loop?"
+		emptyS1 = "Outbound network guard?"
+		emptyS2 = "Keep API keys out of RAM?"
+		emptyS3 = "Tenant authz & VM options?"
+	}
+
+	return []SlidePuzzlePiece{
+		{
+			Slot:        0,
+			Code:        "01",
+			Kind:        "demo",
+			Filled:      true,
+			Face:        demoFace,
+			Badge:       "PIECE 01 • DUNGEON 2D",
+			RebelTitle:  "Zero-DB game saves & undo",
+			RebelDetail: "SNAPSHOT_FIDELITY_MEMORY • revert • --tag",
+			AgentTitle:  "Working memory & branching",
+			AgentDetail: "Undo bad tool calls & fork parallel plans",
+		},
+		{
+			Slot:        1,
+			Code:        "02",
+			Kind:        "demo",
+			Filled:      true,
+			Face:        demoFace,
+			Badge:       "PIECE 02 • COLDSTART",
+			RebelTitle:  "12s search index HPA clone",
+			RebelDetail: "ActorTemplate + wakeupProbe goldenTag",
+			AgentTitle:  "100ms warm toolchains",
+			AgentDetail: "Python, Node, browser & repo index ready",
+		},
+		{
+			Slot:        2,
+			Code:        "03",
+			Kind:        "demo",
+			Filled:      true,
+			Face:        demoFace,
+			Badge:       "PIECE 03 • TENANTDB",
+			RebelTitle:  "1 private DB per customer",
+			RebelDetail: "DurableDir /data • tiered suspend • delete",
+			AgentTitle:  "Sleeping /workspace per user",
+			AgentDetail: "Burst 5s, pay $0 while the human thinks",
+		},
+		{
+			Slot:        3,
+			Code:        "04",
+			Kind:        "demo",
+			Filled:      true,
+			Face:        demoFace,
+			Badge:       "PIECE 04 • HONEYPOT",
+			RebelTitle:  "Hacker /bin/sh movie set",
+			RebelDetail: "gVisor Sentry kernel • rootfs rewind",
+			AgentTitle:  "Safe untrusted bash sandbox",
+			AgentDetail: "Contain prompt injection & undo rm -rf",
+		},
+		{
+			Slot:        4,
+			Code:        "AI",
+			Kind:        "keystone",
+			Filled:      fillExtras,
+			Face:        "keystone",
+			Badge:       "YOU BRING THIS",
+			AgentTitle:  "Model + agent loop",
+			AgentDetail: "Gemini / Claude / open weights + MCP tools",
+			EmptyLabel:  emptyCenter,
+		},
+		{
+			Slot:        5,
+			Code:        "05",
+			Kind:        "demo",
+			Filled:      true,
+			Face:        demoFace,
+			Badge:       "PIECE 05 • TIMEWARP",
+			RebelTitle:  "Wake-on-HTTP & clock fence",
+			RebelDetail: "atenet request parking • ?guard=true",
+			AgentTitle:  "Turn-driven wake & refresh",
+			AgentDetail: "Sleep between turns & fence stale tokens",
+		},
+		{
+			Slot:        6,
+			Code:        "S1",
+			Kind:        "substrate",
+			Filled:      fillExtras,
+			Face:        "extra",
+			Badge:       "ALSO IN SUBSTRATE",
+			AgentTitle:  "ActorEgressPolicy firewall",
+			AgentDetail: "Deny-by-default L7 & DNS egress control",
+			EmptyLabel:  emptyS1,
+		},
+		{
+			Slot:        7,
+			Code:        "S2",
+			Kind:        "substrate",
+			Filled:      fillExtras,
+			Face:        "extra",
+			Badge:       "ALSO IN SUBSTRATE",
+			AgentTitle:  "ate-secret:// MITM auth",
+			AgentDetail: "Inject API keys on egress; 0 keys in GCS",
+			EmptyLabel:  emptyS2,
+		},
+		{
+			Slot:        8,
+			Code:        "S3",
+			Kind:        "substrate",
+			Filled:      fillExtras,
+			Face:        "extra",
+			Badge:       "ALSO IN SUBSTRATE",
+			AgentTitle:  "OpenFGA, microVM & CSI",
+			AgentDetail: "Per-tenant AccessPolicy, Kata & volumes",
+			EmptyLabel:  emptyS3,
+		},
+	}
+}
+
+// AllSlideDefs returns the full 15-slide presentation deck definitions styled
 // after the official Agent Substrate Day (ATECon) speaker template.
 func AllSlideDefs() []SlideDef {
-	total := 12
+	total := 15
 	eventLine := "ATECon  •  Monday, November 9, 2026  •  Sky SLC"
 	return []SlideDef{
 		{
@@ -107,19 +253,19 @@ func AllSlideDefs() []SlideDef {
 			Index:            1,
 			Total:            total,
 			Layout:           "asd-title",
-			Kicker:           "AGENT SUBSTRATE DAY",
+			Kicker:           "AGENT SUBSTRATE DAY  •  REBEL TRACK",
 			Chapter:          "Cold open",
 			Badge:            "AGENT SUBSTRATE DAY",
 			Title:            "Running anything *but* agents on Agent Substrate",
-			Subtitle:         "Five infrastructure crimes on three tiny Kubernetes pods — zero tokens, zero prompts",
+			Subtitle:         "Every talk today has an LLM. Let's be rebels: zero models, zero prompts, five weird demos on three tiny pods.",
 			Kind:             "title",
-			HighlightPhrases: []string{"*but*", "three tiny Kubernetes pods"},
+			HighlightPhrases: []string{"*but*", "zero models, zero prompts", "three tiny pods"},
 			SpeakerByline:    "Mofi Rahman  •  Google Cloud Advocate, Google",
 			EventFooter:      eventLine,
 			Points: []string{
-				"Zero tokens, zero prompts, and zero chatbots for the next 20 minutes",
-				"Strip the AI away: a sub-second memory-checkpointing, wake-on-HTTP actor runtime",
-				"Five non-agent workloads multiplexed across three 1-vCPU worker pods",
+				"Zero tokens, zero prompts, and zero chatbots for the next 18 minutes",
+				"Raiding Agent Substrate for raw systems superpowers across five non-AI apps",
+				"All five demos (plus this 15-actor slide deck) share three 1-vCPU worker pods",
 			},
 			DemoName: "Scan audience QR & join Dungeon 2D",
 			DemoURL:  "https://dungeon.substrate.learngke.dev/dashboard",
@@ -129,7 +275,7 @@ func AllSlideDefs() []SlideDef {
 				"gVisor Sandbox",
 				"atenet Wake-on-HTTP",
 			},
-			SpeakerNotes: "Open with a 15-second title card, then flash the QR code. Tell the audience you are cheap and only provisioned three 1-CPU worker pods for the entire talk. Even this slide deck is 12 sleeping gVisor actors waking on arrow keys!",
+			SpeakerNotes: "Open as the conference rebel: we are at Agent Substrate Day, everyone else has LLMs on screen, so I promise zero models and zero prompts. We're raiding Substrate for raw systems primitives across five rapid-fire demos on three 1-CPU pods—even this slide deck is 15 sleeping gVisor actors!",
 		},
 		{
 			ID:               "slide-02",
@@ -155,18 +301,18 @@ func AllSlideDefs() []SlideDef {
 				"atenet-router",
 				"Zero Database Architecture",
 			},
-			SpeakerNotes: "Think about how much of our lives we waste turning Go structs into SQL rows and back. For Demo 1: what if we just didn't use a database? Point out 50 people playing on 3 pods.",
+			SpeakerNotes: "First rebel experiment: a game with save files, boss-death undo, and forked save slots—without writing a single SQL query. Point out 50 people playing on 3 pods.",
 		},
 		{
 			ID:               "slide-03",
 			Index:            3,
 			Total:            total,
 			Layout:           "asd-cards",
-			Kicker:           "DEMO 01 RECAP  •  SUBSTRATE SUPERPOWERS",
-			Chapter:          "Demo 01 • Recap",
-			Badge:            "DEMO 01 RECAP",
+			Kicker:           "PUZZLE PIECE 01 / 05  •  SUBSTRATE MEMORY",
+			Chapter:          "Piece 01 • Memory",
+			Badge:            "PIECE 01 / 05",
 			Title:            "Look ma, no database",
-			Subtitle:         "Three process-memory primitives we got for free without writing persistence code",
+			Subtitle:         "Piece #1 grabbed from Substrate: checkpoint live RAM, rewind mistakes, and fork new timelines",
 			Kind:             "recap",
 			HighlightPhrases: []string{"SNAPSHOT_FIDELITY_MEMORY", "git reset --hard", "parallel universes"},
 			Points: []string{
@@ -199,7 +345,7 @@ func AllSlideDefs() []SlideDef {
 				"kubectl ate revert",
 				"kubectl ate create tag",
 			},
-			SpeakerNotes: "Summarize: we just did git reset --hard on live RAM, hopped across worker pod IPs, and forked parallel timelines. Next up: autoscaling.",
+			SpeakerNotes: "Pocket Piece #1: process memory checkpointing, revert, and tag branching. Next rebel experiment: beating Kubernetes HPA.",
 		},
 		{
 			ID:               "slide-04",
@@ -233,11 +379,11 @@ func AllSlideDefs() []SlideDef {
 			Index:            5,
 			Total:            total,
 			Layout:           "asd-two-col",
-			Kicker:           "DEMO 02 RECAP  •  SUBSTRATE SUPERPOWERS",
-			Chapter:          "Demo 02 • Recap",
-			Badge:            "DEMO 02 RECAP",
+			Kicker:           "PUZZLE PIECE 02 / 05  •  GOLDEN SNAPSHOTS",
+			Chapter:          "Piece 02 • Warm Clone",
+			Badge:            "PIECE 02 / 05",
 			Title:            "Golden snapshots beat cold boots",
-			Subtitle:         "Build deterministic startup state once, then fork warm memory across pods",
+			Subtitle:         "Piece #2 grabbed from Substrate: pay deterministic startup once, then clone warm RAM in ~100ms",
 			Kind:             "recap",
 			HighlightPhrases: []string{"goldenTag", "~100ms", "0% shed rate"},
 			Points: []string{
@@ -271,7 +417,7 @@ func AllSlideDefs() []SlideDef {
 				"Cluster-Wide fork()",
 				"Pod-Decoupled Scaling",
 			},
-			SpeakerNotes: "Substrate runs initialization once, freezes the warm heap into goldenTag, and forks it onto warm worker pods in 100ms. Photocopying 76MB of RAM is great, but what about nightly storage bills?",
+			SpeakerNotes: "Pocket Piece #2: ActorTemplate + wakeupProbe Golden Snapshots. Photocopying 76 MB of RAM is awesome, but what about per-customer storage?",
 		},
 		{
 			ID:               "slide-06",
@@ -305,14 +451,14 @@ func AllSlideDefs() []SlideDef {
 			Index:            7,
 			Total:            total,
 			Layout:           "asd-big-stat",
-			Kicker:           "DEMO 03 RECAP  •  MICRO-VOLUMES & TIERING",
-			Chapter:          "Demo 03 • Recap",
-			Badge:            "DEMO 03 RECAP",
+			Kicker:           "PUZZLE PIECE 03 / 05  •  DURABLEDIR & TIERING",
+			Chapter:          "Piece 03 • Workspaces",
+			Badge:            "PIECE 03 / 05",
 			Title:            "Snapshot bandwidth saved by tiering hot RAM and DurableDir",
-			Subtitle:         "Keep rebuildable caches hot during active bursts, commit only compact WAL logs for overnight hibernation",
+			Subtitle:         "Piece #3 grabbed from Substrate: private /data micro-volumes that burst hot and hibernate tiny",
 			Kind:             "recap",
 			StatValue:        "99.997%",
-			StatContext:      "480 B /data/wal.jsonl committed on sync hibernate vs. 16.0 MB hot RAM buffer pool (<1ms wakeup replay)",
+			StatContext:      "Piece #3 unlocked: 480 B /data/wal.jsonl on sync hibernate vs. 16.0 MB hot RAM buffer pool (<1ms wakeup replay)",
 			HighlightPhrases: []string{"16.0 MB", "480 B", "kubectl ate delete actor"},
 			Points: []string{
 				"Async suspend keeps the 16.0 MB buffer pool warm in memory for active customer bursts",
@@ -327,7 +473,7 @@ func AllSlideDefs() []SlideDef {
 				"WAL Fast-Replay (<1ms)",
 				"GDPR Blast-Radius Isolation",
 			},
-			SpeakerNotes: "DurableDir avoids Kubernetes PVC attach bottlenecks. Async suspend keeps 16 MB hot; sync hibernate drops cache and saves 99.997% bandwidth. Now, what if the user is an active hacker?",
+			SpeakerNotes: "Pocket Piece #3: DurableDir micro-volumes, hot vs. cold suspend tiering, and instant actor deletion. Now, what if the user is an active hacker?",
 		},
 		{
 			ID:               "slide-08",
@@ -360,11 +506,11 @@ func AllSlideDefs() []SlideDef {
 			Index:            9,
 			Total:            total,
 			Layout:           "asd-code",
-			Kicker:           "DEMO 04 RECAP  •  SUBSTRATE SUPERPOWERS",
-			Chapter:          "Demo 04 • Recap",
-			Badge:            "DEMO 04 RECAP",
+			Kicker:           "PUZZLE PIECE 04 / 05  •  GVISOR & FORENSICS",
+			Chapter:          "Piece 04 • Sandbox",
+			Badge:            "PIECE 04 / 05",
 			Title:            "gVisor sandboxing and forensic time-travel",
-			Subtitle:         "Un-deleting rm -rf and cloning a live compromised container while the attacker keeps typing",
+			Subtitle:         "Piece #4 grabbed from Substrate: isolate hostile /bin/sh code and un-delete rm -rf",
 			Kind:             "recap",
 			CodeFilename:     "forensic-playbook.sh",
 			CodeLines: []string{
@@ -392,104 +538,187 @@ func AllSlideDefs() []SlideDef {
 				"kubectl ate revert (Anti-Wipe)",
 				"Forensic Tag Cloning (--tag)",
 			},
-			SpeakerNotes: "We un-deleted rm -rf and cloned a live crime scene without the hacker noticing. At this point, maximum hubris kicks in: let's put etcd and Raft on Substrate!",
+			SpeakerNotes: "Pocket Piece #4: gVisor kernel sandboxing + rootfs time-travel. Now hubris peaks: we beat Postgres, HPA, SaaS DBs, and hackers—let's freeze Raft!",
 		},
 		{
 			ID:               "slide-10",
 			Index:            10,
 			Total:            total,
 			Layout:           "asd-demo",
-			Kicker:           "LIVE DEMO 05  •  DISTRIBUTED CONSENSUS",
+			Kicker:           "LIVE DEMO 05  •  TESTING THE BOUNDARY",
 			Chapter:          "Demo 05 • Setup",
 			Badge:            "LIVE DEMO 05",
 			Title:            "Putting Raft in the freezer",
-			Subtitle:         "What breaks when hubris takes over and you suspend the leader of a consensus cluster for five seconds?",
+			Subtitle:         "Maximum hubris: we beat databases, HPA, and hackers — what happens when we freeze consensus?",
 			Kind:             "chapter",
 			HighlightPhrases: []string{"5,000ms clock jump", "dual-leader split-brain"},
 			Points: []string{
 				"Freeze raft-node-1 (Term 1 leader) while the real universe's clock moves on",
-				"3-second lease expires; nodes 2 and 3 elect node 2 as Term 2 leader",
-				"Waking node 1 triggers a 5,000ms clock jump and dual-leader split-brain",
+				"Its 3-second lease expires; nodes 2 and 3 elect node 2 as Term 2 leader",
+				"atenet wakes node 1 on HTTP — triggering a 5,000ms clock jump and dual-leader split-brain",
 			},
 			DemoName: "Open Timewarp split-brain lab",
 			DemoURL:  "https://timewarp.substrate.learngke.dev/dashboard",
 			SubstrateFeatures: []string{
+				"atenet Request Parking",
 				"Wall-Clock Discontinuity",
-				"Dual-Leader Split-Brain",
 				"Wakeup Clock-Jump Fencing",
 			},
-			SpeakerNotes: "You don't understand a shiny new hammer until you smash your own thumb with it. Let's freeze the leader of a distributed consensus cluster and watch three shocks fire in one tick.",
+			SpeakerNotes: "You don't understand a shiny new hammer until you smash your own thumb with it. Let's freeze the leader of a Raft cluster, watch it split-brain, and see what shape of workload Substrate actually wants.",
 		},
 		{
 			ID:               "slide-11",
 			Index:            11,
 			Total:            total,
 			Layout:           "asd-two-col",
-			Kicker:           "DEMO 05 RECAP  •  ARCHITECTURAL BOUNDARIES",
-			Chapter:          "Demo 05 • Recap",
-			Badge:            "LESSONS LEARNED",
-			Title:            "The universe has a clock",
-			Subtitle:         "Substrate freezes process RAM, never wall-clock time in the outside world",
+			Kicker:           "PUZZLE PIECE 05 / 05  •  TURN WAKE & CLOCK FENCE",
+			Chapter:          "Piece 05 • Turn Wake",
+			Badge:            "PIECE 05 / 05",
+			Title:            "Built for discrete turns, not heartbeats",
+			Subtitle:         "Piece #5 grabbed from Substrate: park HTTP requests, wake on demand, and fence stale clocks",
 			Kind:             "recap",
-			HighlightPhrases: []string{"StatefulSets", "elapsed > tick", "wake-on-event"},
+			HighlightPhrases: []string{"atenet", "elapsed > tick", "StatefulSets", "discrete turns"},
 			Points: []string{
-				"Substrate freezes process memory, never external wall clocks, leases, or OAuth expirations",
-				"Guardrail (?guard=true): detect elapsed > tick on wakeup to fence stale leases with 409 Conflict",
-				"Keep continuous consensus heartbeats on StatefulSets; run bursty wake-on-event actors on Substrate",
+				"Substrate freezes process RAM and CLOCK_MONOTONIC, never external wall clocks or leases",
+				"atenet parks incoming HTTP requests, wakes sleeping actors in ~100ms, and runs discrete turns",
+				"Guardrail (?guard=true) detects elapsed > tick on wake to fence stale leases and refresh tokens",
 			},
 			Columns: []SlideColumn{
 				{
-					Heading: "Keep on StatefulSets & Deployments",
+					Heading: "Why Raft Exploded (Heartbeat Daemons)",
 					Bullets: []string{
-						"Consensus voters (etcd, Raft) with continuous heartbeat leases",
-						"Always-on stream brokers and 100% duty-cycle 60Hz loops",
-						"Processes that assume unbroken monotonic wall-clock ticks",
+						"Assumes continuous 100ms ticks and unbroken leases",
+						"Freezing RAM pauses CLOCK_MONOTONIC while real time moves on",
+						"Keep etcd, Raft, and Kafka on Kubernetes StatefulSets",
 					},
 				},
 				{
-					Heading: "Run on Agent Substrate Actors",
+					Heading: "Piece #5: Turn-Driven Wake & Park",
 					Bullets: []string{
-						"Bursty wake-on-event sessions with high idle-to-active ratios",
-						"Isolated per-user sandboxes, warm caches, and stateful tools",
-						"Apps that check elapsed > tick on wakeup to fence stale leases",
+						"atenet parks HTTP bursts and wakes sleeping actors in ~100ms",
+						"Sleep at $0 for minutes or hours between discrete user turns",
+						"Check elapsed > tick (?guard=true) to fence expired leases",
 					},
 				},
 			},
 			DemoName: "Revisit Timewarp lab",
 			DemoURL:  "https://timewarp.substrate.learngke.dev/dashboard",
 			SubstrateFeatures: []string{
+				"atenet Wake & Request Parking",
 				"Wakeup Guardrails (?guard=true)",
-				"Lease Fencing (409 Conflict)",
 				"Actor vs StatefulSet Boundaries",
 			},
-			SpeakerNotes: "Never freeze continuous heartbeats. Check for wall-clock jumps on wakeup, and know what stays on StatefulSets versus Substrate. Now stack all five demos together for the punchline.",
+			SpeakerNotes: "Pocket Piece #5: turn-driven wake-on-HTTP with request parking and clock-jump guardrails. Now let's put all five pieces we stole onto the table...",
 		},
 		{
 			ID:               "slide-12",
 			Index:            12,
 			Total:            total,
+			Layout:           "asd-puzzle",
+			Kicker:           "THE REBEL LOOT  •  ZERO AI SO FAR",
+			Chapter:          "Finale 1 • Rebel Loot",
+			Badge:            "5 PIECES STOLEN",
+			Title:            "Five Substrate features we grabbed for non-AI apps",
+			Subtitle:         "Put all five pieces from our rapid-fire demos on the board... wait, what shape is this?",
+			Kind:             "puzzle",
+			PuzzleStage:      "loot",
+			PuzzlePieces:     buildPuzzlePieces("loot"),
+			HighlightPhrases: []string{"Five Substrate features", "what shape is this?"},
+			Points: []string{
+				"Piece 01 (Dungeon 2D): SNAPSHOT_FIDELITY_MEMORY, revert, and --tag branching",
+				"Piece 02 (Coldstart): ActorTemplate + wakeupProbe Golden Snapshots (~100ms clone)",
+				"Piece 03 (TenantDB): DurableDir /data micro-volumes and tiered suspend",
+				"Piece 04 (Honeypot): gVisor Sentry kernel sandbox and rootfs rewind",
+				"Piece 05 (Timewarp): Turn-driven atenet wake-on-HTTP, parking, and clock fencing",
+			},
+			SubstrateFeatures: []string{
+				"SNAPSHOT_FIDELITY_MEMORY",
+				"Golden Snapshots",
+				"DurableDir + gVisor + atenet",
+			},
+			SpeakerNotes: "Pause here before the punchline! Read off the five non-agent features we just grabbed from Substrate. Point at the jigsaw board: look at those five pieces together... wait a second, what kind of workload needs all five of these at once?",
+		},
+		{
+			ID:               "slide-13",
+			Index:            13,
+			Total:            total,
+			Layout:           "asd-puzzle",
+			Kicker:           "THE EPIPHANY  •  FLIP THE PIECES OVER",
+			Chapter:          "Finale 2 • Epiphany",
+			Badge:            "WAIT A SECOND...",
+			Title:            "Hold on... every piece we stole is what an *agent* needs",
+			Subtitle:         "Flip our five rebel hacks over — they map 1-to-1 onto the hardest problems in agent infrastructure",
+			Kind:             "puzzle",
+			PuzzleStage:      "epiphany",
+			PuzzlePieces:     buildPuzzlePieces("epiphany"),
+			HighlightPhrases: []string{"*agent*", "1-to-1"},
+			Points: []string{
+				"Working memory with undo & branching -> rollback bad tool calls and explore parallel plans",
+				"100ms warm toolchains -> Python, Node, browser, and repo indexes ready on Turn 1",
+				"Sleeping /workspace per user -> burst for 5 seconds, pay $0 while the human reads",
+				"Safe untrusted bash in gVisor -> survive prompt injection and hallucinated rm -rf",
+				"Turn-driven wake & clock fence -> sleep between turns and refresh expired tokens on wake",
+			},
+			SubstrateFeatures: []string{
+				"Agent Working Memory",
+				"100ms Warm Toolchains",
+				"Sandboxed Turn Execution",
+			},
+			SpeakerNotes: "Have the epiphany live! Flip the 5 pieces over (and click any tile if you want to toggle it): a save-scumming gamer, a heavy search index, a sleeping workspace, a chaotic bash user, and a turn-driven lifecycle... that IS an AI agent! Now look at the four empty slots—what else do we need?",
+		},
+		{
+			ID:               "slide-14",
+			Index:            14,
+			Total:            total,
+			Layout:           "asd-puzzle",
+			Kicker:           "COMPLETE PUZZLE  •  SUBSTRATE + YOUR MODEL",
+			Chapter:          "Finale 3 • Complete",
+			Badge:            "PUZZLE COMPLETE",
+			Title:            "Add Substrate's security layer + a *model* = production agent",
+			Subtitle:         "All 8 outer pieces ship in Agent Substrate — drop your model & agent loop into the center",
+			Kind:             "puzzle",
+			PuzzleStage:      "complete",
+			PuzzlePieces:     buildPuzzlePieces("complete"),
+			HighlightPhrases: []string{"*model*", "All 8 outer pieces"},
+			Points: []string{
+				"Also in Substrate: deny-by-default ActorEgressPolicy L7 & DNS outbound firewall",
+				"Also in Substrate: ate-secret:// MITM auth injects API keys outside gVisor (0 keys in GCS snapshots)",
+				"Also in Substrate: OpenFGA per-tenant AccessPolicy, SPIFFE mTLS, Kata microVMs & CSI volumes",
+				"Center keystone (you bring): frontier or open model + a 50-line tool/MCP agent loop",
+			},
+			SubstrateFeatures: []string{
+				"ActorEgressPolicy",
+				"ate-secret:// MITM Secrets",
+				"OpenFGA + microVM + Model",
+			},
+			SpeakerNotes: "Snap the final four pieces into place! Three more pieces are ALREADY inside Agent Substrate—ActorEgressPolicy outbound firewall, ate-secret:// MITM credential injection so API keys never leak into GCS RAM dumps, and OpenFGA multi-tenant authz + microVM/CSI options. Drop your model and loop into the center, and you have a production agent!",
+		},
+		{
+			ID:               "slide-15",
+			Index:            15,
+			Total:            total,
 			Layout:           "asd-closing",
-			Kicker:           "AGENT SUBSTRATE DAY  •  THE PUNCHLINE",
-			Chapter:          "Closer • Synthesis",
-			Badge:            "THE PUNCHLINE",
-			Title:            "Oops, we just built an AI agent by accident",
-			Subtitle:         "An AI agent is the first workload that needs every one of these systems superpowers at once",
+			Kicker:           "AGENT SUBSTRATE DAY  •  THANK YOU",
+			Chapter:          "Closer • Sign-off",
+			Badge:            "ATECON 2026",
+			Title:            "Come for the rebel hacks, stay for the *agents*",
+			Subtitle:         "All five demos, Kubernetes manifests, and this 15-actor slide deck are open source",
 			Kind:             "closer",
 			EventFooter:      eventLine,
-			HighlightPhrases: []string{"AI agent", "systems superpowers"},
+			HighlightPhrases: []string{"*agents*"},
 			Points: []string{
 				"Dungeon 2D: working memory that checkpoints, reverts, and branches into parallel timelines",
 				"Coldstart: heavy 12-second runtimes cloned in ~100ms from Golden Snapshots",
 				"TenantDB: isolated per-user /data workspaces that burst for seconds, then sleep",
 				"Honeypot: untrusted /bin/sh inside gVisor when someone inevitably hallucinates rm -rf",
-				"Timewarp: driven by discrete turn bursts — never continuous consensus heartbeats",
+				"Timewarp + Egress: turn-driven wakeups, ActorEgressPolicy, and ate-secret:// + your model",
 			},
 			AgendaItems: []SlideAgendaItem{
 				{Number: "01", Topic: "Working memory with undo & branching", Detail: "Dungeon 2D  •  SNAPSHOT_FIDELITY_MEMORY, revert, --tag"},
 				{Number: "02", Topic: "Heavy runtimes cloned in ~100ms", Detail: "Coldstart  •  ActorTemplate Golden Snapshots"},
 				{Number: "03", Topic: "Isolated /data workspaces that sleep", Detail: "TenantDB  •  DurableDir & tiered suspend"},
 				{Number: "04", Topic: "Untrusted /bin/sh trapped in gVisor", Detail: "Honeypot  •  Sandbox isolation & forensic rewind"},
-				{Number: "05", Topic: "Discrete turn bursts, zero heartbeats", Detail: "Timewarp  •  Wake-on-event actor lifecycle"},
+				{Number: "05", Topic: "Turn wake + zero-trust + your model", Detail: "Timewarp + Egress  •  atenet, ActorEgressPolicy & ate-secret://"},
 			},
 			SignOffLines: []string{
 				"Mofi Rahman  •  Google Cloud Advocate",
@@ -502,10 +731,10 @@ func AllSlideDefs() []SlideDef {
 				"Memory Checkpointing",
 				"Golden Snapshots",
 				"DurableDir Micro-Volumes",
-				"gVisor Sandbox",
+				"gVisor + Egress MITM",
 				"Wake-on-HTTP",
 			},
-			SpeakerNotes: "Deliver the punchline: Substrate isn't for agents because someone slapped an AI label on Kubernetes. It is for agents because an agent is a save-scumming gamer, a heavy runtime, an idle workspace, and a chaotic shell user in a trench coat!",
+			SpeakerNotes: "Land the close: Agent Substrate isn't awesome for agents because someone slapped an AI sticker on Kubernetes—it's awesome because an agent is the first mainstream workload that needs all eight of those systems primitives at the same time. Thank you!",
 		},
 	}
 }
@@ -535,6 +764,7 @@ func cloneSlideData(in SlideData) SlideData {
 		}
 	}
 	out.CodeLines = append([]string{}, in.CodeLines...)
+	out.PuzzlePieces = append([]SlidePuzzlePiece{}, in.PuzzlePieces...)
 	out.AgendaItems = append([]SlideAgendaItem{}, in.AgendaItems...)
 	out.SignOffLines = append([]string{}, in.SignOffLines...)
 	out.SubstrateFeatures = append([]string{}, in.SubstrateFeatures...)

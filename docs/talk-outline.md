@@ -10,37 +10,37 @@
 
 ## Stage Philosophy (20 Minutes Total)
 
-1. **Show first, explain after:** Zero architecture lecture slides at the beginning. Open with a 90-second dare, flash the QR code, and spend 16 of the 20 minutes inside live demos. Let the audience watch something ridiculous work on screen *first*, then spend 45 seconds pulling back the curtain on which Substrate feature made it happen.
-2. **Keep it light and funny:** Frame the talk as a lazy, slightly mischievous systems engineer committing five escalating "infrastructure crimes" on **three tiny 1-vCPU pods** (`manifests/workerpool.yaml.tmpl`) just to avoid writing boilerplate, waiting on cold boots, or getting paged.
-3. **Repeatable 3-beat rhythm for every demo:**
-   - **The Premise / Joke (15s):** Why a lazy engineer tried this.
+1. **The Conference Rebel Hook:** Open by declaring that at an **Agent Substrate** conference where every talk has an LLM on screen, we are going rogue—zero models, zero prompts, and zero chatbots—raiding Substrate for raw systems primitives across **five rapid-fire non-AI demos** sharing **three tiny 1-vCPU pods** (`manifests/workerpool.yaml.tmpl`).
+2. **Collect One Puzzle Piece Per Demo:** Keep a tight, repeatable 3-beat rhythm for all 5 demos:
+   - **Setup Slide (`slide-02, 04, 06, 08, 10`, ~15s):** Why a lazy/rebellious systems engineer built this non-agent app.
    - **Live Show-Don't-Tell (~2m):** Click through the live UI so the room sees the behavior firsthand.
-   - **What the Demo Does + What Substrate Gives Us (~45s):** Name what the app actually does and the exact Agent Substrate primitives we got for free.
+   - **Puzzle Piece Recap Slide (`slide-03, 05, 07, 09, 11`, ~35s):** Name the exact Agent Substrate primitive we just pocketed (`PUZZLE PIECE 01 / 05` .. `05 / 05`).
+3. **The 3-Stage Jigsaw Epiphany (`slide-12` .. `slide-15`):** Put all 5 stolen rebel primitives on a `3×3` interlocking jigsaw board (`slide-12`), have the realization *"Wait... flip those 5 pieces over—those are the exact runtime superpowers an AI agent needs!"* (`slide-13`), snap in the **3 built-in Agent Substrate security/platform pieces** (`ActorEgressPolicy`, `ate-secret://`, `OpenFGA` + `microVM`/CSI) plus the **1 center keystone you bring (`Model + agent loop`)** (`slide-14`), and close cleanly (`slide-15`).
 
 ```mermaid
 flowchart LR
-    Open["00:00 Cold Open (1.5m): Zero LLMs, 3 Pods, Scan QR"]
-    D1["01:30 Demo 1 (3.5m): Dungeon 2D (Too lazy for Postgres)"]
-    D2["05:00 Demo 2 (3.5m): Coldstart Search (Cheating at HPA)"]
-    D3["08:30 Demo 3 (3.0m): TenantDB (Lazy SaaS DBA + GDPR button)"]
-    D4["11:30 Demo 4 (3.5m): Honeypot (Truman Show for hackers)"]
-    D5["15:00 Demo 5 (3.5m): Timewarp Raft (Putting etcd in the freezer)"]
-    Close["18:30 Closer (1.5m): Oops, we just described an AI agent"]
+    Open["00:00 Rebel Open (1.5m): Zero LLMs, 15 Slide Actors, 3 Pods"]
+    D1["01:30 Piece 01 (3.2m): Dungeon 2D (RAM Save, Revert & Fork)"]
+    D2["04:45 Piece 02 (3.2m): Coldstart Search (100ms Golden Clone)"]
+    D3["08:00 Piece 03 (3.0m): TenantDB (DurableDir & Tiered Suspend)"]
+    D4["11:00 Piece 04 (3.5m): Honeypot (gVisor & Anti-rm -rf)"]
+    D5["14:30 Piece 05 (3.2m): Timewarp (Turn-Driven Wake & Clock Fence)"]
+    Close["17:45 Jigsaw Epiphany (2.2m): 5 Flips + 3 Substrate + Model = Agent"]
 
     Open --> D1 --> D2 --> D3 --> D4 --> D5 --> Close
 ```
 
 ## 20-Minute Run of Show
 
-| Time | Segment | Duration | Live Screen | Substrate Features Unlocked |
+| Time | Segment | Duration | Slides & Live Screen | Puzzle Piece / Substrate Primitives |
 |---|---|---|---|---|
-| `00:00` | **Cold Open: Slides on Substrate & Zero Tokens** (`cmd/slides`) | `1.5 min` | `https://abs.slides.substrate.learngke.dev/deck` + `workerpool.yaml.tmpl` | 12 sleeping slide actors, 0/3 workers held when idle, live heap state |
-| `01:30` | **Demo 1: "I Was Too Lazy to Set Up Postgres"** (`cmd/dungeon2d`) | `3.5 min` | `https://dungeon.substrate.learngke.dev/dashboard` + `/play` | `SNAPSHOT_FIDELITY_MEMORY`, `atenet` Wake-on-HTTP, `revert`, `--tag` |
-| `05:00` | **Demo 2: "Cheating at the Autoscaling Olympics"** (`cmd/coldstart`) | `3.5 min` | `https://coldstart.substrate.learngke.dev/dashboard` | `ActorTemplate` + `wakeupProbe` Golden Snapshots, ~100ms heap clone |
-| `08:30` | **Demo 3: "The Lazy DBA's Multi-Tenant SaaS"** (`cmd/tenantdb`) | `3.0 min` | `https://tenantdb.substrate.learngke.dev/dashboard` | `DurableDir` (`/data`), async hot-RAM vs. sync WAL suspend, `delete actor` |
-| `11:30` | **Demo 4: "The Truman Show for Hackers"** (`cmd/honeypot`) | `3.5 min` | `https://honeypot.substrate.learngke.dev/` | `gVisor` sandboxing, rootfs overlay snapshots, anti-`rm -rf` `revert` + `--tag` |
-| `15:00` | **Demo 5: "Putting Raft in the Freezer"** (`cmd/timewarp`) | `3.5 min` | `https://timewarp.substrate.learngke.dev/dashboard` | Wall-clock jump behavior across `suspend`/`resume`, `?guard=true` fencing |
-| `18:30` | **The Twist: "Wait, That's an AI Agent"** | `1.5 min` | 5-row synthesis slide | Why combining Demos 1-4 (and avoiding Demo 5) defines agentic infra |
+| `00:00` | **Rebel Cold Open: Zero Models, Zero Prompts** (`cmd/slides`) | `1.5 min` | `slide-01` (`abs.slides.substrate.learngke.dev/deck`) + QR | 15 sleeping slide actors, 0/3 workers held when idle, live heap state |
+| `01:30` | **Demo 1: "I Was Too Lazy to Set Up Postgres"** (`cmd/dungeon2d`) | `3.2 min` | `slide-02` → `dungeon.substrate.learngke.dev` → `slide-03` | **Piece 01/05:** `SNAPSHOT_FIDELITY_MEMORY`, `revert`, `create tag` (`--tag`) |
+| `04:45` | **Demo 2: "Cheating at the Autoscaling Olympics"** (`cmd/coldstart`) | `3.2 min` | `slide-04` → `coldstart.substrate.learngke.dev` → `slide-05` | **Piece 02/05:** `ActorTemplate` + `wakeupProbe` `goldenTag` (~100ms clone) |
+| `08:00` | **Demo 3: "The Lazy DBA's Multi-Tenant SaaS"** (`cmd/tenantdb`) | `3.0 min` | `slide-06` → `tenantdb.substrate.learngke.dev` → `slide-07` | **Piece 03/05:** `DurableDir` (`/data`), async vs. sync suspend, `delete actor` |
+| `11:00` | **Demo 4: "The Truman Show for Hackers"** (`cmd/honeypot`) | `3.5 min` | `slide-08` → `honeypot.substrate.learngke.dev` → `slide-09` | **Piece 04/05:** `gVisor` Sentry sandbox, rootfs overlay + forensic `revert`/`--tag` |
+| `14:30` | **Demo 5: "Putting Raft in the Freezer"** (`cmd/timewarp`) | `3.2 min` | `slide-10` → `timewarp.substrate.learngke.dev` → `slide-11` | **Piece 05/05:** Turn-driven `atenet` Wake-on-HTTP, request parking & `?guard=true` |
+| `17:45` | **The Jigsaw Epiphany: "Wait... We Built an Agent"** (`cmd/slides`) | `2.2 min` | `slide-12` (Loot) → `slide-13` (Flip) → `slide-14` (9/9) → `slide-15` | `+ ActorEgressPolicy` + `ate-secret://` + `OpenFGA`/`microVM` + `Model & Loop` |
 
 ## Pre-Stage Setup Checklist
 
@@ -56,13 +56,13 @@ flowchart LR
 
 ## Minute-by-Minute Show Flow
 
-### Cold Open: Zero Tokens, Three Pods (`00:00 - 01:30`)
+### Cold Open: The Conference Rebel (`00:00 - 01:30`, `slide-01`)
 
-* **On screen:** Title card for 15 seconds, then straight to Tab 1 (`dungeon2d` `/dashboard` with the giant QR code open next to `replicas: 3` from `manifests/workerpool.yaml.tmpl`).
+* **On screen:** `slide-01` ("Running anything *but* agents on Agent Substrate") on `abs.slides.substrate.learngke.dev/deck`, then click the CTA button / Tab 1 (`dungeon2d` `/dashboard` with the giant QR code open next to `replicas: 3` from `manifests/workerpool.yaml.tmpl`).
 * **Light spoken hook:**
-  * *"Every other talk this week has an LLM in it. I promise you zero tokens, zero prompts, and zero chatbots for the next 20 minutes."*
-  * *"Agent Substrate has 'Agent' right there in the name, so people assume it is an AI framework. Strip the AI away, and it is really a machine for freezing Linux processes in mid-air and waking them up on any pod in 100 milliseconds."*
-  * *"Also, I am cheap. So I only provisioned **three** 1-CPU worker pods for this entire talk. Scan that QR code right now, pick a class, and start playing. Let's see how many bad ideas we can cram onto three pods before something catches fire."*
+  * *"We are at Agent Substrate Day, which means every other talk today has an LLM, a prompt, and an agent loop on screen. I'm feeling rebellious—so for the next 18 minutes, I promise you zero models, zero prompts, and zero chatbots."*
+  * *"Instead, we're going to raid Agent Substrate for raw systems primitives across five rapid-fire non-AI demos—and pocket one puzzle piece from Substrate after every demo."*
+  * *"Also, I am cheap. So all five demos—plus this 15-slide presentation deck, where every individual slide is its own sleeping gVisor actor—are sharing **three** 1-CPU worker pods. Scan that QR code right now, pick a class, and let's start stealing primitives."*
 
 ### Demo 1: "I Was Too Lazy to Set Up Postgres" (`01:30 - 05:00`, `cmd/dungeon2d`)
 
@@ -162,35 +162,47 @@ sequenceDiagram
      * **Dual-Leader Split-Brain:** `raft-node-1` still thinks it is `LEADER (Term 1)` and hands lock `#101` to Mallory while Bob holds `#102` on Node 2, corrupting the KV store on screen!
      * **Token-Bucket Jackpot:** `tokens += elapsed * rate` mints `+500` burst tokens at once.
   4. **The Seatbelt (`?guard=true`):** Toggle **Clock-Jump Guardrail ON** and replay: now on wakeup the process sees `dt >> 100ms`, immediately fences its stale lease (`409 Conflict`), and clamps its rate limiter.
-* **What the Demo Does & What Substrate Gives Us (1m):**
-  * **What the demo does:** Intentionally split-brains a 3-node Raft & distributed lock cluster by suspending its leader across a lease timeout, then fixes the wakeup shock with a clock-jump fence.
-  * **What we learn about Substrate:**
-    * **Substrate freezes process RAM, never the universe's wall clock:** Any actor holding external leases, OAuth tokens, or `time.Since(lastTick)` rate limiters must check for wall-clock jumps on wakeup.
-    * **Know what stays on plain Kubernetes:** Consensus voters (`etcd`, Raft), continuous brokers (`Kafka`), and 100% duty-cycle 60Hz game loops belong on `StatefulSets` and `Deployments`.
+* **What the Demo Does & Puzzle Piece #5 Grabbed (`slide-11`, 45s):**
+  * **What the demo does:** Intentionally split-brains a 3-node Raft & distributed lock cluster by suspending its leader across a lease timeout, then fixes the wakeup shock with `?guard=true`.
+  * **Puzzle Piece 05 / 05 we pocket from Substrate:**
+    * **Turn-Driven `atenet` Wake-on-HTTP & Request Parking:** Substrate isn't built for continuous 100ms consensus heartbeats (leave `etcd` and `Kafka` on `StatefulSets`!). It is engineered for **discrete request/turn bursts** that wake in ~100ms on HTTP and sleep at `$0` between turns.
+    * **Wakeup Clock-Jump Guardrail (`?guard=true`):** Because freezing RAM does not freeze the universe's wall clock, bursty actors fence stale leases/OAuth tokens and clamp `time.Since(lastTick)` on wakeup.
 
-### The Closer: "Wait... We Just Built an AI Agent by Accident" (`18:30 - 20:00`)
+### The Epiphany Finale: Snapping the 9-Piece Agent Puzzle Together (`17:45 - 20:00`, `slide-12` .. `slide-15`)
 
-* **On screen:** One single punchline scorecard stacking all 5 demos together.
-* **Spoken closer:**
-  * *"Look at our five weird non-AI experiments on those three little pods:"*
-    1. **Dungeon 2D:** Messy working memory that needs **checkpoint, undo (`revert`), and parallel branching (`--tag`)**.
-    2. **Coldstart Search:** Heavy 12-second runtimes and indexes that need **100ms `Golden Snapshot` cloning**.
-    3. **TenantDB:** Thousands of isolated per-user `/data` workspaces (`DurableDir`) that **burst for 5 seconds, then sit idle for 20 minutes** while a human thinks.
-    4. **Honeypot:** Untrusted `/bin/sh` execution (`gVisor`) where someone *will* eventually hallucinate `rm -rf`.
-    5. **Timewarp Raft:** Driven by **discrete request/turn bursts**, never a continuous 100ms consensus heartbeat.
-  * **Final punchline:**
-    > *"Put a save-scumming gamer, a slow-booting search index, an idle per-user workspace, and a chaotic `/bin/sh` user in a trench coat... and you just described an **AI agent**. Agent Substrate isn't 'for agents' because someone slapped an LLM logo on Kubernetes. It is the foundation for agents because an agent is the first mainstream workload in history that needs **all four** of those systems superpowers at once."*
+* **Step 1 — `slide-12` ("Five non-AI demos, five stolen Substrate primitives" — `puzzle_stage: "loot"`):**
+  * Put all 5 stolen Rebel Demo jigsaw pieces onto the `3×3` board (`Dungeon 2D`, `Coldstart`, `TenantDB`, `Honeypot`, `Timewarp`) with 4 empty dashed cutouts remaining.
+  * *"Okay, rebel mission accomplished: zero LLMs used, and look at the five systems primitives we just looted onto our board."*
+* **Step 2 — `slide-13` ("Wait... flip those five pieces over" — `puzzle_stage: "epiphany"`):**
+  * Press `→` (or click individual jigsaw tiles / **Flip 5 demo pieces** live on screen) to flip all 5 Rebel tiles into green **Agent Superpowers**:
+    1. **Piece 01 (`Dungeon 2D` → Working memory & branching):** Undo bad tool calls (`revert`) and fork parallel plans (`--tag`).
+    2. **Piece 02 (`Coldstart` → 100ms warm toolchains):** Pre-baked Python, Node, browser, and repo index ready instantly (`goldenTag`).
+    3. **Piece 03 (`TenantDB` → Sleeping `/workspace` per user):** Burst for 5 seconds, then pay `$0` while the human thinks (`DurableDir`).
+    4. **Piece 04 (`Honeypot` → Safe untrusted bash sandbox):** Contain prompt-injected `/bin/sh` inside `gVisor` and rewind `rm -rf`.
+    5. **Piece 05 (`Timewarp` → Turn-driven wake & refresh):** Wake on each user/tool turn via `atenet` and fence stale credentials on resume.
+  * Point at the 4 empty dashed jigsaw cutouts now asking: *"What drives the loop? Outbound network guard? Keep API keys out of RAM? Tenant authz & VM options?"*
+* **Step 3 — `slide-14` ("Plus 3 Substrate guards + a model = a production agent" — `puzzle_stage: "complete"`):**
+  * Press `→` to watch the final 4 jigsaw pieces snap into place:
+    * **3 `"ALSO IN SUBSTRATE"` platform/security pieces** completing the 8-piece outer ring:
+      * **`ActorEgressPolicy` firewall:** Deny-by-default L7 HTTP & DNS egress control so sandboxes cannot exfiltrate data.
+      * **`ate-secret://` MITM credential injection:** Inject real LLM/API keys at the egress proxy boundary so secrets **never** enter actor RAM or GCS snapshots.
+      * **`OpenFGA` `AccessPolicy`, `microVM` (Kata) & CSI volumes:** Fine-grained per-tenant authorization and hardware VM / storage options.
+    * **1 Center Bullseye Keystone (`"YOU BRING THIS"`):** **`Model + agent loop`** (Gemini, Claude, or open weights + MCP tools).
+  * **Final spoken punchline:**
+    > *"Look at that 9-piece board. Eight of the nine pieces are pure distributed-systems infrastructure—and Agent Substrate gives you all eight out of the box. You bring the center piece—your model and agent loop—and that is why Agent Substrate is an awesome place to run agents."*
+* **Step 4 — `slide-15` ("Thank you" — `asd-closing`):**
+  * Clean closing summary + GitHub repo QR/link for Q&A.
 
 ## Quick Reference: Demo-to-Substrate Feature Cheat Sheet
 
 | Demo | What the Demo Does | Features We Get from Substrate (`v1.0.0-rc.2`) |
 |---|---|---|
-| **0. `cmd/slides`** | Presentation deck where each slide is an actor sleeping in GCS | 12 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` |
+| **0. `cmd/slides`** | Presentation deck where each slide (`slide-01..15`) is an actor sleeping in GCS | 15 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` + `asd-puzzle` finale |
 | **1. `cmd/dungeon2d`** | Multi-player 8-floor browser roguelike with zero DB code | `WorkerPool` (`ate.dev/v1`), `atenet` Wake-on-HTTP, `SNAPSHOT_FIDELITY_MEMORY`, `save` / `--snapshot-version`, `revert`, `create tag` + `--tag` |
 | **2. `cmd/coldstart`** | 50k-doc in-memory search engine in a `60 QPS` HPA race | `ActorTemplate` + `wakeupProbe` (`/readyz` -> `goldenTag` Golden Snapshot), ~100ms Copy-on-Write heap restore, pod-decoupled scaling |
 | **3. `cmd/tenantdb`** | 1 isolated DB + 16 MB cache per customer across 3 pods | `DurableDir` (`/data`), `suspend --mode=async` (hot RAM) vs. `--mode=sync` (compact WAL, `99.997%` GCS saved), 1-cmd `delete actor` |
 | **4. `cmd/honeypot`** | Per-IP `gVisor` hacker Movie Set + SOC forensic booth | `sandboxClasses: [gvisor]` (`ateworker-gvisor`), OCI rootfs overlay + RAM persistence across pod IPs, `revert` (`rm -rf` undo), `--tag` live clone |
-| **5. `cmd/timewarp`** | 3-node Raft cluster broken by a 5s leader freeze | `suspend`/`resume` wall-clock discontinuity mechanics, wakeup clock-jump fencing (`?guard=true`), `Actor` vs. `StatefulSet` boundary |
+| **5. `cmd/timewarp`** | 3-node Raft cluster broken by a 5s leader freeze | Turn-driven `atenet` Wake-on-HTTP + request parking, wakeup clock-jump fencing (`?guard=true`), `Actor` vs. `StatefulSet` boundary |
 
 ## Pocket Q&A Answers (If Time Permits or Hallway Track)
 

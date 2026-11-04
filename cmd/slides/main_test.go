@@ -26,8 +26,8 @@ import (
 
 func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 	slides := AllSlideDefs()
-	if len(slides) != 12 {
-		t.Fatalf("expected 12 slides, got %d", len(slides))
+	if len(slides) != 15 {
+		t.Fatalf("expected 15 slides, got %d", len(slides))
 	}
 
 	validLayouts := map[string]bool{
@@ -37,6 +37,7 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 		"asd-two-col":  true,
 		"asd-big-stat": true,
 		"asd-code":     true,
+		"asd-puzzle":   true,
 		"asd-closing":  true,
 	}
 
@@ -53,8 +54,8 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 		if s.Index != i+1 {
 			t.Errorf("slide %s has index %d, expected %d", s.ID, s.Index, i+1)
 		}
-		if s.Total != 12 {
-			t.Errorf("slide %s has total %d, expected 12", s.ID, s.Total)
+		if s.Total != 15 {
+			t.Errorf("slide %s has total %d, expected 15", s.ID, s.Total)
 		}
 		if !validLayouts[s.Layout] {
 			t.Errorf("slide %s has unexpected layout %q", s.ID, s.Layout)
@@ -93,6 +94,34 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 		case "asd-code":
 			if len(s.CodeLines) == 0 {
 				t.Errorf("slide %s (asd-code) expected CodeLines", s.ID)
+			}
+		case "asd-puzzle":
+			if s.PuzzleStage != "loot" && s.PuzzleStage != "epiphany" && s.PuzzleStage != "complete" {
+				t.Errorf("slide %s (asd-puzzle) has unexpected puzzle_stage %q", s.ID, s.PuzzleStage)
+			}
+			if len(s.PuzzlePieces) != 9 {
+				t.Fatalf("slide %s (asd-puzzle) expected 9 puzzle pieces, got %d", s.ID, len(s.PuzzlePieces))
+			}
+			filledCount := 0
+			for idx, p := range s.PuzzlePieces {
+				if p.Slot != idx {
+					t.Errorf("slide %s piece %d has slot %d", s.ID, idx, p.Slot)
+				}
+				if p.Filled {
+					filledCount++
+				} else if p.EmptyLabel == "" {
+					t.Errorf("slide %s unfilled piece at slot %d missing empty_label", s.ID, p.Slot)
+				}
+			}
+			if s.PuzzlePieces[4].Kind != "keystone" {
+				t.Errorf("slide %s expected keystone at center slot 4, got %q", s.ID, s.PuzzlePieces[4].Kind)
+			}
+			expectedFilled := 5
+			if s.PuzzleStage == "complete" {
+				expectedFilled = 9
+			}
+			if filledCount != expectedFilled {
+				t.Errorf("slide %s (%s) expected %d filled puzzle pieces, got %d", s.ID, s.PuzzleStage, expectedFilled, filledCount)
 			}
 		case "asd-closing":
 			if len(s.AgendaItems) == 0 {
@@ -199,8 +228,8 @@ func TestLocalSimulatorBackendLifecycleAndRevert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSlides failed: %v", err)
 	}
-	if len(summaries) != 12 {
-		t.Fatalf("expected 12 summaries, got %d", len(summaries))
+	if len(summaries) != 15 {
+		t.Fatalf("expected 15 summaries, got %d", len(summaries))
 	}
 
 	// GetSlide
@@ -327,8 +356,8 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 	if err := json.Unmarshal(sRec.Body.Bytes(), &slidesResp); err != nil {
 		t.Fatalf("failed to unmarshal /api/slides: %v", err)
 	}
-	if len(slidesResp.Slides) != 12 || slidesResp.Total != 12 || !slidesResp.IsPresenter {
-		t.Errorf("expected 12 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
+	if len(slidesResp.Slides) != 15 || slidesResp.Total != 15 || !slidesResp.IsPresenter {
+		t.Errorf("expected 15 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
 	}
 
 	// 5. GET /api/slide/slide-01 with cookie -> 200
@@ -410,8 +439,22 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 func TestIndexHTMLDesignAndConventions(t *testing.T) {
 	html := string(indexHTML)
 
-	// Check Agent Substrate Day official template branding, palette, and typography
-	for _, token := range []string{"#07090D", "#56FD5A", "Ubuntu", "Ubuntu Mono", "ATECon", "AGENT SUBSTRATE DAY", "btnLogout", "/api/auth/presenter.js"} {
+	// Check Agent Substrate Day official template branding, palette, typography, and jigsaw puzzle UI
+	for _, token := range []string{
+		"#07090D",
+		"#56FD5A",
+		"Ubuntu",
+		"Ubuntu Mono",
+		"ATECon",
+		"AGENT SUBSTRATE DAY",
+		"btnLogout",
+		"/api/auth/presenter.js",
+		"asd-puzzle",
+		"buildJigsawCellPath",
+		"ActorEgressPolicy",
+		"ate-secret://",
+		"OpenFGA",
+	} {
 		if !strings.Contains(html, token) {
 			t.Errorf("expected official template token %q in index.html", token)
 		}

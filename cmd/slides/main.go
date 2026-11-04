@@ -27,7 +27,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":80", "HTTP listen address")
 	mode := flag.String("mode", "actor", "Operating mode: actor | gateway | local")
-	slideID := flag.String("slide-id", "slide-01", "Slide ID for actor mode (e.g. slide-01..slide-12)")
+	slideID := flag.String("slide-id", "slide-01", "Slide ID for actor mode (e.g. slide-01..slide-15)")
 	atespace := flag.String("atespace", "anything-but-agents", "Agent Substrate atespace")
 	template := flag.String("template", "slides", "Agent Substrate ActorTemplate name")
 	routerURL := flag.String("router-url", "http://localhost:8000", "atenet-router HTTP URL")

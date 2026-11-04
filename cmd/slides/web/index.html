@@ -41,6 +41,21 @@
       --toggle-icon-active: #56FD5A;
       --bg-arc-filter: none;
       --bg-arc-opacity: 1;
+      --pz-rebel-fill: #0C1724;
+      --pz-rebel-stroke: #66B8DC;
+      --pz-rebel-badge: #66B8DC;
+      --pz-agent-fill: #0D1F14;
+      --pz-agent-stroke: #56FD5A;
+      --pz-agent-badge: #56FD5A;
+      --pz-extra-fill: #0E2124;
+      --pz-extra-stroke: #2DD4BF;
+      --pz-extra-badge: #2DD4BF;
+      --pz-key-fill: #16361D;
+      --pz-key-stroke: #56FD5A;
+      --pz-key-badge-bg: #56FD5A;
+      --pz-key-badge-ink: #07090D;
+      --pz-empty-fill: rgba(7, 9, 13, 0.62);
+      --pz-empty-stroke: #2B394B;
     }
 
     [data-theme="light"] {
@@ -76,6 +91,21 @@
       --toggle-icon-active: #0E8A1F;
       --bg-arc-filter: invert(1) hue-rotate(180deg);
       --bg-arc-opacity: 0.42;
+      --pz-rebel-fill: #EFF6FF;
+      --pz-rebel-stroke: #0284C7;
+      --pz-rebel-badge: #0369A1;
+      --pz-agent-fill: #ECFDF3;
+      --pz-agent-stroke: #0E8A1F;
+      --pz-agent-badge: #0E8A1F;
+      --pz-extra-fill: #F0FDFA;
+      --pz-extra-stroke: #0F766E;
+      --pz-extra-badge: #0F766E;
+      --pz-key-fill: #DCFCE7;
+      --pz-key-stroke: #0E8A1F;
+      --pz-key-badge-bg: #0E8A1F;
+      --pz-key-badge-ink: #FFFFFF;
+      --pz-empty-fill: rgba(226, 236, 229, 0.78);
+      --pz-empty-stroke: #94A3B8;
     }
 
     * {
@@ -719,6 +749,281 @@
       color: var(--asd-green);
     }
 
+    /* =====================================================================
+       LAYOUT 8: ASD Interlocking 3x3 Jigsaw Puzzle (Epiphany Sequence)
+       ===================================================================== */
+    .asd-puzzle-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25cqw;
+    }
+
+    .asd-puzzle-toprow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.2cqw;
+    }
+
+    .asd-puzzle-toprow .asd-kicker {
+      margin-bottom: 0;
+      font-size: 1.38cqw;
+    }
+
+    .asd-puzzle-legend {
+      display: flex;
+      align-items: center;
+      gap: 1.0cqw;
+      flex-wrap: wrap;
+    }
+
+    .asd-pz-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.42cqw;
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 1.04cqw;
+      color: var(--asd-muted);
+    }
+
+    .asd-pz-swatch {
+      width: 0.72cqw;
+      height: 0.72cqw;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .asd-pz-swatch-demo { background: var(--pz-agent-stroke); }
+    .asd-pz-swatch-rebel { background: var(--pz-rebel-stroke); }
+    .asd-pz-swatch-extra { background: var(--pz-extra-stroke); }
+    .asd-pz-swatch-key { background: var(--pz-key-badge-bg); border: 1px solid var(--pz-key-stroke); }
+
+    .asd-pz-flip-btn {
+      background: var(--asd-surface);
+      border: 1px solid var(--asd-frame-border);
+      color: var(--asd-body);
+      border-radius: 5px;
+      padding: 0.22cqw 0.65cqw;
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 1.02cqw;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.38cqw;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+    }
+
+    .asd-pz-flip-btn:hover {
+      border-color: var(--asd-green);
+      color: var(--asd-green);
+      background: var(--asd-surface-hover);
+    }
+
+    .asd-pz-flip-btn svg {
+      width: 1.05cqw;
+      height: 1.05cqw;
+    }
+
+    .asd-puzzle-title {
+      font-size: 2.95cqw;
+      line-height: 1.12;
+      font-weight: 700;
+      color: var(--asd-white);
+      letter-spacing: -0.012em;
+    }
+
+    .asd-puzzle-subtitle {
+      font-size: 1.45cqw;
+      line-height: 1.28;
+      color: var(--asd-muted);
+    }
+
+    .asd-puzzle-board {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1200 / 438;
+      margin: auto 0;
+    }
+
+    .asd-puzzle-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+      overflow: visible;
+    }
+
+    .asd-jigsaw-piece {
+      transition: fill 0.22s ease, stroke 0.22s ease, filter 0.22s ease;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    .asd-jigsaw-empty {
+      fill: var(--pz-empty-fill);
+      stroke: var(--pz-empty-stroke);
+      stroke-width: 2.1;
+      stroke-dasharray: 9 7;
+    }
+
+    .asd-jigsaw-rebel {
+      fill: var(--pz-rebel-fill);
+      stroke: var(--pz-rebel-stroke);
+      stroke-width: 2.5;
+    }
+
+    .asd-jigsaw-agent {
+      fill: var(--pz-agent-fill);
+      stroke: var(--pz-agent-stroke);
+      stroke-width: 2.5;
+    }
+
+    .asd-jigsaw-extra {
+      fill: var(--pz-extra-fill);
+      stroke: var(--pz-extra-stroke);
+      stroke-width: 2.5;
+    }
+
+    .asd-jigsaw-keystone {
+      fill: var(--pz-key-fill);
+      stroke: var(--pz-key-stroke);
+      stroke-width: 3.2;
+      filter: drop-shadow(0 0 12px var(--asd-green-soft));
+    }
+
+    @keyframes pzSnapIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.91);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .asd-pz-snap-anim {
+      animation: pzSnapIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .asd-puzzle-grid {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+    }
+
+    .asd-puzzle-cell {
+      padding: 1.32cqw 2.15cqw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.32cqw;
+      min-width: 0;
+      min-height: 0;
+      transition: transform 0.16s ease;
+    }
+
+    .asd-puzzle-cell-clickable {
+      cursor: pointer;
+    }
+
+    .asd-puzzle-cell-clickable:hover {
+      transform: translateY(-0.12cqw);
+    }
+
+    .asd-puzzle-cell-empty {
+      align-items: center;
+      text-align: center;
+      gap: 0.38cqw;
+    }
+
+    .asd-pz-empty-icon {
+      width: 1.75cqw;
+      height: 1.75cqw;
+      color: var(--asd-dim);
+      opacity: 0.78;
+    }
+
+    .asd-pz-empty-text {
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 1.16cqw;
+      font-weight: 700;
+      color: var(--asd-dim);
+      letter-spacing: 0.02em;
+    }
+
+    .asd-pz-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5cqw;
+    }
+
+    .asd-pz-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.38cqw;
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 0.96cqw;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .asd-pz-badge svg {
+      width: 1.05cqw;
+      height: 1.05cqw;
+      flex-shrink: 0;
+    }
+
+    .asd-pz-badge-rebel { color: var(--pz-rebel-badge); }
+    .asd-pz-badge-agent { color: var(--pz-agent-badge); }
+    .asd-pz-badge-extra { color: var(--pz-extra-badge); }
+
+    .asd-pz-badge-keystone {
+      background: var(--pz-key-badge-bg);
+      color: var(--pz-key-badge-ink);
+      padding: 0.14cqw 0.52cqw;
+      border-radius: 4px;
+    }
+
+    .asd-pz-flip-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25cqw;
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 0.86cqw;
+      color: var(--asd-dim);
+      opacity: 0.85;
+    }
+
+    .asd-pz-flip-hint svg {
+      width: 0.88cqw;
+      height: 0.88cqw;
+      flex-shrink: 0;
+    }
+
+    .asd-pz-title {
+      font-size: 1.52cqw;
+      font-weight: 700;
+      line-height: 1.18;
+      color: var(--asd-white);
+    }
+
+    .asd-pz-detail {
+      font-family: "Ubuntu Mono", monospace;
+      font-size: 1.08cqw;
+      line-height: 1.28;
+      color: var(--asd-muted);
+    }
+
     /* Live Go Heap Note Callout Banner inside Slide (appears when actor RAM has notes) */
     .asd-live-note-banner {
       display: none;
@@ -1279,6 +1584,21 @@
       .asd-agenda-num, .asd-agenda-topic { font-size: 14px; }
       .asd-agenda-detail, .asd-signoff-line, .asd-signoff-mono { font-size: 12px; }
       .asd-thankyou-heading { font-size: 22px; }
+      .asd-puzzle-title { font-size: 22px; }
+      .asd-puzzle-subtitle { font-size: 14px; }
+      .asd-puzzle-toprow { flex-direction: column; align-items: flex-start; gap: 6px; }
+      .asd-pz-legend-item, .asd-pz-flip-btn { font-size: 11px; padding: 4px 8px; }
+      .asd-pz-swatch { width: 8px; height: 8px; }
+      .asd-puzzle-board { aspect-ratio: auto; }
+      .asd-puzzle-svg { display: none; }
+      .asd-puzzle-grid { grid-template-columns: 1fr; grid-template-rows: auto; gap: 10px; }
+      .asd-puzzle-cell { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--asd-card-border); background: var(--asd-surface); }
+      .asd-puzzle-cell-empty { border-style: dashed; border-color: var(--asd-frame-border); background: transparent; }
+      .asd-pz-badge { font-size: 11px; }
+      .asd-pz-badge svg, .asd-pz-empty-icon { width: 14px; height: 14px; }
+      .asd-pz-flip-hint { font-size: 10px; }
+      .asd-pz-title { font-size: 16px; }
+      .asd-pz-detail, .asd-pz-empty-text { font-size: 12px; }
       .asd-footer-mascot { width: 22px; height: 17px; }
       .asd-footer-brand, .asd-footer-meta, .asd-footer-cover-text, .asd-slide-num { font-size: 11px; }
       .asd-feature-pills { display: none; }
@@ -1294,13 +1614,13 @@
     <div class="brand-section">
       <img src="/assets/mascot.png" alt="Agent Substrate" class="brand-mascot" />
       <div class="brand-title">Agent Substrate Day</div>
-      <div class="brand-tag">Slides on Substrate • 12 Actors</div>
+      <div class="brand-tag">Slides on Substrate • 15 Actors</div>
     </div>
 
     <div class="progress-section">
-      <div class="slide-counter" id="slideCounter">01 / 12</div>
+      <div class="slide-counter" id="slideCounter">01 / 15</div>
       <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" id="progressBar" style="width: 8.33%;"></div>
+        <div class="progress-bar-fill" id="progressBar" style="width: 6.67%;"></div>
       </div>
     </div>
 
@@ -1491,7 +1811,7 @@
   <div class="grid-modal" id="gridModal">
     <div class="grid-container">
       <div class="grid-header">
-        <h2 class="grid-title">Agent Substrate Day — Slide Deck Overview (12 Actors)</h2>
+        <h2 class="grid-title">Agent Substrate Day — Slide Deck Overview (15 Actors)</h2>
         <button class="top-btn" id="btnCloseGrid" type="button">Close (Esc)</button>
       </div>
       <div class="grid-cards" id="gridCards"></div>
@@ -1499,36 +1819,152 @@
   </div>
 
   <script>
+    function buildStaticPuzzlePieces(stage) {
+      const demoFace = (stage === "epiphany" || stage === "complete") ? "agent" : "rebel";
+      const fillExtras = stage === "complete";
+      const emptyCenter = stage === "epiphany" ? "What drives the loop?" : "Missing centerpiece";
+      const emptyS1 = stage === "epiphany" ? "Outbound network guard?" : "Unclaimed slot";
+      const emptyS2 = stage === "epiphany" ? "Keep API keys out of RAM?" : "Unclaimed slot";
+      const emptyS3 = stage === "epiphany" ? "Tenant authz & VM options?" : "Unclaimed slot";
+
+      return [
+        {
+          slot: 0,
+          code: "01",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 01 • DUNGEON 2D",
+          rebel_title: "Zero-DB game saves & undo",
+          rebel_detail: "SNAPSHOT_FIDELITY_MEMORY • revert • --tag",
+          agent_title: "Working memory & branching",
+          agent_detail: "Undo bad tool calls & fork parallel plans"
+        },
+        {
+          slot: 1,
+          code: "02",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 02 • COLDSTART",
+          rebel_title: "12s search index HPA clone",
+          rebel_detail: "ActorTemplate + wakeupProbe goldenTag",
+          agent_title: "100ms warm toolchains",
+          agent_detail: "Python, Node, browser & repo index ready"
+        },
+        {
+          slot: 2,
+          code: "03",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 03 • TENANTDB",
+          rebel_title: "1 private DB per customer",
+          rebel_detail: "DurableDir /data • tiered suspend • delete",
+          agent_title: "Sleeping /workspace per user",
+          agent_detail: "Burst 5s, pay $0 while the human thinks"
+        },
+        {
+          slot: 3,
+          code: "04",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 04 • HONEYPOT",
+          rebel_title: "Hacker /bin/sh movie set",
+          rebel_detail: "gVisor Sentry kernel • rootfs rewind",
+          agent_title: "Safe untrusted bash sandbox",
+          agent_detail: "Contain prompt injection & undo rm -rf"
+        },
+        {
+          slot: 4,
+          code: "AI",
+          kind: "keystone",
+          filled: fillExtras,
+          face: "keystone",
+          badge: "YOU BRING THIS",
+          agent_title: "Model + agent loop",
+          agent_detail: "Gemini / Claude / open weights + MCP tools",
+          empty_label: emptyCenter
+        },
+        {
+          slot: 5,
+          code: "05",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 05 • TIMEWARP",
+          rebel_title: "Wake-on-HTTP & clock fence",
+          rebel_detail: "atenet request parking • ?guard=true",
+          agent_title: "Turn-driven wake & refresh",
+          agent_detail: "Sleep between turns & fence stale tokens"
+        },
+        {
+          slot: 6,
+          code: "S1",
+          kind: "substrate",
+          filled: fillExtras,
+          face: "extra",
+          badge: "ALSO IN SUBSTRATE",
+          agent_title: "ActorEgressPolicy firewall",
+          agent_detail: "Deny-by-default L7 & DNS egress control",
+          empty_label: emptyS1
+        },
+        {
+          slot: 7,
+          code: "S2",
+          kind: "substrate",
+          filled: fillExtras,
+          face: "extra",
+          badge: "ALSO IN SUBSTRATE",
+          agent_title: "ate-secret:// MITM auth",
+          agent_detail: "Inject API keys on egress; 0 keys in GCS",
+          empty_label: emptyS2
+        },
+        {
+          slot: 8,
+          code: "S3",
+          kind: "substrate",
+          filled: fillExtras,
+          face: "extra",
+          badge: "ALSO IN SUBSTRATE",
+          agent_title: "OpenFGA, microVM & CSI",
+          agent_detail: "Per-tenant AccessPolicy, Kata & volumes",
+          empty_label: emptyS3
+        }
+      ];
+    }
+
     // Pre-bundled static slide definitions matching Agent-Substrate-Day-Speaker-Template.pptx (1.5s Offline Cache Fallback)
     const STATIC_SLIDES = [
       {
         id: "slide-01",
         index: 1,
-        total: 12,
+        total: 15,
         layout: "asd-title",
-        kicker: "AGENT SUBSTRATE DAY",
+        kicker: "AGENT SUBSTRATE DAY  •  REBEL TRACK",
         chapter: "Cold open",
         badge: "AGENT SUBSTRATE DAY",
         title: "Running anything *but* agents on Agent Substrate",
-        subtitle: "Five infrastructure crimes on three tiny Kubernetes pods — zero tokens, zero prompts",
+        subtitle: "Every talk today has an LLM. Let's be rebels: zero models, zero prompts, five weird demos on three tiny pods.",
         kind: "title",
-        highlight_phrases: ["*but*", "three tiny Kubernetes pods"],
+        highlight_phrases: ["*but*", "zero models, zero prompts", "three tiny pods"],
         speaker_byline: "Mofi Rahman  •  Google Cloud Advocate, Google",
         event_footer: "ATECon  •  Monday, November 9, 2026  •  Sky SLC",
         points: [
-          "Zero tokens, zero prompts, and zero chatbots for the next 20 minutes",
-          "Strip the AI away: a sub-second memory-checkpointing, wake-on-HTTP actor runtime",
-          "Five non-agent workloads multiplexed across three 1-vCPU worker pods"
+          "Zero tokens, zero prompts, and zero chatbots for the next 18 minutes",
+          "Raiding Agent Substrate for raw systems superpowers across five non-AI apps",
+          "All five demos (plus this 15-actor slide deck) share three 1-vCPU worker pods"
         ],
         demo_name: "Scan audience QR & join Dungeon 2D",
         demo_url: "https://dungeon.substrate.learngke.dev/dashboard",
         substrate_features: ["WorkerPool (ate.dev/v1)", "Pod-Decoupled Identity", "gVisor Sandbox", "atenet Wake-on-HTTP"],
-        speaker_notes: "Open with a 15-second title card, then flash the QR code. Tell the audience you are cheap and only provisioned three 1-CPU worker pods for the entire talk. Even this slide deck is 12 sleeping gVisor actors waking on arrow keys!"
+        speaker_notes: "Open as the conference rebel: we are at Agent Substrate Day, everyone else has LLMs on screen, so I promise zero models and zero prompts. We're raiding Substrate for raw systems primitives across five rapid-fire demos on three 1-CPU pods—even this slide deck is 15 sleeping gVisor actors!"
       },
       {
         id: "slide-02",
         index: 2,
-        total: 12,
+        total: 15,
         layout: "asd-demo",
         kicker: "LIVE DEMO 01  •  ZERO DATABASE",
         chapter: "Demo 01 • Setup",
@@ -1545,18 +1981,18 @@
         demo_name: "Launch Dungeon 2D live demo",
         demo_url: "https://dungeon.substrate.learngke.dev/dashboard",
         substrate_features: ["SNAPSHOT_FIDELITY_MEMORY", "atenet-router", "Zero Database Architecture"],
-        speaker_notes: "Think about how much of our lives we waste turning Go structs into SQL rows and back. For Demo 1: what if we just didn't use a database? Point out 50 people playing on 3 pods."
+        speaker_notes: "First rebel experiment: a game with save files, boss-death undo, and forked save slots—without writing a single SQL query. Point out 50 people playing on 3 pods."
       },
       {
         id: "slide-03",
         index: 3,
-        total: 12,
+        total: 15,
         layout: "asd-cards",
-        kicker: "DEMO 01 RECAP  •  SUBSTRATE SUPERPOWERS",
-        chapter: "Demo 01 • Recap",
-        badge: "DEMO 01 RECAP",
+        kicker: "PUZZLE PIECE 01 / 05  •  SUBSTRATE MEMORY",
+        chapter: "Piece 01 • Memory",
+        badge: "PIECE 01 / 05",
         title: "Look ma, no database",
-        subtitle: "Three process-memory primitives we got for free without writing persistence code",
+        subtitle: "Piece #1 grabbed from Substrate: checkpoint live RAM, rewind mistakes, and fork new timelines",
         kind: "recap",
         highlight_phrases: ["SNAPSHOT_FIDELITY_MEMORY", "git reset --hard", "parallel universes"],
         points: [
@@ -1584,12 +2020,12 @@
         demo_name: "Revisit Dungeon 2D leaderboard",
         demo_url: "https://dungeon.substrate.learngke.dev/dashboard",
         substrate_features: ["SNAPSHOT_FIDELITY_MEMORY", "atenet Wake-on-HTTP", "kubectl ate revert", "kubectl ate create tag"],
-        speaker_notes: "Summarize: we just did git reset --hard on live RAM, hopped across worker pod IPs, and forked parallel timelines. Next up: autoscaling."
+        speaker_notes: "Pocket Piece #1: process memory checkpointing, revert, and tag branching. Next rebel experiment: beating Kubernetes HPA."
       },
       {
         id: "slide-04",
         index: 4,
-        total: 12,
+        total: 15,
         layout: "asd-demo",
         kicker: "LIVE DEMO 02  •  AUTOSCALING RACE",
         chapter: "Demo 02 • Setup",
@@ -1611,13 +2047,13 @@
       {
         id: "slide-05",
         index: 5,
-        total: 12,
+        total: 15,
         layout: "asd-two-col",
-        kicker: "DEMO 02 RECAP  •  SUBSTRATE SUPERPOWERS",
-        chapter: "Demo 02 • Recap",
-        badge: "DEMO 02 RECAP",
+        kicker: "PUZZLE PIECE 02 / 05  •  GOLDEN SNAPSHOTS",
+        chapter: "Piece 02 • Warm Clone",
+        badge: "PIECE 02 / 05",
         title: "Golden snapshots beat cold boots",
-        subtitle: "Build deterministic startup state once, then fork warm memory across pods",
+        subtitle: "Piece #2 grabbed from Substrate: pay deterministic startup once, then clone warm RAM in ~100ms",
         kind: "recap",
         highlight_phrases: ["goldenTag", "~100ms", "0% shed rate"],
         points: [
@@ -1646,12 +2082,12 @@
         demo_name: "Revisit Cold-Start oscilloscope",
         demo_url: "https://coldstart.substrate.learngke.dev/dashboard",
         substrate_features: ["ActorTemplate Golden Snapshots", "wakeupProbe /readyz", "Cluster-Wide fork()", "Pod-Decoupled Scaling"],
-        speaker_notes: "Substrate runs initialization once, freezes the warm heap into goldenTag, and forks it onto warm worker pods in 100ms. Photocopying 76MB of RAM is great, but what about nightly storage bills?"
+        speaker_notes: "Pocket Piece #2: ActorTemplate + wakeupProbe Golden Snapshots. Photocopying 76 MB of RAM is awesome, but what about per-customer storage?"
       },
       {
         id: "slide-06",
         index: 6,
-        total: 12,
+        total: 15,
         layout: "asd-demo",
         kicker: "LIVE DEMO 03  •  ONE DB PER CUSTOMER",
         chapter: "Demo 03 • Setup",
@@ -1673,16 +2109,16 @@
       {
         id: "slide-07",
         index: 7,
-        total: 12,
+        total: 15,
         layout: "asd-big-stat",
-        kicker: "DEMO 03 RECAP  •  MICRO-VOLUMES & TIERING",
-        chapter: "Demo 03 • Recap",
-        badge: "DEMO 03 RECAP",
+        kicker: "PUZZLE PIECE 03 / 05  •  DURABLEDIR & TIERING",
+        chapter: "Piece 03 • Workspaces",
+        badge: "PIECE 03 / 05",
         title: "Snapshot bandwidth saved by tiering hot RAM and DurableDir",
-        subtitle: "Keep rebuildable caches hot during active bursts, commit only compact WAL logs for overnight hibernation",
+        subtitle: "Piece #3 grabbed from Substrate: private /data micro-volumes that burst hot and hibernate tiny",
         kind: "recap",
         stat_value: "99.997%",
-        stat_context: "480 B /data/wal.jsonl committed on sync hibernate vs. 16.0 MB hot RAM buffer pool (<1ms wakeup replay)",
+        stat_context: "Piece #3 unlocked: 480 B /data/wal.jsonl on sync hibernate vs. 16.0 MB hot RAM buffer pool (<1ms wakeup replay)",
         highlight_phrases: ["16.0 MB", "480 B", "kubectl ate delete actor"],
         points: [
           "Async suspend keeps the 16.0 MB buffer pool warm in memory for active customer bursts",
@@ -1692,12 +2128,12 @@
         demo_name: "Revisit TenantDB console",
         demo_url: "https://tenantdb.substrate.learngke.dev/dashboard",
         substrate_features: ["DurableDir Micro-Volumes", "Async vs Sync Suspend Tiering", "WAL Fast-Replay (<1ms)", "GDPR Blast-Radius Isolation"],
-        speaker_notes: "DurableDir avoids Kubernetes PVC attach bottlenecks. Async suspend keeps 16 MB hot; sync hibernate drops cache and saves 99.997% bandwidth. Now, what if the user is an active hacker?"
+        speaker_notes: "Pocket Piece #3: DurableDir micro-volumes, hot vs. cold suspend tiering, and instant actor deletion. Now, what if the user is an active hacker?"
       },
       {
         id: "slide-08",
         index: 8,
-        total: 12,
+        total: 15,
         layout: "asd-demo",
         kicker: "LIVE DEMO 04  •  DECEPTION SANDBOX",
         chapter: "Demo 04 • Setup",
@@ -1719,13 +2155,13 @@
       {
         id: "slide-09",
         index: 9,
-        total: 12,
+        total: 15,
         layout: "asd-code",
-        kicker: "DEMO 04 RECAP  •  SUBSTRATE SUPERPOWERS",
-        chapter: "Demo 04 • Recap",
-        badge: "DEMO 04 RECAP",
+        kicker: "PUZZLE PIECE 04 / 05  •  GVISOR & FORENSICS",
+        chapter: "Piece 04 • Sandbox",
+        badge: "PIECE 04 / 05",
         title: "gVisor sandboxing and forensic time-travel",
-        subtitle: "Un-deleting rm -rf and cloning a live compromised container while the attacker keeps typing",
+        subtitle: "Piece #4 grabbed from Substrate: isolate hostile /bin/sh code and un-delete rm -rf",
         kind: "recap",
         code_filename: "forensic-playbook.sh",
         code_lines: [
@@ -1748,96 +2184,167 @@
         demo_name: "Revisit Honeypot console",
         demo_url: "https://honeypot.substrate.learngke.dev/",
         substrate_features: ["gVisor Application Kernel", "Rootfs Overlay Snapshots", "kubectl ate revert (Anti-Wipe)", "Forensic Tag Cloning (--tag)"],
-        speaker_notes: "We un-deleted rm -rf and cloned a live crime scene without the hacker noticing. At this point, maximum hubris kicks in: let's put etcd and Raft on Substrate!"
+        speaker_notes: "Pocket Piece #4: gVisor kernel sandboxing + rootfs time-travel. Now hubris peaks: we beat Postgres, HPA, SaaS DBs, and hackers—let's freeze Raft!"
       },
       {
         id: "slide-10",
         index: 10,
-        total: 12,
+        total: 15,
         layout: "asd-demo",
-        kicker: "LIVE DEMO 05  •  DISTRIBUTED CONSENSUS",
+        kicker: "LIVE DEMO 05  •  TESTING THE BOUNDARY",
         chapter: "Demo 05 • Setup",
         badge: "LIVE DEMO 05",
         title: "Putting Raft in the freezer",
-        subtitle: "What breaks when hubris takes over and you suspend the leader of a consensus cluster for five seconds?",
+        subtitle: "Maximum hubris: we beat databases, HPA, and hackers — what happens when we freeze consensus?",
         kind: "chapter",
         highlight_phrases: ["5,000ms clock jump", "dual-leader split-brain"],
         points: [
           "Freeze raft-node-1 (Term 1 leader) while the real universe's clock moves on",
-          "3-second lease expires; nodes 2 and 3 elect node 2 as Term 2 leader",
-          "Waking node 1 triggers a 5,000ms clock jump and dual-leader split-brain"
+          "Its 3-second lease expires; nodes 2 and 3 elect node 2 as Term 2 leader",
+          "atenet wakes node 1 on HTTP — triggering a 5,000ms clock jump and dual-leader split-brain"
         ],
         demo_name: "Open Timewarp split-brain lab",
         demo_url: "https://timewarp.substrate.learngke.dev/dashboard",
-        substrate_features: ["Wall-Clock Discontinuity", "Dual-Leader Split-Brain", "Wakeup Clock-Jump Fencing"],
-        speaker_notes: "You don't understand a shiny new hammer until you smash your own thumb with it. Let's freeze the leader of a distributed consensus cluster and watch three shocks fire in one tick."
+        substrate_features: ["atenet Request Parking", "Wall-Clock Discontinuity", "Wakeup Clock-Jump Fencing"],
+        speaker_notes: "You don't understand a shiny new hammer until you smash your own thumb with it. Let's freeze the leader of a Raft cluster, watch it split-brain, and see what shape of workload Substrate actually wants."
       },
       {
         id: "slide-11",
         index: 11,
-        total: 12,
+        total: 15,
         layout: "asd-two-col",
-        kicker: "DEMO 05 RECAP  •  ARCHITECTURAL BOUNDARIES",
-        chapter: "Demo 05 • Recap",
-        badge: "LESSONS LEARNED",
-        title: "The universe has a clock",
-        subtitle: "Substrate freezes process RAM, never wall-clock time in the outside world",
+        kicker: "PUZZLE PIECE 05 / 05  •  TURN WAKE & CLOCK FENCE",
+        chapter: "Piece 05 • Turn Wake",
+        badge: "PIECE 05 / 05",
+        title: "Built for discrete turns, not heartbeats",
+        subtitle: "Piece #5 grabbed from Substrate: park HTTP requests, wake on demand, and fence stale clocks",
         kind: "recap",
-        highlight_phrases: ["StatefulSets", "elapsed > tick", "wake-on-event"],
+        highlight_phrases: ["atenet", "elapsed > tick", "StatefulSets", "discrete turns"],
         points: [
-          "Substrate freezes process memory, never external wall clocks, leases, or OAuth expirations",
-          "Guardrail (?guard=true): detect elapsed > tick on wakeup to fence stale leases with 409 Conflict",
-          "Keep continuous consensus heartbeats on StatefulSets; run bursty wake-on-event actors on Substrate"
+          "Substrate freezes process RAM and CLOCK_MONOTONIC, never external wall clocks or leases",
+          "atenet parks incoming HTTP requests, wakes sleeping actors in ~100ms, and runs discrete turns",
+          "Guardrail (?guard=true) detects elapsed > tick on wake to fence stale leases and refresh tokens"
         ],
         columns: [
           {
-            heading: "Keep on StatefulSets & Deployments",
+            heading: "Why Raft Exploded (Heartbeat Daemons)",
             bullets: [
-              "Consensus voters (etcd, Raft) with continuous heartbeat leases",
-              "Always-on stream brokers and 100% duty-cycle 60Hz loops",
-              "Processes that assume unbroken monotonic wall-clock ticks"
+              "Assumes continuous 100ms ticks and unbroken leases",
+              "Freezing RAM pauses CLOCK_MONOTONIC while real time moves on",
+              "Keep etcd, Raft, and Kafka on Kubernetes StatefulSets"
             ]
           },
           {
-            heading: "Run on Agent Substrate Actors",
+            heading: "Piece #5: Turn-Driven Wake & Park",
             bullets: [
-              "Bursty wake-on-event sessions with high idle-to-active ratios",
-              "Isolated per-user sandboxes, warm caches, and stateful tools",
-              "Apps that check elapsed > tick on wakeup to fence stale leases"
+              "atenet parks HTTP bursts and wakes sleeping actors in ~100ms",
+              "Sleep at $0 for minutes or hours between discrete user turns",
+              "Check elapsed > tick (?guard=true) to fence expired leases"
             ]
           }
         ],
         demo_name: "Revisit Timewarp lab",
         demo_url: "https://timewarp.substrate.learngke.dev/dashboard",
-        substrate_features: ["Wakeup Guardrails (?guard=true)", "Lease Fencing (409 Conflict)", "Actor vs StatefulSet Boundaries"],
-        speaker_notes: "Never freeze continuous heartbeats. Check for wall-clock jumps on wakeup, and know what stays on StatefulSets versus Substrate. Now stack all five demos together for the punchline."
+        substrate_features: ["atenet Wake & Request Parking", "Wakeup Guardrails (?guard=true)", "Actor vs StatefulSet Boundaries"],
+        speaker_notes: "Pocket Piece #5: turn-driven wake-on-HTTP with request parking and clock-jump guardrails. Now let's put all five pieces we stole onto the table..."
       },
       {
         id: "slide-12",
         index: 12,
-        total: 12,
+        total: 15,
+        layout: "asd-puzzle",
+        kicker: "THE REBEL LOOT  •  ZERO AI SO FAR",
+        chapter: "Finale 1 • Rebel Loot",
+        badge: "5 PIECES STOLEN",
+        title: "Five Substrate features we grabbed for non-AI apps",
+        subtitle: "Put all five pieces from our rapid-fire demos on the board... wait, what shape is this?",
+        kind: "puzzle",
+        puzzle_stage: "loot",
+        puzzle_pieces: buildStaticPuzzlePieces("loot"),
+        highlight_phrases: ["Five Substrate features", "what shape is this?"],
+        points: [
+          "Piece 01 (Dungeon 2D): SNAPSHOT_FIDELITY_MEMORY, revert, and --tag branching",
+          "Piece 02 (Coldstart): ActorTemplate + wakeupProbe Golden Snapshots (~100ms clone)",
+          "Piece 03 (TenantDB): DurableDir /data micro-volumes and tiered suspend",
+          "Piece 04 (Honeypot): gVisor Sentry kernel sandbox and rootfs rewind",
+          "Piece 05 (Timewarp): Turn-driven atenet wake-on-HTTP, parking, and clock fencing"
+        ],
+        substrate_features: ["SNAPSHOT_FIDELITY_MEMORY", "Golden Snapshots", "DurableDir + gVisor + atenet"],
+        speaker_notes: "Pause here before the punchline! Read off the five non-agent features we just grabbed from Substrate. Point at the jigsaw board: look at those five pieces together... wait a second, what kind of workload needs all five of these at once?"
+      },
+      {
+        id: "slide-13",
+        index: 13,
+        total: 15,
+        layout: "asd-puzzle",
+        kicker: "THE EPIPHANY  •  FLIP THE PIECES OVER",
+        chapter: "Finale 2 • Epiphany",
+        badge: "WAIT A SECOND...",
+        title: "Hold on... every piece we stole is what an *agent* needs",
+        subtitle: "Flip our five rebel hacks over — they map 1-to-1 onto the hardest problems in agent infrastructure",
+        kind: "puzzle",
+        puzzle_stage: "epiphany",
+        puzzle_pieces: buildStaticPuzzlePieces("epiphany"),
+        highlight_phrases: ["*agent*", "1-to-1"],
+        points: [
+          "Working memory with undo & branching -> rollback bad tool calls and explore parallel plans",
+          "100ms warm toolchains -> Python, Node, browser, and repo indexes ready on Turn 1",
+          "Sleeping /workspace per user -> burst for 5 seconds, pay $0 while the human reads",
+          "Safe untrusted bash in gVisor -> survive prompt injection and hallucinated rm -rf",
+          "Turn-driven wake & clock fence -> sleep between turns and refresh expired tokens on wake"
+        ],
+        substrate_features: ["Agent Working Memory", "100ms Warm Toolchains", "Sandboxed Turn Execution"],
+        speaker_notes: "Have the epiphany live! Flip the 5 pieces over (and click any tile if you want to toggle it): a save-scumming gamer, a heavy search index, a sleeping workspace, a chaotic bash user, and a turn-driven lifecycle... that IS an AI agent! Now look at the four empty slots—what else do we need?"
+      },
+      {
+        id: "slide-14",
+        index: 14,
+        total: 15,
+        layout: "asd-puzzle",
+        kicker: "COMPLETE PUZZLE  •  SUBSTRATE + YOUR MODEL",
+        chapter: "Finale 3 • Complete",
+        badge: "PUZZLE COMPLETE",
+        title: "Add Substrate's security layer + a *model* = production agent",
+        subtitle: "All 8 outer pieces ship in Agent Substrate — drop your model & agent loop into the center",
+        kind: "puzzle",
+        puzzle_stage: "complete",
+        puzzle_pieces: buildStaticPuzzlePieces("complete"),
+        highlight_phrases: ["*model*", "All 8 outer pieces"],
+        points: [
+          "Also in Substrate: deny-by-default ActorEgressPolicy L7 & DNS outbound firewall",
+          "Also in Substrate: ate-secret:// MITM auth injects API keys outside gVisor (0 keys in GCS snapshots)",
+          "Also in Substrate: OpenFGA per-tenant AccessPolicy, SPIFFE mTLS, Kata microVMs & CSI volumes",
+          "Center keystone (you bring): frontier or open model + a 50-line tool/MCP agent loop"
+        ],
+        substrate_features: ["ActorEgressPolicy", "ate-secret:// MITM Secrets", "OpenFGA + microVM + Model"],
+        speaker_notes: "Snap the final four pieces into place! Three more pieces are ALREADY inside Agent Substrate—ActorEgressPolicy outbound firewall, ate-secret:// MITM credential injection so API keys never leak into GCS RAM dumps, and OpenFGA multi-tenant authz + microVM/CSI options. Drop your model and loop into the center, and you have a production agent!"
+      },
+      {
+        id: "slide-15",
+        index: 15,
+        total: 15,
         layout: "asd-closing",
-        kicker: "AGENT SUBSTRATE DAY  •  THE PUNCHLINE",
-        chapter: "Closer • Synthesis",
-        badge: "THE PUNCHLINE",
-        title: "Oops, we just built an AI agent by accident",
-        subtitle: "An AI agent is the first workload that needs every one of these systems superpowers at once",
+        kicker: "AGENT SUBSTRATE DAY  •  THANK YOU",
+        chapter: "Closer • Sign-off",
+        badge: "ATECON 2026",
+        title: "Come for the rebel hacks, stay for the *agents*",
+        subtitle: "All five demos, Kubernetes manifests, and this 15-actor slide deck are open source",
         kind: "closer",
         event_footer: "ATECon  •  Monday, November 9, 2026  •  Sky SLC",
-        highlight_phrases: ["AI agent", "systems superpowers"],
+        highlight_phrases: ["*agents*"],
         points: [
           "Dungeon 2D: working memory that checkpoints, reverts, and branches into parallel timelines",
           "Coldstart: heavy 12-second runtimes cloned in ~100ms from Golden Snapshots",
           "TenantDB: isolated per-user /data workspaces that burst for seconds, then sleep",
           "Honeypot: untrusted /bin/sh inside gVisor when someone inevitably hallucinates rm -rf",
-          "Timewarp: driven by discrete turn bursts — never continuous consensus heartbeats"
+          "Timewarp + Egress: turn-driven wakeups, ActorEgressPolicy, and ate-secret:// + your model"
         ],
         agenda_items: [
           { number: "01", topic: "Working memory with undo & branching", detail: "Dungeon 2D  •  SNAPSHOT_FIDELITY_MEMORY, revert, --tag" },
           { number: "02", topic: "Heavy runtimes cloned in ~100ms", detail: "Coldstart  •  ActorTemplate Golden Snapshots" },
           { number: "03", topic: "Isolated /data workspaces that sleep", detail: "TenantDB  •  DurableDir & tiered suspend" },
           { number: "04", topic: "Untrusted /bin/sh trapped in gVisor", detail: "Honeypot  •  Sandbox isolation & forensic rewind" },
-          { number: "05", topic: "Discrete turn bursts, zero heartbeats", detail: "Timewarp  •  Wake-on-event actor lifecycle" }
+          { number: "05", topic: "Turn wake + zero-trust + your model", detail: "Timewarp + Egress  •  atenet, ActorEgressPolicy & ate-secret://" }
         ],
         sign_off_lines: [
           "Mofi Rahman  •  Google Cloud Advocate",
@@ -1846,8 +2353,8 @@
         ],
         demo_name: "Explore repo & manifests on GitHub",
         demo_url: "https://github.com/moficodes/anything-but-agents",
-        substrate_features: ["Memory Checkpointing", "Golden Snapshots", "DurableDir Micro-Volumes", "gVisor Sandbox", "Wake-on-HTTP"],
-        speaker_notes: "Deliver the punchline: Substrate isn't for agents because someone slapped an AI label on Kubernetes. It is for agents because an agent is a save-scumming gamer, a heavy runtime, an idle workspace, and a chaotic shell user in a trench coat!"
+        substrate_features: ["Memory Checkpointing", "Golden Snapshots", "DurableDir Micro-Volumes", "gVisor + Egress MITM", "Wake-on-HTTP"],
+        speaker_notes: "Land the close: Agent Substrate isn't awesome for agents because someone slapped an AI sticker on Kubernetes—it's awesome because an agent is the first mainstream workload that needs all eight of those systems primitives at the same time. Thank you!"
       }
     ];
 
@@ -2027,8 +2534,365 @@
         code_filename: slideData.code_filename || fallback.code_filename,
         code_lines: (slideData.code_lines && slideData.code_lines.length) ? slideData.code_lines : fallback.code_lines,
         agenda_items: (slideData.agenda_items && slideData.agenda_items.length) ? slideData.agenda_items : fallback.agenda_items,
-        sign_off_lines: (slideData.sign_off_lines && slideData.sign_off_lines.length) ? slideData.sign_off_lines : fallback.sign_off_lines
+        sign_off_lines: (slideData.sign_off_lines && slideData.sign_off_lines.length) ? slideData.sign_off_lines : fallback.sign_off_lines,
+        puzzle_stage: slideData.puzzle_stage || fallback.puzzle_stage,
+        puzzle_pieces: (slideData.puzzle_pieces && slideData.puzzle_pieces.length) ? slideData.puzzle_pieces : fallback.puzzle_pieces
       });
+    }
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+
+    function svgEl(tag, attrs) {
+      const node = document.createElementNS(SVG_NS, tag);
+      if (attrs) {
+        Object.keys(attrs).forEach(k => node.setAttribute(k, String(attrs[k])));
+      }
+      return node;
+    }
+
+    function buildPuzzleIcon(kind) {
+      const svg = svgEl("svg", {
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2.1",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round"
+      });
+
+      if (kind === "shield") {
+        svg.appendChild(svgEl("path", { d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" }));
+        svg.appendChild(svgEl("path", { d: "m9 12 2 2 4-4" }));
+        return svg;
+      }
+
+      if (kind === "keystone") {
+        svg.appendChild(svgEl("rect", { x: "4", y: "4", width: "16", height: "16", rx: "2.5" }));
+        svg.appendChild(svgEl("rect", { x: "9", y: "9", width: "6", height: "6", rx: "1" }));
+        svg.appendChild(svgEl("path", { d: "M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 15h3M1 9h3M1 15h3" }));
+        return svg;
+      }
+
+      if (kind === "flip") {
+        svg.appendChild(svgEl("path", { d: "M3 12a9 9 0 0 1 15-6.7L21 8" }));
+        svg.appendChild(svgEl("path", { d: "M21 3v5h-5" }));
+        svg.appendChild(svgEl("path", { d: "M21 12a9 9 0 0 1-15 6.7L3 16" }));
+        svg.appendChild(svgEl("path", { d: "M3 21v-5h5" }));
+        return svg;
+      }
+
+      if (kind === "empty") {
+        svg.appendChild(svgEl("circle", { cx: "12", cy: "12", r: "9", "stroke-dasharray": "3.5 3" }));
+        svg.appendChild(svgEl("path", { d: "M9.6 9.4a2.6 2.6 0 0 1 4.8 1.2c0 1.6-2.4 2.1-2.4 3.4" }));
+        svg.appendChild(svgEl("circle", { cx: "12", cy: "17.2", r: "0.7", fill: "currentColor" }));
+        return svg;
+      }
+
+      // Default: jigsaw piece icon
+      svg.appendChild(svgEl("path", {
+        d: "M19.44 7.85c-.05.32.06.65.29.88l1.57 1.57c.47.47.7.99.7 1.7s-.23 1.23-.7 1.7l-1.61 1.61a.98.98 0 0 1-.84.28c-.47-.07-.8-.48-.97-.93a2.5 2.5 0 1 0-3.21 3.21c.45.17.86.5.93.97a.98.98 0 0 1-.28.84l-1.61 1.61a2.4 2.4 0 0 1-3.41 0l-1.57-1.57a1.03 1.03 0 0 0-.88-.29c-.49.07-.84.5-1.02.97a2.5 2.5 0 1 1-3.24-3.24c.46-.18.89-.53.97-1.02a1.03 1.03 0 0 0-.29-.88l-1.57-1.57a2.4 2.4 0 0 1 0-3.41L4.23 8.77c.24-.24.58-.35.92-.3.52.08.88.53 1.07 1.01a2.5 2.5 0 1 0 3.26-3.26c-.48-.2-.93-.56-1.01-1.07-.05-.34.06-.68.3-.92l1.53-1.53a2.4 2.4 0 0 1 3.41 0l1.57 1.57c.23.23.56.34.88.29.49-.07.84-.5 1.02-.97a2.5 2.5 0 1 1 3.24 3.24c-.46.18-.89.53-.98 1.02Z"
+      }));
+      return svg;
+    }
+
+    // Symmetric C1 cubic-Bezier jigsaw edge in fixed world-space units so forward and reverse paths match 100%
+    function appendJigsawEdge(x1, y1, x2, y2, kx, ky) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      const ux = dx / len;
+      const uy = dy / len;
+      const mx = (x1 + x2) * 0.5;
+      const my = (y1 + y2) * 0.5;
+
+      function pt(along, out) {
+        const px = mx + along * ux + out * kx;
+        const py = my + along * uy + out * ky;
+        return `${px.toFixed(2)} ${py.toFixed(2)}`;
+      }
+
+      return [
+        `L ${pt(-16, 0)}`,
+        `C ${pt(-8, 0)}, ${pt(-7, 0.16)}, ${pt(-9.5, 0.32)}`,
+        `C ${pt(-17, 0.80)}, ${pt(-11, 1.05)}, ${pt(0, 1.05)}`,
+        `C ${pt(11, 1.05)}, ${pt(17, 0.80)}, ${pt(9.5, 0.32)}`,
+        `C ${pt(7, 0.16)}, ${pt(8, 0)}, ${pt(16, 0)}`,
+        `L ${x2.toFixed(2)} ${y2.toFixed(2)}`
+      ].join(" ");
+    }
+
+    // 3x3 board (1200 x 438): center keystone (1,1) has 4 outward tabs locking into slots 1, 3, 5, and 7
+    const PUZZLE_H_SIGN = [
+      [1, -1, 1],
+      [-1, 1, -1]
+    ];
+    const PUZZLE_V_SIGN = [
+      [1, -1],
+      [-1, 1],
+      [1, -1]
+    ];
+
+    function buildJigsawCellPath(row, col) {
+      const W = 400;
+      const H = 146;
+      const K = 13;
+      const R = 14;
+      const x0 = col * W;
+      const x1 = (col + 1) * W;
+      const y0 = row * H;
+      const y1 = (row + 1) * H;
+
+      const tlRound = row === 0 && col === 0;
+      const trRound = row === 0 && col === 2;
+      const brRound = row === 2 && col === 2;
+      const blRound = row === 2 && col === 0;
+
+      const segs = [];
+      segs.push(tlRound ? `M ${x0 + R} ${y0}` : `M ${x0} ${y0}`);
+
+      // Top edge (x0 -> x1 at y0)
+      if (row === 0) {
+        segs.push(trRound ? `L ${x1 - R} ${y0} Q ${x1} ${y0} ${x1} ${y0 + R}` : `L ${x1} ${y0}`);
+      } else {
+        segs.push(appendJigsawEdge(x0, y0, x1, y0, 0, PUZZLE_H_SIGN[row - 1][col] * K));
+      }
+
+      // Right edge (y0 -> y1 at x1)
+      if (col === 2) {
+        segs.push(brRound ? `L ${x1} ${y1 - R} Q ${x1} ${y1} ${x1 - R} ${y1}` : `L ${x1} ${y1}`);
+      } else {
+        segs.push(appendJigsawEdge(x1, y0, x1, y1, PUZZLE_V_SIGN[row][col] * K, 0));
+      }
+
+      // Bottom edge (x1 -> x0 at y1)
+      if (row === 2) {
+        segs.push(blRound ? `L ${x0 + R} ${y1} Q ${x0} ${y1} ${x0} ${y1 - R}` : `L ${x0} ${y1}`);
+      } else {
+        segs.push(appendJigsawEdge(x1, y1, x0, y1, 0, PUZZLE_H_SIGN[row][col] * K));
+      }
+
+      // Left edge (y1 -> y0 at x0)
+      if (col === 0) {
+        segs.push(tlRound ? `L ${x0} ${y0 + R} Q ${x0} ${y0} ${x0 + R} ${y0}` : `L ${x0} ${y0}`);
+      } else {
+        segs.push(appendJigsawEdge(x0, y1, x0, y0, PUZZLE_V_SIGN[row][col - 1] * K, 0));
+      }
+
+      segs.push("Z");
+      return segs.join(" ");
+    }
+
+    function buildLegendItem(swatchClass, labelText) {
+      const item = el("span", "asd-pz-legend-item");
+      item.appendChild(el("span", `asd-pz-swatch ${swatchClass}`));
+      item.appendChild(document.createTextNode(labelText));
+      return item;
+    }
+
+    function renderPuzzleSlide(canvas, def, highlights) {
+      const stage = def.puzzle_stage || "loot";
+      const rawPieces = (def.puzzle_pieces && def.puzzle_pieces.length === 9)
+        ? def.puzzle_pieces
+        : buildStaticPuzzlePieces(stage);
+
+      const header = el("div", "asd-puzzle-header");
+      const topRow = el("div", "asd-puzzle-toprow");
+      topRow.appendChild(el("div", "asd-kicker", def.kicker || def.badge));
+
+      const legend = el("div", "asd-puzzle-legend");
+      legend.appendChild(buildLegendItem("asd-pz-swatch-rebel", "Rebel demo"));
+      legend.appendChild(buildLegendItem("asd-pz-swatch-demo", "Agent superpower"));
+      legend.appendChild(buildLegendItem("asd-pz-swatch-extra", "Also in Substrate"));
+      legend.appendChild(buildLegendItem("asd-pz-swatch-key", "You bring"));
+
+      const flipAllBtn = el("button", "asd-pz-flip-btn");
+      flipAllBtn.type = "button";
+      flipAllBtn.title = "Flip the 5 demo jigsaw pieces between non-AI Rebel and Agent Superpower faces";
+      flipAllBtn.appendChild(buildPuzzleIcon("flip"));
+      const flipBtnLabel = el("span", "", stage === "loot" ? "Preview agent flip" : "Flip 5 demo pieces");
+      flipAllBtn.appendChild(flipBtnLabel);
+      legend.appendChild(flipAllBtn);
+
+      topRow.appendChild(legend);
+      header.appendChild(topRow);
+
+      const h1 = el("h1", "asd-puzzle-title");
+      appendHighlightedText(h1, def.title, highlights);
+      header.appendChild(h1);
+
+      if (def.subtitle) {
+        const sub = el("p", "asd-puzzle-subtitle");
+        appendHighlightedText(sub, def.subtitle, highlights);
+        header.appendChild(sub);
+      }
+
+      const board = el("div", "asd-puzzle-board");
+      const svg = svgEl("svg", {
+        class: "asd-puzzle-svg",
+        viewBox: "-4 -4 1208 446",
+        preserveAspectRatio: "none"
+      });
+      const emptyLayer = svgEl("g");
+      const filledLayer = svgEl("g");
+      const keystoneLayer = svgEl("g");
+      svg.append(emptyLayer, filledLayer, keystoneLayer);
+
+      const grid = el("div", "asd-puzzle-grid");
+      const demoUpdaters = [];
+      let demoOrder = 0;
+
+      for (let slot = 0; slot < 9; slot++) {
+        const p = rawPieces.find(item => item.slot === slot) || rawPieces[slot];
+        const row = Math.floor(slot / 3);
+        const col = slot % 3;
+        const dPath = buildJigsawCellPath(row, col);
+
+        const pathNode = svgEl("path", { d: dPath });
+        const cell = el("div", "asd-puzzle-cell");
+
+        if (!p.filled) {
+          pathNode.setAttribute("class", "asd-jigsaw-piece asd-jigsaw-empty");
+          emptyLayer.appendChild(pathNode);
+
+          cell.classList.add("asd-puzzle-cell-empty");
+          const iconWrap = el("div", "asd-pz-empty-icon");
+          iconWrap.appendChild(buildPuzzleIcon("empty"));
+          cell.appendChild(iconWrap);
+          cell.appendChild(el("div", "asd-pz-empty-text", p.empty_label || "Missing piece"));
+          grid.appendChild(cell);
+          continue;
+        }
+
+        if (p.kind === "demo") {
+          let activeFace = p.face === "agent" ? "agent" : "rebel";
+          const myDemoIdx = demoOrder++;
+
+          cell.classList.add("asd-puzzle-cell-clickable");
+          cell.title = "Click to flip between Rebel Demo and Agent Superpower";
+
+          const head = el("div", "asd-pz-head");
+          const badgeEl = el("span", "");
+          badgeEl.appendChild(buildPuzzleIcon("puzzle"));
+          badgeEl.appendChild(document.createTextNode(p.badge || `PIECE ${p.code}`));
+          const hintEl = el("span", "asd-pz-flip-hint");
+          const hintLabel = el("span", "");
+          hintEl.append(hintLabel, buildPuzzleIcon("flip"));
+          head.append(badgeEl, hintEl);
+
+          const titleEl = el("div", "asd-pz-title");
+          const detailEl = el("div", "asd-pz-detail");
+          cell.append(head, titleEl, detailEl);
+
+          function syncDemoFace(animateFlip) {
+            const isAgent = activeFace === "agent";
+            let pathCls = `asd-jigsaw-piece ${isAgent ? "asd-jigsaw-agent" : "asd-jigsaw-rebel"}`;
+            if (animateFlip) {
+              pathCls += " asd-pz-snap-anim";
+            }
+            pathNode.setAttribute("class", pathCls);
+            badgeEl.className = `asd-pz-badge ${isAgent ? "asd-pz-badge-agent" : "asd-pz-badge-rebel"}`;
+            hintLabel.textContent = isAgent ? "agent" : "rebel";
+            titleEl.textContent = isAgent ? p.agent_title : p.rebel_title;
+            detailEl.textContent = isAgent ? p.agent_detail : p.rebel_detail;
+          }
+
+          syncDemoFace(stage === "epiphany");
+          if (stage === "epiphany") {
+            const delay = `${(myDemoIdx * 0.045).toFixed(3)}s`;
+            pathNode.style.animationDelay = delay;
+            cell.classList.add("asd-pz-snap-anim");
+            cell.style.animationDelay = delay;
+          }
+
+          cell.addEventListener("click", () => {
+            activeFace = activeFace === "agent" ? "rebel" : "agent";
+            pathNode.style.animationDelay = "0s";
+            syncDemoFace(false);
+          });
+
+          demoUpdaters.push({
+            getFace: () => activeFace,
+            setFace: (nextFace) => {
+              activeFace = nextFace;
+              pathNode.style.animationDelay = "0s";
+              syncDemoFace(false);
+            }
+          });
+
+          filledLayer.appendChild(pathNode);
+          grid.appendChild(cell);
+          continue;
+        }
+
+        if (p.kind === "keystone" || p.kind === "model") {
+          let pathCls = "asd-jigsaw-piece asd-jigsaw-keystone";
+          if (stage === "complete") {
+            pathCls += " asd-pz-snap-anim";
+            pathNode.style.animationDelay = "0.24s";
+            cell.classList.add("asd-pz-snap-anim");
+            cell.style.animationDelay = "0.24s";
+          }
+          pathNode.setAttribute("class", pathCls);
+          keystoneLayer.appendChild(pathNode);
+
+          const head = el("div", "asd-pz-head");
+          const badgeEl = el("span", "asd-pz-badge asd-pz-badge-keystone");
+          badgeEl.appendChild(buildPuzzleIcon("keystone"));
+          badgeEl.appendChild(document.createTextNode(p.badge || "YOU BRING THIS"));
+          head.appendChild(badgeEl);
+
+          const titleEl = el("div", "asd-pz-title", p.agent_title);
+          const detailEl = el("div", "asd-pz-detail", p.agent_detail);
+          cell.append(head, titleEl, detailEl);
+          grid.appendChild(cell);
+          continue;
+        }
+
+        // kind === "substrate" ("ALSO IN SUBSTRATE")
+        let pathCls = "asd-jigsaw-piece asd-jigsaw-extra";
+        if (stage === "complete") {
+          const extraIdx = Math.max(0, slot - 6);
+          const delay = `${(0.04 + extraIdx * 0.06).toFixed(2)}s`;
+          pathCls += " asd-pz-snap-anim";
+          pathNode.style.animationDelay = delay;
+          cell.classList.add("asd-pz-snap-anim");
+          cell.style.animationDelay = delay;
+        }
+        pathNode.setAttribute("class", pathCls);
+        filledLayer.appendChild(pathNode);
+
+        const head = el("div", "asd-pz-head");
+        const badgeEl = el("span", "asd-pz-badge asd-pz-badge-extra");
+        badgeEl.appendChild(buildPuzzleIcon("shield"));
+        badgeEl.appendChild(document.createTextNode(p.badge || "ALSO IN SUBSTRATE"));
+        head.appendChild(badgeEl);
+
+        const titleEl = el("div", "asd-pz-title", p.agent_title);
+        const detailEl = el("div", "asd-pz-detail", p.agent_detail);
+        cell.append(head, titleEl, detailEl);
+        grid.appendChild(cell);
+      }
+
+      flipAllBtn.addEventListener("click", (e) => {
+        const allAgent = demoUpdaters.every(u => u.getFace() === "agent");
+        const targetFace = allAgent ? "rebel" : "agent";
+        demoUpdaters.forEach(u => u.setFace(targetFace));
+        flipBtnLabel.textContent = targetFace === "agent" ? "Show rebel faces" : "Flip to agent faces";
+        if (e.currentTarget && typeof e.currentTarget.blur === "function") {
+          e.currentTarget.blur();
+        }
+      });
+
+      board.append(svg, grid);
+
+      const bottomWrap = el("div", "");
+      bottomWrap.style.display = "flex";
+      bottomWrap.style.flexDirection = "column";
+      bottomWrap.style.gap = "0.6cqw";
+      bottomWrap.appendChild(buildLiveNoteBanner(def.notes));
+      bottomWrap.appendChild(buildFooter(def, false));
+
+      canvas.append(header, board, bottomWrap);
     }
 
     // Render Official Agent Substrate Day Slide Layout
@@ -2046,6 +2910,11 @@
       const canvas = document.getElementById("slideCanvasInner");
       canvas.replaceChildren();
       const highlights = def.highlight_phrases || [];
+
+      if (layout === "asd-puzzle") {
+        renderPuzzleSlide(canvas, def, highlights);
+        return;
+      }
 
       if (layout === "asd-title" || layout === "asd-demo") {
         const topSpacer = el("div", "");

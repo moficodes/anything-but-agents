@@ -52,13 +52,14 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 ### Demo 0: "Slides on Substrate" — The Presentation Deck as gVisor Actors (`cmd/slides`)
 
 * **Why this demo:**
-  Instead of presenting from static Google Slides or Keynote, what if **every individual slide in the 20-minute talk (`slide-01` .. `slide-12`) is its own gVisor-sandboxed Linux container (`Actor`) sleeping in GCS**, sharing the exact same 3-pod `WorkerPool` as the other 5 live demos?
+  Instead of presenting from static Google Slides or Keynote, what if **every individual slide in the 20-minute talk (`slide-01` .. `slide-15`) is its own gVisor-sandboxed Linux container (`Actor`) sleeping in GCS**, sharing the exact same 3-pod `WorkerPool` as the other 5 live demos?
 * **Why this demo specifically:**
   Pressing `→` wakes the next slide's actor over `atenet-router` in ~90ms, increments its Go heap view counter, serves the slide definition and presenter scratchpad, and immediately suspends the previous slide actor back to GCS (`--mode=async`). This leaves `0/3` worker pods occupied while the presenter speaks or switches browser tabs to run the 5 live demos!
 * **What do we learn:**
   1. Per-slide in-memory state: Each slide actor holds its own `view_count`, `pod_ip_history`, and live presenter scratchpad notes directly in Go heap RAM (`SNAPSHOT_FIDELITY_MEMORY`).
   2. Live memory rollback: Editing the scratchpad note and clicking **Revert Memory** runs `kubectl ate revert actor`, rewinding process RAM to its previous snapshot.
-  3. Auditorium ergonomics: Follows the **Agent Substrate Day (`ATECon`) Speaker Template** (`#07090D` + `#56FD5A` Substrate Green palette, embedded concentric orbital arc backgrounds, official octopus mascot, `Ubuntu` & `Ubuntu Mono` typography, and sentence-case layout archetypes), with a top-right icon-only Moon/Sun **Projector Light Mode** toggle (zero layout shift), **Heap RAM (`M`)** scratchpad popover, speaker notes drawer (`N`), slide grid overview (`G`), cross-subdomain Google Sign-In + **Sign out**, and a 1.5-second pre-bundled offline cache fallback so projector screens never blank during conference Wi-Fi hiccups.
+  3. Interactive `3×3` Jigsaw Finale (`asd-puzzle`): Slides `12–14` assemble the 5 non-AI demo primitives (`slide-12` Rebel Loot), flip each tile to its AI agent superpower (`slide-13` Epiphany), and snap in the 3 remaining Agent Substrate security/platform pieces (`ActorEgressPolicy`, `ate-secret://`, `OpenFGA` + `microVM`/CSI) around the `Model + agent loop` centerpiece (`slide-14`) before the closing slide (`slide-15`).
+  4. Auditorium ergonomics: Follows the **Agent Substrate Day (`ATECon`) Speaker Template** (`#07090D` + `#56FD5A` Substrate Green palette, embedded concentric orbital arc backgrounds, official octopus mascot, `Ubuntu` & `Ubuntu Mono` typography, and sentence-case layout archetypes), with a top-right icon-only Moon/Sun **Projector Light Mode** toggle (zero layout shift), **Heap RAM (`M`)** scratchpad popover, speaker notes drawer (`N`), slide grid overview (`G`), cross-subdomain Google Sign-In + **Sign out**, and a 1.5-second pre-bundled offline cache fallback so projector screens never blank during conference Wi-Fi hiccups.
 
 ---
 
