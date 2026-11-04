@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/moficodes/anything-but-agents/internal/presenterauth"
 )
 
 func decodeOptionalJSON(r *http.Request, dst any) error {
@@ -39,8 +41,16 @@ func decodeOptionalJSON(r *http.Request, dst any) error {
 //go:embed web/*.html
 var webFS embed.FS
 
+const (
+	// PresenterCookieName is the HttpOnly cookie set when unlocking the Honeypot UI via ?key=<PRESENTER_TOKEN>.
+	PresenterCookieName = "hp_presenter"
+	// PresenterHeaderName carries the presenter token for CLI scripts and tests.
+	PresenterHeaderName = presenterauth.PresenterHeaderName
+)
+
 type GatewayServer struct {
-	backend HoneypotBackend
+	backend  HoneypotBackend
+	authGate *presenterauth.Gate
 }
 
 type GatewayActionResponse struct {
@@ -54,8 +64,25 @@ type GatewayActionResponse struct {
 	Actors           []ActorTrackerState    `json:"actors"`
 }
 
-func NewGatewayServer(backend HoneypotBackend) *GatewayServer {
-	return &GatewayServer{backend: backend}
+func NewGatewayServer(backend HoneypotBackend, presenterTokens ...string) *GatewayServer {
+	var token string
+	if len(presenterTokens) > 0 {
+		token = strings.TrimSpace(presenterTokens[0])
+	}
+	return &GatewayServer{
+		backend: backend,
+		authGate: presenterauth.NewGate(presenterauth.GateConfig{
+			Title:            "Demo 4: Truman Show Honeypot & SOC Booth",
+			Subtitle:         "Sign in with an authorized Google Workspace or event account to access the per-attacker gVisor sandbox shell and SOC forensics controls.",
+			SecretName:       "honeypot-gateway",
+			LegacyCookieName: PresenterCookieName,
+			PresenterToken:   token,
+		}),
+	}
+}
+
+func (g *GatewayServer) PresenterKey() string {
+	return g.authGate.PresenterKey()
 }
 
 func shouldAutoCheckpoint(cmd string, forensics *ForensicsResponse) (bool, string) {
@@ -120,13 +147,14 @@ func (g *GatewayServer) buildActionResponse(r *http.Request, actorName string, a
 
 func (g *GatewayServer) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
+	g.authGate.RegisterRoutes(mux)
 
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
-	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/state", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		actorName := r.URL.Query().Get("actor")
 		if actorName == "" {
 			actorName = "honeypot-203-0-113-5"
@@ -150,9 +178,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		resp := g.buildActionResponse(r, actorName, false, "", nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/api/attacker/exec", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/attacker/exec", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -188,9 +216,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 
 		resp := g.buildActionResponse(r, req.ActorName, autoSaved, saveReason, shellResp, forensicsResp)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/api/soc/save", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/soc/save", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -213,12 +241,12 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		forensics, _ := g.backend.GetForensics(r.Context(), req.ActorName)
+		forensics, _ := g.backend.GetForensics(r.Context(), actorNameOrDefault(req.ActorName))
 		resp := g.buildActionResponse(r, req.ActorName, true, req.Reason, nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/api/soc/suspend", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/soc/suspend", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -239,9 +267,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		resp := g.buildActionResponse(r, req.ActorName, false, "Suspended to GCS ($0/hr idle compute)", nil, nil)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/api/soc/revert", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/soc/revert", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -264,9 +292,9 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		resp := g.buildActionResponse(r, req.ActorName, false, "Reverted to pre-wipe snapshot", nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/api/soc/clone", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/soc/clone", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -296,17 +324,31 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		resp := g.buildActionResponse(r, req.NewActor, false, "Cloned live sandbox via tag "+req.TagName, nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
-	})
+	}))
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	serveUI := func(w http.ResponseWriter, r *http.Request) {
+		if g.authGate.HandleUnlockOrGate(w, r, "/") {
+			return
+		}
 		data, err := webFS.ReadFile("web/index.html")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		_, _ = w.Write(data)
-	})
+	}
+	mux.HandleFunc("/dashboard", serveUI)
+	mux.HandleFunc("/", serveUI)
 
 	return mux
+}
+
+func actorNameOrDefault(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "honeypot-203-0-113-5"
+	}
+	return name
 }

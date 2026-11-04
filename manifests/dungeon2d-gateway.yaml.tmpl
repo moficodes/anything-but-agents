@@ -84,6 +84,8 @@ spec:
     metadata:
       labels:
         app: dungeon2d-gateway
+      annotations:
+        anything-but-agents.dev/presenter-auth-hash: "${PRESENTER_AUTH_HASH}"
     spec:
       serviceAccountName: dungeon2d-gateway
       initContainers:
@@ -106,6 +108,13 @@ spec:
         - --ate-endpoint=api.ate-system.svc:443
         - --kubectl-ate-bin=/tools/kubectl-ate
         - --public-url=https://dungeon.${DEMO_DOMAIN}
+        envFrom:
+        - configMapRef:
+            name: presenter-auth
+            optional: true
+        - secretRef:
+            name: presenter-auth
+            optional: true
         env:
         - name: PRESENTER_TOKEN
           valueFrom:

@@ -732,11 +732,14 @@ func (c *ClusterAteBackend) runAte(ctx context.Context, args ...string) ([]byte,
 	}
 	fullArgs = append(fullArgs, args...)
 	cmd := exec.CommandContext(ctx, c.kubectlAte, fullArgs...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, fmt.Errorf("kubectl-ate %v failed: %w (%s)", args, err, strings.TrimSpace(string(out)))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		combined := strings.TrimSpace(stderr.String() + "\n" + stdout.String())
+		return stdout.Bytes(), fmt.Errorf("kubectl-ate %v failed: %w (%s)", args, err, combined)
 	}
-	return out, nil
+	return stdout.Bytes(), nil
 }
 
 func (c *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor string) {
@@ -817,6 +820,7 @@ func (c *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 			} `json:"externalSnapshot"`
 			Snapshots []struct {
 				DurableSnapshot struct {
+					State  string `json:"state"`
 					Object struct {
 						SnapshotURI string `json:"snapshotUri"`
 					} `json:"object"`
@@ -838,7 +842,7 @@ func (c *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 	}
 	uri := parsed.Status.ExternalSnapshot.SnapshotURI
 	for _, s := range parsed.Status.Snapshots {
-		if s.DurableSnapshot.Object.SnapshotURI != "" {
+		if (s.DurableSnapshot.State == "" || s.DurableSnapshot.State == "SNAPSHOT_STORAGE_STATE_COMPLETED") && s.DurableSnapshot.Object.SnapshotURI != "" {
 			uri = s.DurableSnapshot.Object.SnapshotURI
 		}
 	}
@@ -1355,6 +1359,7 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 					} `json:"externalSnapshot"`
 					Snapshots []struct {
 						DurableSnapshot struct {
+							State  string `json:"state"`
 							Object struct {
 								SnapshotURI string `json:"snapshotUri"`
 							} `json:"object"`
@@ -1385,7 +1390,7 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 				rec.State = a.Status.State
 				uri := a.Status.ExternalSnapshot.SnapshotURI
 				for _, s := range a.Status.Snapshots {
-					if s.DurableSnapshot.Object.SnapshotURI != "" {
+					if (s.DurableSnapshot.State == "" || s.DurableSnapshot.State == "SNAPSHOT_STORAGE_STATE_COMPLETED") && s.DurableSnapshot.Object.SnapshotURI != "" {
 						uri = s.DurableSnapshot.Object.SnapshotURI
 					}
 				}

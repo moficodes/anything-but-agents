@@ -598,7 +598,7 @@ func (e *WarmHeapEngine) HandleSearchQuery(query string, overlaySymbol string, p
 		"cold_boot_duration_ms":     e.ColdBootDuration.Milliseconds(),
 		"cold_boot_completed_at":    e.ColdBootCompletedAt.Format(time.RFC3339Nano),
 		"served_at":                 time.Now().UTC().Format(time.RFC3339Nano),
-		"time_since_golden_boot_s":  fmt.Sprintf("%.1fs", time.Since(e.ColdBootCompletedAt).Seconds()),
+		"time_since_golden_boot_s":  fmt.Sprintf("%.1fs", time.Now().Round(0).Sub(e.ColdBootCompletedAt.Round(0)).Seconds()),
 		"docs_indexed":              len(e.docs),
 		"tokens_indexed":            len(e.tokenIndex),
 		"trigrams_indexed":          len(e.trigramIndex),

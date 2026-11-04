@@ -738,6 +738,10 @@
         <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
         Player View (/play)
       </a>
+      <button id="btnLogout" type="button" class="btn" title="Sign out" aria-label="Sign out">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        Sign out
+      </button>
       <div class="theme-seg stone-socket" title="Projector Light / Dark Mode">
         <button id="btnDarkMode" class="theme-seg-btn active" onclick="toggleLightMode(false)" aria-label="Dark Mode">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
@@ -1163,5 +1167,6 @@
     refreshState();
     setInterval(refreshState, 1200);
   </script>
+  <script src="/api/auth/presenter.js" defer></script>
 </body>
 </html>

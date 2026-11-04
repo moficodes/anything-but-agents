@@ -380,4 +380,60 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 	}
 }
 
+func TestHoneypotGatewayPresenterAuthAndGoogleGate(t *testing.T) {
+	t.Setenv("ALLOWED_GOOGLE_DOMAINS", "google.com,event.goog")
+	t.Setenv("GOOGLE_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	gw := NewGatewayServer(backend, "hp-secret-token")
+	mux := gw.Mux()
+
+	// 1. Unauthenticated / and /api/state return 401
+	unauthRec := httptest.NewRecorder()
+	mux.ServeHTTP(unauthRec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if unauthRec.Code != http.StatusUnauthorized || !strings.Contains(unauthRec.Body.String(), "Presenter Sign-In Required") {
+		t.Fatalf("expected 401 Google Sign-In Gate on unauthenticated /, got %d", unauthRec.Code)
+	}
+	if !strings.Contains(unauthRec.Body.String(), "@google.com") || !strings.Contains(unauthRec.Body.String(), "@event.goog") {
+		t.Fatalf("expected allowed Google domains in gate HTML")
+	}
+
+	unauthAPIRec := httptest.NewRecorder()
+	mux.ServeHTTP(unauthAPIRec, httptest.NewRequest(http.MethodGet, "/api/state", nil))
+	if unauthAPIRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on unauthenticated /api/state, got %d", unauthAPIRec.Code)
+	}
+
+	// 2. ?key= unlocks session cookie and redirects (303) to /
+	unlockRec := httptest.NewRecorder()
+	mux.ServeHTTP(unlockRec, httptest.NewRequest(http.MethodGet, "/?key=hp-secret-token", nil))
+	if unlockRec.Code != http.StatusSeeOther || unlockRec.Header().Get("Location") != "/" {
+		t.Fatalf("expected 303 redirect to /, got %d (%q)", unlockRec.Code, unlockRec.Header().Get("Location"))
+	}
+	cookies := unlockRec.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Name != PresenterCookieName {
+		t.Fatalf("expected %s cookie at cookies[0], got %+v", PresenterCookieName, cookies)
+	}
+
+	// 3. Cookie unlocks UI and X-Presenter-Key unlocks API
+	uiReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range cookies {
+		uiReq.AddCookie(c)
+	}
+	uiRec := httptest.NewRecorder()
+	mux.ServeHTTP(uiRec, uiReq)
+	if uiRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK with session cookie, got %d", uiRec.Code)
+	}
+
+	apiReq := httptest.NewRequest(http.MethodGet, "/api/state", nil)
+	apiReq.Header.Set(PresenterHeaderName, "hp-secret-token")
+	apiRec := httptest.NewRecorder()
+	mux.ServeHTTP(apiRec, apiReq)
+	if apiRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on /api/state with X-Presenter-Key, got %d", apiRec.Code)
+	}
+}
+
+
 

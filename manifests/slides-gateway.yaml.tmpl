@@ -1,0 +1,165 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Demo 0: Slides on Substrate — In-cluster Gateway & Live Presentation Deck
+# Deployment and LoadBalancer Service.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slides-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: slides-gateway-ate-client
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["clustertrustbundles"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: slides-gateway-ate-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: slides-gateway-ate-client
+subjects:
+- kind: ServiceAccount
+  name: slides-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: slides-gateway-token-minter
+  namespace: ate-system
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  resourceNames: ["ate-client"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: slides-gateway-token-minter
+  namespace: ate-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: slides-gateway-token-minter
+subjects:
+- kind: ServiceAccount
+  name: slides-gateway
+  namespace: anything-but-agents
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slides-gateway
+  namespace: anything-but-agents
+  labels:
+    app: slides-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slides-gateway
+  template:
+    metadata:
+      labels:
+        app: slides-gateway
+      annotations:
+        anything-but-agents.dev/presenter-auth-hash: "${PRESENTER_AUTH_HASH}"
+    spec:
+      serviceAccountName: slides-gateway
+      initContainers:
+      - name: copy-kubectl-ate
+        image: ${KUBECTL_ATE_IMAGE}
+        command: ["/bin/cp", "/ko-app/kubectl-ate", "/tools/kubectl-ate"]
+        volumeMounts:
+        - name: tools
+          mountPath: /tools
+      containers:
+      - name: gateway
+        image: ko://github.com/moficodes/anything-but-agents/cmd/slides
+        command:
+        - /ko-app/slides
+        - --mode=gateway
+        - --addr=:8080
+        - --atespace=anything-but-agents
+        - --template=slides
+        - --router-url=https://atenet-router.ate-system.svc:443
+        - --ate-endpoint=api.ate-system.svc:443
+        - --kubectl-ate-bin=/tools/kubectl-ate
+        envFrom:
+        - configMapRef:
+            name: presenter-auth
+            optional: true
+        - secretRef:
+            name: presenter-auth
+            optional: true
+        env:
+        - name: PRESENTER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slides-gateway
+              key: PRESENTER_TOKEN
+              optional: true
+        volumeMounts:
+        - name: tools
+          mountPath: /tools
+        - name: router-client
+          mountPath: /run/router-client
+          readOnly: true
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+      volumes:
+      - name: tools
+        emptyDir: {}
+      - name: router-client
+        projected:
+          sources:
+          - podCertificate:
+              signerName: podidentity.podcert.ate.dev/identity
+              keyType: ECDSAP256
+              credentialBundlePath: credential-bundle.pem
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: trust-bundle.pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slides-gateway
+  namespace: anything-but-agents
+spec:
+  type: LoadBalancer
+  selector:
+    app: slides-gateway
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

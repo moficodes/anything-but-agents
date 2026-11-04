@@ -13,7 +13,9 @@
 # limitations under the License.
 
 # Global External Application Load Balancer (GKE Gateway API) with Google Cloud
-# Certificate Manager wildcard TLS for all 5 interactive demos:
+# Certificate Manager TLS for all 5 interactive demos + Demo 0 slides:
+#   - https://${SLIDES_DOMAIN}         -> svc/slides-gateway:80
+#   - https://slides.${DEMO_DOMAIN}    -> svc/slides-gateway:80
 #   - https://dungeon.${DEMO_DOMAIN}   -> svc/dungeon2d-gateway:80
 #   - https://coldstart.${DEMO_DOMAIN} -> svc/coldstart-gateway:80
 #   - https://tenantdb.${DEMO_DOMAIN}  -> svc/tenantdb-gateway:80
@@ -60,6 +62,23 @@ spec:
       requestRedirect:
         scheme: https
         statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: slides-https-route
+  namespace: anything-but-agents
+spec:
+  parentRefs:
+  - name: anything-but-agents-gateway
+    sectionName: https
+  hostnames:
+  - "${SLIDES_DOMAIN}"
+  - "slides.${DEMO_DOMAIN}"
+  rules:
+  - backendRefs:
+    - name: slides-gateway
+      port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -140,6 +159,27 @@ spec:
   - backendRefs:
     - name: timewarp-gateway
       port: 80
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: slides-gateway-healthcheck
+  namespace: anything-but-agents
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_SERVING_PORT
+        requestPath: /readyz
+  targetRef:
+    group: ""
+    kind: Service
+    name: slides-gateway
 ---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy

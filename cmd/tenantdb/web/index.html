@@ -800,6 +800,14 @@
           </svg>
           <span>Reset 4 Customer DBs</span>
         </button>
+        <button id="btnLogout" type="button" class="reset-btn" title="Sign out" aria-label="Sign out">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Sign out</span>
+        </button>
         <!-- Segmented icon-only Moon/Sun Projector Light Mode Toggle -->
         <div class="theme-toggle" role="group" aria-label="Theme Toggle">
           <button type="button" id="theme-toggle-dark" class="theme-btn active" title="Dark Mode" aria-label="Dark Mode">
@@ -1055,7 +1063,7 @@
                 Physically destroys this customer's compute sandbox, RAM checkpoints, and <code>/data</code> volume in 1 command without touching sibling tenants:
               </div>
               <button type="button" class="action-btn btn-gdpr" onclick="gdprDeleteSelectedTenant()">
-                <span id="gdpr-btn-label">kubectl ate delete actor db-acme --any-state</span>
+                <span id="gdpr-btn-label">kubectl ate delete actor db-acme</span>
               </button>
               <div class="receipt-box" id="gdpr-receipt-box" style="display: none;"></div>
             </div>
@@ -1236,7 +1244,7 @@
       document.getElementById('suspend-btn-label').textContent =
         `kubectl ate suspend actor ${tenant.actor_name} (DATA Scope)`;
       document.getElementById('gdpr-btn-label').textContent =
-        `kubectl ate delete actor ${tenant.actor_name} --any-state`;
+        `kubectl ate delete actor ${tenant.actor_name}`;
 
       const snap = tenant.last_snapshot;
       const banner = document.getElementById('recovery-banner');
@@ -1381,5 +1389,6 @@
 
     refreshState();
   </script>
+  <script src="/api/auth/presenter.js" defer></script>
 </body>
 </html>

@@ -365,4 +365,49 @@ func TestInteractiveDoubleSpendVaultAndForkedRaftLog(t *testing.T) {
 	}
 }
 
+func TestTimeWarpGatewayPresenterAuthAndGoogleGate(t *testing.T) {
+	t.Setenv("ALLOWED_GOOGLE_DOMAINS", "google.com,cloud-demos.goog")
+	t.Setenv("GOOGLE_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+
+	backend := NewLocalSimulatorBackend("anything-but-agents", "timewarp")
+	gw := NewGatewayServer(backend, "tw-secret-token")
+	mux := gw.Mux()
+
+	unauthRec := httptest.NewRecorder()
+	mux.ServeHTTP(unauthRec, httptest.NewRequest(http.MethodGet, "/dashboard", nil))
+	if unauthRec.Code != http.StatusUnauthorized || !strings.Contains(unauthRec.Body.String(), "Presenter Sign-In Required") {
+		t.Fatalf("expected 401 Google Sign-In Gate on unauthenticated /dashboard, got %d", unauthRec.Code)
+	}
+	if !strings.Contains(unauthRec.Body.String(), "@cloud-demos.goog") {
+		t.Fatalf("expected @cloud-demos.goog chip in gate HTML")
+	}
+
+	unauthAPIRec := httptest.NewRecorder()
+	mux.ServeHTTP(unauthAPIRec, httptest.NewRequest(http.MethodGet, "/api/state", nil))
+	if unauthAPIRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on unauthenticated /api/state, got %d", unauthAPIRec.Code)
+	}
+
+	unlockRec := httptest.NewRecorder()
+	mux.ServeHTTP(unlockRec, httptest.NewRequest(http.MethodGet, "/dashboard?key=tw-secret-token", nil))
+	if unlockRec.Code != http.StatusSeeOther || unlockRec.Header().Get("Location") != "/dashboard" {
+		t.Fatalf("expected 303 redirect to /dashboard, got %d (%q)", unlockRec.Code, unlockRec.Header().Get("Location"))
+	}
+	cookies := unlockRec.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Name != PresenterCookieName {
+		t.Fatalf("expected %s cookie at cookies[0], got %+v", PresenterCookieName, cookies)
+	}
+
+	dashReq := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	for _, c := range cookies {
+		dashReq.AddCookie(c)
+	}
+	dashRec := httptest.NewRecorder()
+	mux.ServeHTTP(dashRec, dashReq)
+	if dashRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on /dashboard with cookie, got %d", dashRec.Code)
+	}
+}
+
+
 

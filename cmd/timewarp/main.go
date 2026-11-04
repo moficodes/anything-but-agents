@@ -33,6 +33,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/moficodes/anything-but-agents/internal/presenterauth"
 )
 
 func main() {
@@ -43,6 +45,7 @@ func main() {
 	routerURL := flag.String("router-url", "http://localhost:8000", "atenet-router HTTP URL")
 	ateEndpoint := flag.String("ate-endpoint", "", "Optional ate-api-server gRPC endpoint override for kubectl-ate")
 	kubectlAteBin := flag.String("kubectl-ate-bin", "kubectl-ate", "Path to kubectl-ate binary")
+	presenterToken := flag.String("presenter-token", os.Getenv("PRESENTER_TOKEN"), "Presenter token for /dashboard & APIs (defaults to PRESENTER_TOKEN env var or random key)")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -68,21 +71,37 @@ func main() {
 		}
 
 	case "gateway":
+		token := *presenterToken
+		if token == "" {
+			token = presenterauth.RandomToken(24)
+		}
 		backend := NewClusterAteBackend(*atespace, *template, *routerURL, *ateEndpoint, *kubectlAteBin)
-		gw := NewGatewayServer(backend)
+		gw := NewGatewayServer(backend, token)
 		slog.Info("Starting Time-Warp Split-Brain & Dual-Clock Lab Gateway (cluster-ate mode)",
 			slog.String("addr", *addr),
 			slog.String("atespace", *atespace),
 			slog.String("router_url", *routerURL))
+		if *presenterToken == "" {
+			slog.Info("PRESENTER_TOKEN is unset; generated presenter key for /dashboard",
+				slog.String("dashboard_url", "/dashboard?key="+gw.PresenterKey()))
+		}
 		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
 			slog.Error("Gateway server exited", slog.Any("err", err))
 			os.Exit(1)
 		}
 
 	case "local":
+		token := *presenterToken
+		if token == "" {
+			token = presenterauth.RandomToken(24)
+		}
 		backend := NewLocalSimulatorBackend(*atespace, *template)
-		gw := NewGatewayServer(backend)
+		gw := NewGatewayServer(backend, token)
 		slog.Info("Starting Time-Warp Split-Brain & Dual-Clock Lab Gateway (local simulator mode)", slog.String("addr", *addr))
+		if *presenterToken == "" {
+			slog.Info("PRESENTER_TOKEN is unset; generated presenter key for /dashboard",
+				slog.String("dashboard_url", "/dashboard?key="+gw.PresenterKey()))
+		}
 		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
 			slog.Error("Local gateway server exited", slog.Any("err", err))
 			os.Exit(1)

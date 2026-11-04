@@ -10,14 +10,19 @@ If you strip the word **"Agent"** out of Agent Substrate, you have a **Kubernete
 
 ```text
 cmd/
+  slides/      # Demo 0: "Slides on Substrate" — Presentation deck where every slide is an actor sleeping in GCS
   dungeon/     # Demo 1: "Look Ma, No Database" — Zork-style RPG in pure Go heap RAM (+ revert/tag save-scumming)
   dungeon2d/   # Demo 1B: "Save-Scumming the Heap Dragon (2D Edition)" — PixiJS v8 8-floor action roguelike + Live Mission-Control Dashboard
   coldstart/   # Demo 2: "The Instant Cloner & Production HPA QPS Race" — 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
   tenantdb/    # Demo 3: "One DB Per Customer" — Per-tenant embedded DB (DurableDir + 16MB Buffer Pool) + Storage X-Ray Console
   honeypot/    # Demo 4: "The Truman Show Honeypot" — Per-attacker-IP gVisor sandbox + Split-Screen SOC Director's Booth UI
   timewarp/    # Demo 5: "Don't Try This at Home" — Wall-clock time-jump shock & Raft split-brain anti-pattern
+internal/
+  presenterauth/ # Shared zero-dependency Google Sign-In (ALLOWED_GOOGLE_DOMAINS) + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
   workerpool.yaml.tmpl          # Shared 3-worker gVisor WorkerPool (`anything-but-agents`)
+  slides-template.yaml.tmpl     # ActorTemplate for presentation deck slides (FULL pause, FULL commit)
+  slides-gateway.yaml.tmpl      # K8s Deployment + LoadBalancer Service for presentation deck web UI
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
   dungeon2d-template.yaml.tmpl  # ActorTemplate for 2D multilevel dungeon actors (FULL pause, FULL commit)
   dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phone QR access
@@ -33,7 +38,7 @@ manifests/
 hack/
   stage-demo.sh                 # Interactive live-stage deployer & act-by-act demo runner
 docs/
-  talk-outline.md               # Full 4-act slide-by-slide outline, speaker notes & decision matrix
+  talk-outline.md               # 20-min show-don't-tell talk flow, feature cheat sheet & Q&A notes
 ```
 
 ---
@@ -41,6 +46,19 @@ docs/
 ## Deep Dive: Rationale Behind Each Demo
 
 Each of the demos is designed to isolate and prove a specific architectural property of Agent Substrate—without a single AI agent in sight.
+
+---
+
+### Demo 0: "Slides on Substrate" — The Presentation Deck as gVisor Actors (`cmd/slides`)
+
+* **Why this demo:**
+  Instead of presenting from static Google Slides or Keynote, what if **every individual slide in the 20-minute talk (`slide-01` .. `slide-12`) is its own gVisor-sandboxed Linux container (`Actor`) sleeping in GCS**, sharing the exact same 3-pod `WorkerPool` as the other 5 live demos?
+* **Why this demo specifically:**
+  Pressing `→` wakes the next slide's actor over `atenet-router` in ~90ms, increments its Go heap view counter, serves the slide definition and presenter scratchpad, and immediately suspends the previous slide actor back to GCS (`--mode=async`). This leaves `0/3` worker pods occupied while the presenter speaks or switches browser tabs to run the 5 live demos!
+* **What do we learn:**
+  1. Per-slide in-memory state: Each slide actor holds its own `view_count`, `pod_ip_history`, and live presenter scratchpad notes directly in Go heap RAM (`SNAPSHOT_FIDELITY_MEMORY`).
+  2. Live memory rollback: Editing the scratchpad note and clicking **Revert Memory** runs `kubectl ate revert actor`, rewinding process RAM to its previous snapshot.
+  3. Auditorium ergonomics: Follows the **Agent Substrate Day (`ATECon`) Speaker Template** (`#07090D` + `#56FD5A` Substrate Green palette, embedded concentric orbital arc backgrounds, official octopus mascot, `Ubuntu` & `Ubuntu Mono` typography, and sentence-case layout archetypes), with a top-right icon-only Moon/Sun **Projector Light Mode** toggle (zero layout shift), **Heap RAM (`M`)** scratchpad popover, speaker notes drawer (`N`), slide grid overview (`G`), cross-subdomain Google Sign-In + **Sign out**, and a 1.5-second pre-bundled offline cache fallback so projector screens never blank during conference Wi-Fi hiccups.
 
 ---
 
@@ -185,12 +203,16 @@ Each of the demos is designed to isolate and prove a specific architectural prop
 
 ### 1. Configure `.env`
 
-Copy [`.env.example`](.env.example) to `.env` and set your GCP `PROJECT_ID`. All other settings default automatically (`GCE_REGION=us-west3` for Salt Lake City, `CLUSTER_LOCATION=us-west3-a`, `CLUSTER_NAME=anything-but-agents`, `BUCKET_NAME`, and `KO_DOCKER_REPO`), and any of them can be overridden in `.env`:
+Copy [`.env.example`](.env.example) to `.env` and set your GCP `PROJECT_ID`. All other settings default automatically (`GCE_REGION=us-west3` for Salt Lake City, `CLUSTER_LOCATION=us-west3-a`, `CLUSTER_NAME=anything-but-agents`, `BUCKET_NAME`, `KO_DOCKER_REPO`, and `SLIDES_DOMAIN=abs.slides.substrate.learngke.dev`), and any of them can be overridden in `.env`:
 
 ```bash
 cp .env.example .env
 # Edit .env and set: export PROJECT_ID="your-gcp-project-id"
+# Optional: enable Google Workspace & event-domain Sign-In across all 6 demo dashboards:
+# export ALLOWED_GOOGLE_DOMAINS="google.com,event.goog,cloud-demos.goog,gcdemos.goog"
 ```
+
+When `ALLOWED_GOOGLE_DOMAINS` is set, `hack/stage-demo.sh` auto-discovers your project's Identity Platform Google OAuth `clientId` and `apiKey`, configures `ConfigMap/presenter-auth` + `Secret/presenter-auth`, and scopes an `HttpOnly; Secure; SameSite=Lax` `__Secure-aba_session` cookie across `COOKIE_DOMAIN` (`substrate.learngke.dev`). Signing in once on `https://abs.slides.substrate.learngke.dev/deck` unlocks all 6 presenter consoles (`slides`, `dungeon2d` `/dashboard`, `coldstart`, `tenantdb`, `honeypot`, and `timewarp`), while `https://dungeon.substrate.learngke.dev/play` stays open for audience QR-code gameplay and `?key=<PRESENTER_TOKEN>` / `X-Presenter-Key` remain available for CLI scripts.
 
 ### 2. Provision GKE Cluster, Install Substrate & Deploy All 5 Demos
 
@@ -200,15 +222,19 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh bootstrap-gke
 ```
 
-*(If you already have an Agent Substrate cluster running, run `./hack/stage-demo.sh deploy` instead.)*
+*(If you already have an Agent Substrate cluster running, run `./hack/stage-demo.sh upgrade-substrate` to upgrade `ate-system` to `v1.0.0-rc.2` if needed, then `./hack/stage-demo.sh deploy`.)*
 
 ### 3. Run the Live Stage Demos
 
 `hack/stage-demo.sh` automatically port-forwards `svc/atenet-router` on `localhost:8000` if needed. Each step pauses for `<Enter>` so you can narrate on stage (set `PAUSE_BETWEEN_STEPS=0` to run non-interactively):
 
 ```bash
+./hack/stage-demo.sh upgrade-substrate  # Upgrade ate-system on an existing GKE cluster to SUBSTRATE_VERSION (v1.0.0-rc.2)
 ./hack/stage-demo.sh run-all           # Run all 5 demos in sequence (or run them individually below)
 
+./hack/stage-demo.sh act0-slides           # Act 0: Slides Presentation Deck + Go heap view counter & revert
+./hack/stage-demo.sh deploy-slides         # Deploy in-cluster Slides Gateway + LoadBalancer + PRESENTER_TOKEN Secret
+./hack/stage-demo.sh cleanup-slides        # Clean up in-cluster Slides Gateway & slide-* actors
 ./hack/stage-demo.sh act1-dungeon          # Act I: Zero-DB Dungeon + `kubectl ate revert` save-scumming
 ./hack/stage-demo.sh act1b-dungeon2d       # Act I-B: 2D Multilevel Dungeon (/play) + Live Dashboard (/dashboard)
 ./hack/stage-demo.sh deploy-dungeon2d      # Deploy in-cluster Dungeon 2D Gateway + LoadBalancer + PRESENTER_TOKEN Secret

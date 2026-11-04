@@ -15,12 +15,13 @@
 package main
 
 import (
-	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/moficodes/anything-but-agents/internal/presenterauth"
 )
 
 //go:embed web/index.html
@@ -29,43 +30,35 @@ var indexHTML []byte
 const presenterCookieName = "tdb_presenter"
 
 type GatewayServer struct {
-	backend        TenantDBBackend
-	presenterToken string
+	backend  TenantDBBackend
+	authGate *presenterauth.Gate
 }
 
 func NewGatewayServer(backend TenantDBBackend, presenterToken string) *GatewayServer {
 	return &GatewayServer{
-		backend:        backend,
-		presenterToken: strings.TrimSpace(presenterToken),
+		backend: backend,
+		authGate: presenterauth.NewGate(presenterauth.GateConfig{
+			Title:            "Demo 3: TenantDB Storage & Memory X-Ray",
+			Subtitle:         "Sign in with an authorized Google Workspace or event account to manage the 4-tenant database fleet, snapshot fidelity, and GDPR Article 17 deletion.",
+			SecretName:       "tenantdb-gateway",
+			LegacyCookieName: presenterCookieName,
+			PresenterToken:   strings.TrimSpace(presenterToken),
+		}),
 	}
 }
 
+func (g *GatewayServer) PresenterKey() string {
+	return g.authGate.PresenterKey()
+}
+
 func (g *GatewayServer) isAuthorized(r *http.Request) bool {
-	if g.presenterToken == "" {
-		return true
-	}
-	if key := strings.TrimSpace(r.Header.Get("X-Presenter-Key")); key != "" {
-		if subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterToken)) == 1 {
-			return true
-		}
-	}
-	if key := strings.TrimSpace(r.URL.Query().Get("key")); key != "" {
-		if subtle.ConstantTimeCompare([]byte(key), []byte(g.presenterToken)) == 1 {
-			return true
-		}
-	}
-	if c, err := r.Cookie(presenterCookieName); err == nil {
-		if subtle.ConstantTimeCompare([]byte(c.Value), []byte(g.presenterToken)) == 1 {
-			return true
-		}
-	}
-	return false
+	return g.authGate.IsAuthorized(r)
 }
 
 func (g *GatewayServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !g.isAuthorized(r) {
-			writeJSONError(w, http.StatusUnauthorized, "unauthorized: provide ?key=<PRESENTER_TOKEN> or X-Presenter-Key header")
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized: sign in with Google or provide ?key=<PRESENTER_TOKEN> / X-Presenter-Key header")
 			return
 		}
 		next(w, r)
@@ -74,6 +67,7 @@ func (g *GatewayServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func (g *GatewayServer) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
+	g.authGate.RegisterRoutes(mux)
 
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -81,25 +75,11 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	serveUI := func(w http.ResponseWriter, r *http.Request) {
-		if g.presenterToken != "" {
-			if qKey := strings.TrimSpace(r.URL.Query().Get("key")); qKey != "" &&
-				subtle.ConstantTimeCompare([]byte(qKey), []byte(g.presenterToken)) == 1 {
-				http.SetCookie(w, &http.Cookie{
-					Name:     presenterCookieName,
-					Value:    g.presenterToken,
-					Path:     "/",
-					HttpOnly: true,
-					SameSite: http.SameSiteStrictMode,
-				})
-				http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-				return
-			}
-			if !g.isAuthorized(r) {
-				writeJSONError(w, http.StatusUnauthorized, "presenter dashboard locked: open /dashboard?key=<PRESENTER_TOKEN>")
-				return
-			}
+		if g.authGate.HandleUnlockOrGate(w, r, "/dashboard") {
+			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write(indexHTML)
 	}
 

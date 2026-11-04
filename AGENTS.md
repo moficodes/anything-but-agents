@@ -8,9 +8,10 @@ This is the companion repository (Go demo services, Substrate manifests, live-st
 
 Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native, sub-second memory-checkpointing, wake-on-HTTP, gVisor-sandboxed actor runtime**. This project demonstrates its architectural primitives—and its failure modes—by multiplexing five non-agent workloads across a single 3-replica `WorkerPool`:
 
+0. **`cmd/slides` ("Demo 0: Slides on Substrate")**: Presentation deck where 100% of individual slides (`slide-01` .. `slide-12`) are gVisor-sandboxed actors sleeping in GCS (`ActorTemplate/slides`), served over HTTPS at `abs.slides.${DEMO_DOMAIN}` (`SLIDES_DOMAIN`). Demonstrates per-slide in-memory state (`view_count`, `pod_ip_history`, and live presenter scratchpad RAM), `kubectl ate revert actor` memory rollback, asynchronous previous-slide suspension (`--mode=async`) leaving 0/3 worker slots held when idle, cross-subdomain Google Sign-In SSO (`internal/presenterauth`), and a 1.5s offline cache fallback with top-right Moon/Sun Projector Light Mode toggle.
 1. **`cmd/dungeon` ("Look Ma, No Database")**: Zork-style RPG where 100% of state (`GameState`: HP, inventory, room items, monster HP, `pod_ip_history`) lives in Go heap RAM with zero database or disk I/O. Demonstrates `SNAPSHOT_FIDELITY_MEMORY` across pod migrations, save-scumming via `kubectl ate revert actor`, and timeline branching via `kubectl ate create tag` + `--tag`.
-1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a PixiJS v8 8-floor action roguelike (`/play`, public, 100% client-side 60fps simulation with asymmetric Paladin/Ranger/Wizard classes and A* enemy pathfinding) and a Kubernetes Secret token-gated presenter leaderboard (`/dashboard?token=...`). Demonstrates explicit `WorldState` checkpoints via `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
-2. **`cmd/coldstart` ("The Instant Cloner & Production HPA QPS Race")**: Multi-mode binary (`--mode=worker|gateway|k8s-router|local`). Worker mode builds a 50,000-document in-memory trigram & token search index + prime lookup table (~76.6 MB post-GC Go heap) across 6 stages (`--init-delay=12s`) before `/readyz` flips from `503` to `200 OK`, executing real BM25 + 3-gram searches (~53k posting intersections, ~15ms compute) with a `20 QPS` per-replica concurrency cap (`--max-concurrent=4`, `--min-query-duration=200ms`). Gateway/local mode runs a synchronized traffic generator, a Kubernetes Secret token-gated (`Secret/coldstart-gateway` `PRESENTER_TOKEN`) Hardware Telemetry & Oscilloscope Rack Web Dashboard (`/dashboard?key=...` setting `cs_presenter` cookie or `X-Presenter-Key` header, with top-right icon-only Moon/Sun Projector Light Mode toggle), and a Kubernetes `external.metrics.k8s.io/v1beta1` HTTPS server (`coldstart_lb_qps`) comparing Standard K8s HPA (`Deployment/coldstart-k8s`) vs. Substrate Golden Snapshot HPA (`coldstart-1..3`) across an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` running `--mode=k8s-router` vs `svc/atenet-router`) → Backend Pod network path.
+1b. **`cmd/dungeon2d` ("2D Roguelike & Presenter Dashboard")**: Dual-mode binary (`--mode=actor|gateway`) with a PixiJS v8 8-floor action roguelike (`/play`, public, 100% client-side 60fps simulation with asymmetric Paladin/Ranger/Wizard classes and A* enemy pathfinding) and a Google Sign-In + `PRESENTER_TOKEN`-gated presenter leaderboard (`/dashboard`). Demonstrates explicit `WorldState` checkpoints via `kubectl ate save actor` (`v1..vN`), version-specific `kubectl ate revert actor --snapshot-version`, and timeline branching via `kubectl ate create tag` + `--tag`.
+2. **`cmd/coldstart` ("The Instant Cloner & Production HPA QPS Race")**: Multi-mode binary (`--mode=worker|gateway|k8s-router|local`). Worker mode builds a 50,000-document in-memory trigram & token search index + prime lookup table (~76.6 MB post-GC Go heap) across 6 stages (`--init-delay=12s`) before `/readyz` flips from `503` to `200 OK`, executing real BM25 + 3-gram searches (~53k posting intersections, ~15ms compute) with a `20 QPS` per-replica concurrency cap (`--max-concurrent=4`, `--min-query-duration=200ms`). Gateway/local mode runs a synchronized traffic generator, a Google Sign-In + `PRESENTER_TOKEN`-gated Hardware Telemetry & Oscilloscope Rack Web Dashboard (`/dashboard`, with top-right icon-only Moon/Sun Projector Light Mode toggle), and a Kubernetes `external.metrics.k8s.io/v1beta1` HTTPS server (`coldstart_lb_qps`) comparing Standard K8s HPA (`Deployment/coldstart-k8s`) vs. Substrate Golden Snapshot HPA (`coldstart-1..3`) across an identical 2-hop `Service` → L7 Router (`svc/coldstart-k8s-router` running `--mode=k8s-router` vs `svc/atenet-router`) → Backend Pod network path.
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Multi-mode binary (`--mode=actor|gateway|local`) combining a single-tenant embedded database (`DurableDir` `/data/wal.jsonl` + lazy `16.0 MB` Hot RAM Buffer Pool & Materialized View) with a **Storage & Memory Tiering X-Ray Console** (`:8086` / `/dashboard`). Demonstrates memory vs. volume snapshot fidelity (`SNAPSHOT_FIDELITY_MEMORY` keeping the `16.0 MB` RAM Buffer Pool hot on `suspend --mode=async` vs. `SNAPSHOT_FIDELITY_VOLUMES` / pre-commit RAM discard committing only `/data/wal.jsonl` to GCS on `suspend --mode=sync` for `99.997%` bandwidth savings + `<1ms` WAL replay on wakeup), 4 customer databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) multiplexing across the 3-replica `WorkerPool` with zero `WHERE tenant_id` queries, and 1-command GDPR Article 17 deletion (`kubectl ate delete actor ...`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`sandboxClass: gvisor`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
@@ -19,14 +20,19 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 
 ```text
 cmd/
+  slides/                       # Demo 0: Slides on Substrate (actor + gateway)
   dungeon/                      # Demo 1: Zero-DB RPG in Go heap RAM (main.go, main_test.go)
   dungeon2d/                    # Demo 1b: 2D Canvas Roguelike & Presenter Gateway (actor + gateway)
   coldstart/                    # Demo 2: 50k-doc in-memory search engine + K8s vs Substrate HPA QPS race
   tenantdb/                     # Demo 3: Per-tenant embedded DB (DurableDir + 16MB Buffer Pool + Storage X-Ray Gateway)
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
   timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
+internal/
+  presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
-  workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1alpha1 WorkerPool
+  workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1 WorkerPool
+  slides-template.yaml.tmpl     # ActorTemplate (Presentation deck slide actor, FULL pause, FULL commit)
+  slides-gateway.yaml.tmpl      # K8s Secret, RBAC, Deployment & Service for slides-gateway
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
   dungeon2d-template.yaml.tmpl  # ActorTemplate (2D Roguelike actor, FULL pause, FULL commit)
   dungeon2d-gateway.yaml.tmpl   # K8s Secret, RBAC, Deployment & Service for dungeon2d-gateway
@@ -42,7 +48,7 @@ manifests/
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
 docs/
-  talk-outline.md               # 4-act talk outline, sequence diagram, speaker notes & litmus test
+  talk-outline.md               # 20-min show-don't-tell talk flow, feature cheat sheet & Q&A notes
 .ko.yaml                        # ko build config (distroless static-debian13, base-debian13 for gateways, debian:13-slim for kubectl-ate & honeypot)
 .env.example                    # Template for local .env (GCP PROJECT_ID, region/cluster defaults)
 ```
@@ -64,11 +70,15 @@ Always run `go test ./...` after modifying any file under `cmd/`.
 1. **Environment configuration**:
    Copy `.env.example` to `.env` and set `PROJECT_ID`. (`.env` is gitignored; never commit credentials or project-specific `.env` files.)
    - Default region/zone: `us-west3` / `us-west3-a` (Salt Lake City).
-   - `SUBSTRATE_ROOT`: Path to the `agent-substrate` checkout (needed only for `bootstrap-gke` or building `ateom-gvisor` / `kubectl-ate` from source; auto-detected from `..` or `../../agent-substrate/*` if unset).
+   - Default Agent Substrate release: `SUBSTRATE_VERSION=v1.0.0-rc.2` from `SUBSTRATE_IMAGE_REPO=ghcr.io/agent-substrate/substrate`.
+   - `SUBSTRATE_ROOT`: Path to the `agent-substrate` checkout (needed for `bootstrap-gke`, `upgrade-substrate`, or building `kubectl-ate` initContainer images via `ko`; auto-detected from `..` or `../../agent-substrate/*` if unset).
 2. **Stage script (`hack/stage-demo.sh`)**:
    ```bash
    ./hack/stage-demo.sh bootstrap-gke         # Provision GKE (1.36+), install ate-system, and deploy all demos
+   ./hack/stage-demo.sh upgrade-substrate     # Upgrade ate-system & local kubectl-ate on existing GKE cluster to SUBSTRATE_VERSION
    ./hack/stage-demo.sh deploy                # Deploy WorkerPool + build/register all ActorTemplates via ko
+   ./hack/stage-demo.sh deploy-slides         # Deploy interactive Presentation Deck Gateway (prints presenter auth URL)
+   ./hack/stage-demo.sh cleanup-slides        # Clean up Slides Gateway deployment/secret/actors
    ./hack/stage-demo.sh deploy-dungeon2d      # Deploy interactive 2D Dungeon Gateway (prints presenter auth URL)
    ./hack/stage-demo.sh cleanup-dungeon2d     # Clean up 2D Dungeon Gateway deployment/secret/actors/tags
    ./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy K8s vs Substrate HPA QPS comparison stack & gateway
@@ -83,6 +93,7 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh cleanup-gateway-tls   # Clean up GKE Gateway API + HTTPRoute + HealthCheckPolicy resources
    ./hack/stage-demo.sh run-all               # Run all 5 live demos interactively
    PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
+   ./hack/stage-demo.sh act0-slides           # Run Demo 0 (Presentation deck)
    ./hack/stage-demo.sh act1-dungeon          # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)
    ./hack/stage-demo.sh cleanup               # Delete demo actors, tags, templates, atespace, and namespace
    ```
@@ -97,7 +108,7 @@ Always run `go test ./...` after modifying any file under `cmd/`.
   - Format HTTP responses as pretty-printed JSON (`enc.SetIndent("", "  ")`) so `curl` output in `hack/stage-demo.sh` is human-readable on stage without requiring `jq`.
   - Include pod IP tracking (`current_pod_ip` / `pod_ip_history`) in responses so cross-worker-pod actor migrations are visible in demo output.
 - **`kubectl` vs. `kubectl ate` Manifests**:
-  - `manifests/workerpool.yaml.tmpl` is a standard Kubernetes manifest (`apiVersion: ate.dev/v1alpha1`, `kind: WorkerPool`) applied via `envsubst | kubectl apply -f -`.
+  - `manifests/workerpool.yaml.tmpl` is a standard Kubernetes manifest (`apiVersion: ate.dev/v1`, `kind: WorkerPool`) applied via `envsubst | kubectl apply -f -`.
   - `manifests/*-template.yaml.tmpl` are **Agent Substrate API payloads** (no `apiVersion`/`kind`), built and registered via `envsubst < manifests/<name>-template.yaml.tmpl | ko resolve -f - | kubectl ate create actor-template -f -`. Do not add Kubernetes CRD headers to `*-template.yaml.tmpl` or pass them to `kubectl apply`.
 - **`ko` Image References**:
   - `ActorTemplate` manifests use `image: ko://github.com/moficodes/anything-but-agents/cmd/<demo>` and `command: ["/ko-app/<demo>"]`.

@@ -8,142 +8,194 @@
 >
 > Through this exercise of "unconventional systems-engineering design patterns" we'll look at the good ideas, the terrible ideas, and how pushing this infrastructure to its limits helps us all gain a better understanding of why these exact primitives make Substrate the perfect foundation for the agentic era.
 
-## Additional Info (Notes for the Program Committee)
+## Stage Philosophy (20 Minutes Total)
 
-> The goal of this talk is to use Agent Substrate the "wrong" way so we can see how its Kubernetes primitives work without getting distracted by AI/LLM logic. By testing non-agent workloads on it, attendees learn both how stateful checkpoint/restore works under the hood and what makes agentic workloads unique.
->
-> Candidate live demos we are exploring:
-> - A game server where state lives purely in RAM across suspends and pod migrations, using snapshot revert to "save-scum."
-> - Cloning slow-booting apps in ~100ms from Golden Snapshots, or running one isolated embedded database per user.
-> - (Don't Try This at Home): Suspending a consensus/heartbeat node and watching it split-brain when wall-clock time jumps forward on resume.
+1. **Show first, explain after:** Zero architecture lecture slides at the beginning. Open with a 90-second dare, flash the QR code, and spend 16 of the 20 minutes inside live demos. Let the audience watch something ridiculous work on screen *first*, then spend 45 seconds pulling back the curtain on which Substrate feature made it happen.
+2. **Keep it light and funny:** Frame the talk as a lazy, slightly mischievous systems engineer committing five escalating "infrastructure crimes" on **three tiny 1-vCPU pods** (`manifests/workerpool.yaml.tmpl`) just to avoid writing boilerplate, waiting on cold boots, or getting paged.
+3. **Repeatable 3-beat rhythm for every demo:**
+   - **The Premise / Joke (15s):** Why a lazy engineer tried this.
+   - **Live Show-Don't-Tell (~2m):** Click through the live UI so the room sees the behavior firsthand.
+   - **What the Demo Does + What Substrate Gives Us (~45s):** Name what the app actually does and the exact Agent Substrate primitives we got for free.
 
----
+```mermaid
+flowchart LR
+    Open["00:00 Cold Open (1.5m): Zero LLMs, 3 Pods, Scan QR"]
+    D1["01:30 Demo 1 (3.5m): Dungeon 2D (Too lazy for Postgres)"]
+    D2["05:00 Demo 2 (3.5m): Coldstart Search (Cheating at HPA)"]
+    D3["08:30 Demo 3 (3.0m): TenantDB (Lazy SaaS DBA + GDPR button)"]
+    D4["11:30 Demo 4 (3.5m): Honeypot (Truman Show for hackers)"]
+    D5["15:00 Demo 5 (3.5m): Timewarp Raft (Putting etcd in the freezer)"]
+    Close["18:30 Closer (1.5m): Oops, we just described an AI agent"]
 
-## Narrative Arc & Timing (35–40 Minute Talk)
+    Open --> D1 --> D2 --> D3 --> D4 --> D5 --> Close
+```
 
-| Section | Title | Duration | Live Demo |
-|---|---|---|---|
-| **Act I** | **The Lie in the Name:** What Substrate Actually Is Under the Hood | 6 min | Architecture walkthrough |
-| **Act II** | **Look Ma, No Database:** Turning `malloc()` into Durable Storage | 8 min | `act1-dungeon` (Zork RPG + Save-Scumming with `revert` & `tag`) |
-| **Act III** | **Taming Real-World Monsters:** Cold-Start Cloners, Per-Tenant DBs & Deception Grids | 12 min | `act2-coldstart`, `act3-tenantdb`, `act4-honeypot` |
-| **Act IV** | **Don't Try This at Home:** How to Break a Process Time-Machine | 7 min | `act5-timewarp` (Time-Jump Shock & Raft Split-Brain) |
-| **Wrap-up** | **The "Secretly Agent-Shaped" Litmus Test** | 3 min | Decision matrix slide |
+## 20-Minute Run of Show
 
----
+| Time | Segment | Duration | Live Screen | Substrate Features Unlocked |
+|---|---|---|---|---|
+| `00:00` | **Cold Open: Slides on Substrate & Zero Tokens** (`cmd/slides`) | `1.5 min` | `https://abs.slides.substrate.learngke.dev/deck` + `workerpool.yaml.tmpl` | 12 sleeping slide actors, 0/3 workers held when idle, live heap state |
+| `01:30` | **Demo 1: "I Was Too Lazy to Set Up Postgres"** (`cmd/dungeon2d`) | `3.5 min` | `https://dungeon.substrate.learngke.dev/dashboard` + `/play` | `SNAPSHOT_FIDELITY_MEMORY`, `atenet` Wake-on-HTTP, `revert`, `--tag` |
+| `05:00` | **Demo 2: "Cheating at the Autoscaling Olympics"** (`cmd/coldstart`) | `3.5 min` | `https://coldstart.substrate.learngke.dev/dashboard` | `ActorTemplate` + `wakeupProbe` Golden Snapshots, ~100ms heap clone |
+| `08:30` | **Demo 3: "The Lazy DBA's Multi-Tenant SaaS"** (`cmd/tenantdb`) | `3.0 min` | `https://tenantdb.substrate.learngke.dev/dashboard` | `DurableDir` (`/data`), async hot-RAM vs. sync WAL suspend, `delete actor` |
+| `11:30` | **Demo 4: "The Truman Show for Hackers"** (`cmd/honeypot`) | `3.5 min` | `https://honeypot.substrate.learngke.dev/` | `gVisor` sandboxing, rootfs overlay snapshots, anti-`rm -rf` `revert` + `--tag` |
+| `15:00` | **Demo 5: "Putting Raft in the Freezer"** (`cmd/timewarp`) | `3.5 min` | `https://timewarp.substrate.learngke.dev/dashboard` | Wall-clock jump behavior across `suspend`/`resume`, `?guard=true` fencing |
+| `18:30` | **The Twist: "Wait, That's an AI Agent"** | `1.5 min` | 5-row synthesis slide | Why combining Demos 1-4 (and avoiding Demo 5) defines agentic infra |
 
-## Slide-by-Slide Outline & Speaker Notes
+## Pre-Stage Setup Checklist
 
-### Act I — The Lie in the Name (Slides 1–5)
+1. **Cluster & Golden Snapshots (`v1.0.0-rc.2`):** Confirm `kubectl get workerpool anything-but-agents -n anything-but-agents` shows `3/3` ready `ateworker-gvisor` pods and `kubectl ate get actor-templates -a anything-but-agents` has `goldenTag` populated on all templates.
+2. **Browser tabs pre-opened left-to-right (sign in once with Google on Tab 0 to unlock all 6 tabs via cross-subdomain SSO, and click the top-right Sun icon for Projector Light Mode if the room is bright):**
+   - Tab 0: `https://abs.slides.substrate.learngke.dev/deck` (Live Slide Deck)
+   - Tab 1: `https://dungeon.substrate.learngke.dev/dashboard` (with QR modal open!) + mobile `/play` tab
+   - Tab 2: `https://coldstart.substrate.learngke.dev/dashboard`
+   - Tab 3: `https://tenantdb.substrate.learngke.dev/dashboard`
+   - Tab 4: `https://honeypot.substrate.learngke.dev/`
+   - Tab 5: `https://timewarp.substrate.learngke.dev/dashboard`
+3. **Clear stuck actors before walking on stage:** Run `./hack/stage-demo.sh act1-dungeon` once or check `kubectl ate get actors -a anything-but-agents` so all 3 worker slots start free.
 
-* **Slide 1: Title Slide**
-  * *Title:* Running Anything *But* Agents on Agent Substrate
-  * *Subtitle:* Abusing a Stateful Sandbox Multiplexer for Fun, Profit, and Split-Brain Chaos
-* **Slide 2: Why Kubernetes Pods Struggle with Bursty, Stateful Entities**
-  * Kubernetes excels at long-lived services, not 1,000,000 idle single-tenant sandboxes that wake up for 200ms every 4 hours.
-  * Traditional Serverless (Knative/Lambda) scales to zero by **killing your process**—forcing you to externalize every byte of state to Redis/Postgres and pay the full cold-start initialization tax on wakeup.
-* **Slide 3: Strip Away the Word "Agent" — What Are the 5 Primitives?**
-  1. **Warm `WorkerPool` Pods:** Pre-scheduled sandboxes (`gVisor` / `microVM`) waiting for an identity.
-  2. **`ActorTemplate` Golden Snapshots:** Boot a heavy container once, wait for `/readyz` == `200 OK`, and freeze its memory + rootfs.
-  3. **`Pause` & `Suspend` (`FULL` vs `DATA` scope):** Freeze process RAM (`Full`) and/or [`DurableDir`](#) volumes (`Data`) to local disk or GCS/S3.
-  4. **Wake-on-HTTP (`atenet` + Request Parking):** Any request with `ate-target-actor: <atespace>/<actor>` transparently restores that exact memory image onto a free worker (or parks the request briefly if the pool is busy).
-  5. **Time-Travel Primitives (`Tag` & `Revert`):** Tag a suspended snapshot to fork new actors (`--tag`), or call `kubectl ate revert` to throw away a crashed/mutated execution and rewind to the last snapshot.
+## Minute-by-Minute Show Flow
+
+### Cold Open: Zero Tokens, Three Pods (`00:00 - 01:30`)
+
+* **On screen:** Title card for 15 seconds, then straight to Tab 1 (`dungeon2d` `/dashboard` with the giant QR code open next to `replicas: 3` from `manifests/workerpool.yaml.tmpl`).
+* **Light spoken hook:**
+  * *"Every other talk this week has an LLM in it. I promise you zero tokens, zero prompts, and zero chatbots for the next 20 minutes."*
+  * *"Agent Substrate has 'Agent' right there in the name, so people assume it is an AI framework. Strip the AI away, and it is really a machine for freezing Linux processes in mid-air and waking them up on any pod in 100 milliseconds."*
+  * *"Also, I am cheap. So I only provisioned **three** 1-CPU worker pods for this entire talk. Scan that QR code right now, pick a class, and start playing. Let's see how many bad ideas we can cram onto three pods before something catches fire."*
+
+### Demo 1: "I Was Too Lazy to Set Up Postgres" (`01:30 - 05:00`, `cmd/dungeon2d`)
+
+* **The Joke / Setup (15s):**
+  * *"Think about how much of our lives we waste turning Go structs into SQL rows before an HTTP request finishes, and turning SQL rows back into Go structs 200ms later. For Demo 1, I asked: what if I just... didn't use a database?"*
+* **Show, Don't Tell (2m 15s live in Tab 1):**
+  1. **Close the QR modal to reveal the Live Leaderboard:** Point at the screen: 20 to 50 people in the audience are playing an 8-floor roguelike right now, and all of them are sharing **3 pods** (`0` pods used while they run around at 60fps in the browser; an actor only wakes up for ~100ms when someone hits a Save Shrine!). Point out `pod_ip_history`: players hop from pod IP to pod IP between saves without losing a single gold coin.
+  2. **Die on purpose:** Take your hero on Floor 8 straight into the **Ancient Heap Dragon** without fire protection -> `HP = 0`, dead on screen.
+  3. **Save-Scum like a shameless gamer:** Click **Revert** (`kubectl ate revert actor d2d-mofi --snapshot-version`). Boom: alive again before the boss room! That was `git reset --hard` on live Go heap memory.
+  4. **Cheat at a mutually exclusive choice:** Floor 6 has two locked chests and one key (`sunforged-aegis` vs. `voidbane-relic`). Click **Fork Timeline** (`--tag`) to clone your frozen memory into a parallel universe so you can open both.
+* **What the Demo Does & What Substrate Gives Us (1m):**
+  * **What the demo does:** Runs a multi-player 8-floor dungeon crawler where `100%` of server persistence is ordinary Go structs (`WorldState` / `ActorSession`) sitting in RAM, with zero SQL drivers, Redis clients, or files on disk.
+  * **Features we get from Substrate:**
+    * **`WorkerPool` + `atenet` Wake-on-HTTP:** An HTTP header (`ate-target-actor`) wakes a sleeping process on whichever of the 3 pods is free in ~100ms (and parks requests briefly if all 3 are busy), turning 3 pods into capacity for the whole room.
+    * **Process Memory Checkpointing (`SNAPSHOT_FIDELITY_MEMORY`):** Freezes the Go heap and goroutine state to GCS when idle and restores it onto a totally different pod IP later.
+    * **`kubectl ate revert` & `kubectl ate create tag` (`--tag`):** Infrastructure-level undo and branching timelines with zero application rollback code.
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant Router as atenet Router (Envoy + ext_proc)
-    participant API as ate-api-server
-    participant Worker as Warm Worker Pod (ateom + gVisor)
-    participant GCS as Snapshot Store (GCS/S3)
+    participant Phone as Audience Phone
+    participant Router as atenet-router
+    participant Worker as Any Free Pod (1 of 3)
+    participant GCS as GCS Snapshot Store
 
-    Client->>Router: HTTP Request (ate-target-actor: game/hero-mofi)
-    Router->>API: ResumeActor(game/hero-mofi) [parks if pool full]
-    API->>Worker: Assign & Restore Snapshot
-    Worker->>GCS: Stream Last Snapshot (RAM + rootfs / DurableDir)
-    Worker-->>API: /readyz 200 OK (~100ms)
-    API-->>Router: Routable at Worker Pod IP
-    Router->>Worker: Forward HTTP Request
-    Worker-->>Client: HTTP Response (from restored heap!)
+    Phone->>Router: POST /save (ate-target-actor: d2d-player)
+    Router->>Worker: Wake d2d-player (~100ms from GCS)
+    Worker->>GCS: Stream Go Heap Snapshot in & out
+    Worker-->>Phone: 200 OK (Saved v3 on new Worker Pod IP!)
 ```
 
----
+* **Transition joke to Demo 2:**
+  * *"Okay, I can hear the backend engineers thinking: 'Cute game, Mofi, I don't run dungeons at work, I run serious stateless services behind HorizontalPodAutoscaler.' Great! Let's race."*
 
-### Act II — Look Ma, No Database! (Slides 6–9 + Live Demo 1)
+### Demo 2: "Cheating at the Autoscaling Olympics" (`05:00 - 08:30`, `cmd/coldstart`)
 
-* **Slide 6: What If We Stopped Writing Persistence Code Altogether?**
-  * Think about how much code in a typical app exists just to translate in-memory structs into SQL rows or JSON blobs and back.
-  * What if `main()` was just structs on the heap, and **the infrastructure checkpointed the heap**?
-* **Slide 7: Live Demo 1 — The "Zero-Database" Dungeon (`cmd/dungeon` & `cmd/dungeon2d`)**
-  * **Show the code (`cmd/dungeon/main.go` & `cmd/dungeon2d/actor.go`):** Point out `type GameState struct` / `type ActorSession struct`. No SQL driver, no `os.WriteFile`, no Redis client. Just a Go struct in RAM.
-  * **CLI Walkthrough (`./hack/stage-demo.sh act1-dungeon`) & 2D Live Audience Game (`./hack/stage-demo.sh act1b-dungeon2d`):**
-    1. Open the **Live Mission-Control Dashboard (`/dashboard`)** on the projector and scan the QR code to open the **2D Mobile Action Roguelike (`/play`)**.
-    2. Choose an asymmetric class (**Paladin** melee cleave + shield block, **Ranger** slow high-damage longbow + snare, or **Wizard** glass-cannon AoE fireball + frost blink) and fight through the 8-floor progressive campaign (`22x16` maps with A* pathfinding enemies, levers, spike traps, and Floor 6 branching vaults) at 60fps in the browser (0 worker pods used during real-time movement and combat!).
-    3. **Explicit Save Checkpoints (`save_world`):** Tap the Save button or step onto a Save Shrine (`kubectl ate save actor`), waking the actor on one of the 3 `WorkerPool` pods for ~100ms to checkpoint the entire multi-floor `WorldState` (hero stats, wounded enemy positions/HP, ground loot, and unlocked gates/vaults) into Go heap RAM and GCS (`v1..vN`).
-    4. **Die horribly on Floor 8:** Charge the multi-phase **Ancient Heap Dragon** without defensive relics -> `HP = 0, Alive = false`.
-    5. **Save-Scumming (`git reset --hard` for RAM):** Tap **Revert Actor** on the phone (`kubectl ate revert actor --snapshot-version`), restoring the pre-boss GCS snapshot with every enemy, item, and gate in its exact saved position! Equip the `fire-shield` / `sunforged-aegis`, defeat the Dragon, and escape through the Ascension Portal.
-    6. **Fork the Multiverse:** Tap **Fork Timeline** (`--tag`)—two parallel universes forked from the same Floor 6 vault checkpoint!
+* **The Joke / Setup (15s):**
+  * *"Who here runs a 'stateless' Java app, Python ML service, or search engine that takes 12+ seconds to boot before `/readyz` turns green? When traffic spikes, HPA panics and adds pods, and your new pods spend 12 seconds doing yoga while Pod 1 catches fire."*
+* **Show, Don't Tell (2m 15s live in Tab 2):**
+  1. **Show the contestants:** A real 50,000-package BM25 + trigram code search engine (~76 MB Go heap, capped at `20 QPS` per pod) that takes **12 seconds** across 6 startup stages to build its in-memory index. Click **Probe Both Backends** to show `coldstart-1` and `coldstart-2` returning real search hits with the **exact same `golden_heap_fingerprint`**.
+  2. **Hit the `60 QPS` Spike button (`1 -> 3` replicas):** Watch the oscilloscope and 6-stage LED matrix live!
+     * **Top track (Standard K8s HPA):** Pods 2 and 3 sit at `503` slowly ticking through `Stage 1/6... 2/6...` for 12 agonizing seconds while Pod 1 drowns in red `429 Too Many Requests` crosshatch.
+     * **Bottom track (Substrate HPA):** Actors 2 and 3 wake up in **~100ms** with the 50,000-doc index *already built in RAM*, jumping straight to `60 QPS` and serving ~2x the total queries!
+* **What the Demo Does & What Substrate Gives Us (1m):**
+  * **What the demo does:** Races standard Kubernetes HPA against Substrate under a `3x` traffic spike on a heavy 50,000-document in-memory search engine.
+  * **Features we get from Substrate:**
+    * **`ActorTemplate` + `wakeupProbe` Golden Snapshots:** Substrate runs the 12-second index build **once** when you register the template, waits for `/readyz == 200 OK`, and freezes that warm 76 MB heap into a Golden Snapshot (`goldenTag`).
+    * **Cluster-Wide `fork()` & Pod-Decoupled Scaling:** Scaling from `1 -> 3` stamps out pre-warmed clones onto warm worker pods in ~100ms instead of repeating deterministic startup work on every scale-out event.
 
----
+* **Transition joke to Demo 3:**
+  * *"Photocopying 76 MB of read-only RAM is awesome. Know what is less awesome? Uploading 10,000 giant RAM caches to GCS every night when your SaaS customers go to bed."*
 
-### Act III — Taming Real-World Non-Agent Monsters (Slides 10–16 + Live Demos 2, 3, 4)
+### Demo 3: "The Lazy DBA's Multi-Tenant SaaS" (`08:30 - 11:30`, `cmd/tenantdb`)
 
-* **Slide 10: Pattern 1 — The "Cold-Start Monster" & Production HPA QPS Race (`cmd/coldstart`)**
-  * *Real-world examples:* In-memory search/autocomplete services (`Zoekt`, `pkg.go.dev`), language servers (`rust-analyzer`, `gopls`), or JVM monoliths that build a ~76.6 MB in-memory index across 6 startup stages for 12+ seconds before `/readyz` turns `200 OK`.
-  * *Why Cold Starts Kill Production QPS:* When a traffic spike (`15 -> 60 QPS`) triggers Kubernetes HPA (`1 -> 3` replicas, `20 QPS`/pod capacity on `coldstart_lb_qps`), newly scheduled Pods sit at `/readyz == 503` for 12+ seconds while Pod 1 drowns and sheds `40 QPS` (`429 Too Many Requests`).
-  * *The Substrate Trick:* `ActorTemplate` waits for `wakeupProbe` (`/readyz`) before taking the **Golden Snapshot**—capturing the 50,000-doc inverted token & 3-gram search index once.
-  * *Symmetrical 2-Hop Benchmark Architecture:* Both tracks route through a Kubernetes `Service` + L7 Router (`svc/coldstart-k8s-router` watching `Endpoints/coldstart-k8s` vs `svc/atenet-router` routing to `WorkerPool`) so HTTP/1.1 keep-alives are load-balanced per request on an identical network path.
-  * **Live Demo (`./hack/stage-demo.sh act2-coldstart` + `/dashboard?key=<PRESENTER_TOKEN>`):**
-    * Open the **Hardware Telemetry & Oscilloscope Rack UI** (authenticated via `Secret/coldstart-gateway` `PRESENTER_TOKEN`, with a top-right Moon/Sun **Projector Light Mode** toggle for auditorium screens).
-    * Query `coldstart-1` and `coldstart-2` via the **Live Dual-Backend Search Probe** (`/api/probe`)—both wake in ~100ms, share the **exact same `golden_heap_fingerprint`**, and execute real BM25 + 3-gram searches (`~53,400` posting intersections across `50,000` indexed packages in `~15ms` of CPU/RAM work).
-    * Trigger the **60 QPS Production HPA Spike** (`minReplicas: 1 -> maxReplicas: 3` on `coldstart_lb_qps`): watch the **6-Stage Index Warmup LED Matrix** and **HiDPI Goodput/429 Shed-Zone Oscilloscope** as Substrate wakes Actors 2 & 3 in ~100ms and serves `60 QPS` immediately while Standard K8s HPA remains stuck at `20 QPS` (shedding `40 QPS` as `429`) for 12 seconds (**~2x more total successful queries served**).
+* **The Joke / Setup (15s):**
+  * *"Every SaaS engineer has two nightmares: forgetting `WHERE tenant_id = ?` on a SQL query, and getting a GDPR 'delete all my data' ticket across 50 foreign-key tables on Friday at 4:55 PM. So I gave every customer their own private database binary... on our same 3 pods."*
+* **Show, Don't Tell (2m live in Tab 3):**
+  1. **Four DBs, Three Pods, Zero `tenant_id`:** Show `db-acme`, `db-globex`, `db-initech`, and `db-umbrella` multiplexing across the 3 worker slots. Every query is literally `SELECT * FROM tenant_records` because each tenant lives in its own isolated sandbox!
+  2. **The Storage vs. RAM X-Ray:** Warm up `db-acme`'s `16.0 MB` RAM Buffer Pool. Click **Quick Suspend (`--mode=async`)** -> query it: `HOT_RAM_RESUME` (the 16 MB cache stayed hot!). Now click **Cold Hibernate (`--mode=sync`)** -> watch the 16 MB scratch cache evaporate so only the **`~480 B` `/data/wal.jsonl`** uploads to GCS (**`99.997%` bandwidth saved**!), replaying in `<1ms` on the next click.
+  3. **The Friday 4:55 PM GDPR Button:** Acme Corp churns and demands GDPR deletion. Click **GDPR Shred** (`kubectl ate delete actor db-acme`): compute, RAM snapshots, and `/data` volume are vaporized in one command (`404 TENANT_SHREDDED`) while `db-globex` next door doesn't drop a beat.
+* **What the Demo Does & What Substrate Gives Us (45s):**
+  * **What the demo does:** Runs a dedicated embedded database + 16 MB buffer pool per SaaS customer without Kubernetes PVC attach bottlenecks or giant object-storage bills.
+  * **Features we get from Substrate:**
+    * **`DurableDir` Micro-Volumes (`volumes: [{durableDir: {}}]`):** Snapshot-backed `/data` directories that attach and detach in ~100ms across thousands of tenants (unlike K8s PVCs, which cap out at tens per node and take seconds/minutes to mount).
+    * **Hot-RAM (`--mode=async`) vs. Compact Durable (`--mode=sync`) Suspend:** Keep RAM warm during active bursts, drop rebuildable caches for long hibernation.
+    * **1-Command Tenant Shredding (`kubectl ate delete actor`):** Per-customer blast radius and instant cryptographic/storage cleanup.
 
-* **Slide 12: Pattern 2 — One Database Process Per Customer (`cmd/tenantdb`)**
-  * *Real-world examples:* Per-tenant SQLite, DuckDB, or embedded analytical engines.
-  * *Why Multi-Tenant DBs Hurt:* Noisy neighbors, missing `WHERE tenant_id = ?` row-level security bugs, painful per-tenant backup/restore, and complex GDPR deletion queries across 50 shared tables.
-  * *The Substrate Hybrid (`onPause: FULL`, `onCommit: DATA` + `DurableDir` + Storage/Memory Tiering X-Ray UI `:8086`):*
-    * **4 Customer Databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) on 3 Worker Pods:** Queries execute `SELECT * FROM tenant_records` with **zero `WHERE tenant_id` clause** because each customer has a dedicated gVisor address space and `/data/wal.jsonl` `DurableDir` micro-volume.
-    * **Short Idle (`Pause` on the node -> `FULL` scope):** Freezes the **`16.0 MB` Hot RAM Buffer Pool & Materialized View** (`recovery_mode: HOT_RAM_RESUME`, `0` WAL entries replayed).
-    * **Long Idle (`Suspend` to GCS -> `DATA` scope):** Discards the `16.0 MB` dirty RAM heap and uploads **only the `~480 B` `/data/wal.jsonl` `DurableDir`** (**`99.997%` GCS snapshot bandwidth saved**). On next wakeup, the process replays `/data/wal.jsonl` in `<1ms` (`recovery_mode: COLD_DATA_REPLAY`) and re-hydrates its Buffer Pool across Worker Pod migrations (`pod_ip_history`).
-    * **GDPR Article 17 Right-to-be-Forgotten:** `kubectl ate delete actor db-acme` shreds `db-acme`'s compute, RAM checkpoints, and `/data` volume in one command (`404 TENANT_SHREDDED`) while `db-globex` stays 100% online.
+* **Transition joke to Demo 4:**
+  * *"Acme and Globex were polite paying customers. What happens when the user connecting to your app is an active hacker running `rm -rf`?"*
 
-* **Slide 14: Pattern 3 — The "Truman Show" Deception Grid (`cmd/honeypot`)**
-  * *Real-world examples:* High-interaction security honeypots, per-PR full-stack preview environments, SaaS webhook/plugin runners, CTF (Capture The Flag) challenge boxes per contestant.
-  * *Split-Screen Live Demo (`./hack/stage-demo.sh act4-honeypot` + In-Cluster Gateway `deploy-honeypot` / `:8084`):*
-    * **Left Pane ("The Movie Set" — Attacker View `/shell`):** Route each scanner IP (`honeypot-203-0-113-5`) to its own `sandboxClass: gvisor` actor (`debian:13-slim` base image in `.ko.yaml`) running real `/bin/sh -c` commands. The attacker sees only realistic `AcmeCorp Internal Payroll v1.4` `stdout`/`stderr` and decoy lures (`payroll_db_credentials.env.bak`, `wire_transfer_batch_409.csv`).
-    * **Right Pane ("The Director's Booth" — Hidden SOC View `/forensics`):** Silently tracks in-memory `canary_alerts`, SHA-256 `rootfs_delta` (`UNCHANGED` / `ADDED` / `MODIFIED` / `DELETED`), `gvisor_sandbox_proof` (`Linux version 4.19.0-gvisor #1 SMP`), and cross-pod `pod_ip_history`.
-    * **Auto-Checkpoint, $0 Idle Suspend & Un-deleting `rm -rf`:** When Attacker A steals decoy credentials and plants `/tmp/honeypot/dropper.sh`, the SOC Gateway auto-checkpoints (`/checkpoint/save` + `kubectl ate suspend actor`) to GCS ($0 idle compute) while Attacker B (`198.51.100.9`) sees a clean Golden Snapshot. Weeks later, Attacker A returns, wakes in ~100ms (even across different GKE worker pod IPs!) with `dropper.sh` still in `/tmp`, and runs `rm -f dropper.sh` to wipe their tracks—and the SOC Director uses **`kubectl ate revert actor`** to rewind the rootfs overlay and recover the deleted malware, or **`kubectl ate create tag` + `--tag`** to fork the live sandbox into `honeypot-forensic-lab` without tipping off the attacker!
-    * **Attendee Takeaway:** `sandboxClass: gvisor` + `SNAPSHOT_FIDELITY_MEMORY` solves the multi-tenant untrusted-code trilemma (VM-grade isolation, $0 idle cost, ~100ms wakeup), while `revert` and `--tag` act as a filesystem + RAM time machine and live Copy-on-Write process cloner for debugging stateful sessions.
+### Demo 4: "The Truman Show for Hackers" (`11:30 - 15:00`, `cmd/honeypot`)
 
----
+* **The Joke / Setup (15s):**
+  * *"Security honeypots usually suck: real VMs cost a fortune to leave idle, and fake Python shell emulators fool nobody. With Substrate, every sketchy IP address gets its own private *Truman Show* movie set."*
+* **Show, Don't Tell (2m 30s live in Tab 4):**
+  1. **Left ("The Movie Set") vs. Right ("The Director's Booth"):** On the left terminal, pretend to be Attacker `203.0.113.5` poking around an "exposed AcmeCorp Payroll console." Run real `/bin/sh` commands: `cat payroll_db_credentials.env.bak` and drop `/tmp/honeypot/dropper.sh`. Point to the right pane: silent SOC telemetry confirms `Linux 4.19.0-gvisor`, logs Canary alerts, hashes `dropper.sh`, and suspends the crime scene to GCS (`$0` idle cost while a second attacker IP gets a clean box!).
+  2. **The Attacker Panics (`rm -f`):** Reconnect as `203.0.113.5` (it wakes in ~100ms on a *different* pod IP with `dropper.sh` still sitting in `/tmp`!). Run `rm -f dropper.sh` to destroy the evidence. The SOC pane flashes `ANTI_FORENSIC_WIPE_ATTEMPT (DELETED)`.
+  3. **Un-deleting `rm -rf` & Secret Cloning:** Click **Revert Wipe** (`kubectl ate revert actor`) in the SOC booth -> the container filesystem rewinds and **`dropper.sh` pops right back onto disk**! Then click **Clone to Forensic Lab** (`--tag`) to spin up an identical copy of the compromised container for malware detonation while the hacker keeps typing on the left, totally clueless.
+* **What the Demo Does & What Substrate Gives Us (45s):**
+  * **What the demo does:** Gives every attacker IP a dedicated Linux shell environment with `$0` idle cost, invisible SOC telemetry, un-deletable evidence, and live sandbox cloning.
+  * **Features we get from Substrate:**
+    * **Native `gVisor` Isolation (`sandboxClasses: [gvisor]`):** Real `/bin/sh` Linux binaries trapped inside a user-space application kernel (`ateworker-gvisor`), solving the VM-security vs. `$0`-idle vs. 100ms-wakeup trilemma.
+    * **Rootfs Overlay + RAM Persistence:** Even ephemeral `/tmp` edits survive suspend/resume across different GKE worker pods without a PVC.
+    * **Forensic Time-Travel (`revert` + `--tag`):** Rewind destructive filesystem mutations or fork a live container Copy-on-Write to debug/inspect it safely on the side.
 
-### Act IV — Don't Try This at Home: Where the Wheels Fall Off (Slides 17–21 + Live Demo 5)
+* **Transition joke to Demo 5 (Maximum Hubris):**
+  * *"Pause and admire our ego right now. We deleted Postgres! We humiliated HPA! We solved GDPR and un-deleted `rm -rf`! At this point every engineer in the room has the same intrusive thought: 'Put EVERYTHING on Substrate! Let's put `etcd` and Raft on Substrate so our control plane scales to zero!' ... Let's watch how fast that ruins your weekend."*
 
-* **Slide 17: What Happens When You Freeze a Process, But Not the Universe?**
-  * When `gVisor` or a `microVM` checkpoints a process, the process's CPU registers and RAM freeze at $t_0$.
-  * When it restores at $t_0 + \Delta t$, **the process has no idea $\Delta t$ happened** until it reads the clock or the network!
-* **Slide 18: Live Demo 5 — 3-Node Raft Split-Brain & Dual-Clock Time-Jump Lab (`cmd/timewarp`)**
-  * **On Stage (`./hack/stage-demo.sh act5-timewarp` + `/dashboard`):**
-    1. **Healthy Term 1 Quorum:** Start `raft-node-1..3`. `raft-node-1` is `LEADER (Term 1)` with a 3s lease; client `"Alice"` acquires exclusive lock `#101`. Universe Wall Clock and `raft-node-1` Heap Clock tick in lockstep.
-    2. **Freeze Term 1 Leader in GCS (`kubectl ate suspend`) & Elect Term 2 Leader:** Suspend `raft-node-1` for 5 seconds (`0 CPU instructions`; its heap clock freezes flat in amber). After 3s, its lease expires in the real world—`raft-node-2` & `raft-node-3` elect **`raft-node-2` as `LEADER (Term 2)`** and grant exclusive lock `#102` to `"Bob"`.
-    3. **Wake the Zombie Leader via `atenet` (`"Mallory"` Split-Brain!):** Send a lock request for `"Mallory"` to `raft-node-1`. `atenet` restores `raft-node-1` from GCS in ~100ms:
-       * A single `100ms` tick observes a `5,000+ ms` wall-clock jump.
-       * Its restored heap still believes it is `LEADER (Term 1)` and grants lock `#101` to `"Mallory"` while `raft-node-2` holds lock `#102` for `"Bob"` (**two simultaneous leaders granting conflicting exclusive locks!**).
-       * Its naive rate-limiter (`tokens += elapsed * rate`) mints `+500` burst tokens in a single tick.
-    4. **The Guardrail Fix (`?guard=true`):** Replay with **Wakeup Clock-Jump Guardrail** enabled—showing how valid Substrate actors detect `dt >> expectedTick` on wakeup, fence stale leases (`409 Conflict`), and clamp rate-limiter deltas.
-* **Slide 19: The Four Horsemen of Substrate Anti-Patterns**
-  1. **Distributed Consensus Voters (etcd / Raft / Paxos):** Suspending a voter triggers leader elections; resuming it reintroduces a zombie leader with amnesia.
-  2. **Wall-Clock-Naive Loops:** Heartbeats, TLS session tickets, OAuth token refreshers, and token-bucket rate limiters that don't clamp `time.Since(lastTick)`.
-  3. **Always-On 60Hz Streams (FPS Game Servers, Kafka Brokers, Live Video Transcoding):** If duty cycle is 100%, multiplexing is `1:1`—you've just built Kubernetes Pods with extra steps and a massive GCS snapshot bill.
-  4. **Stateless Fast-Boot Microservices:** If a Go binary boots in 5ms and holds no state, `Deployment` + Service load-balancing beats actor pinning every time.
+### Demo 5: "Putting Raft in the Freezer" (`15:00 - 18:30`, `cmd/timewarp`)
 
----
+* **The Joke / Setup (15s):**
+  * *"You don't really understand a shiny new hammer until you smash your own thumb with it. Let's freeze the leader of a distributed consensus cluster."*
+* **Show, Don't Tell (2m 15s live in Tab 5):**
+  1. **Happy Cluster:** `raft-node-1..3` are up. `raft-node-1` is `LEADER (Term 1)` with a 3-second lease; Alice holds exclusive lock `#101`. Both clocks tick together.
+  2. **Put Leader 1 in the Freezer:** Click **Suspend Term 1 Leader** (`kubectl ate suspend actor raft-node-1 --mode=sync`). Its CPU instructions drop to `0` and its heap clock freezes flat in amber. Count 3 seconds out loud: its lease expires in the real universe! `raft-node-2` and `raft-node-3` elect **`raft-node-2` as `LEADER (Term 2)`** and give exclusive lock `#102` to Bob.
+  3. **Wake the Zombie:** Send a write from Mallory to `raft-node-1`. `atenet` cheerfully wakes `raft-node-1` up in 100ms! Because its frozen brain has no idea 5 seconds passed, three explosions happen in one tick:
+     * **5,000ms Clock-Jump Shock** on a 100ms ticker.
+     * **Dual-Leader Split-Brain:** `raft-node-1` still thinks it is `LEADER (Term 1)` and hands lock `#101` to Mallory while Bob holds `#102` on Node 2, corrupting the KV store on screen!
+     * **Token-Bucket Jackpot:** `tokens += elapsed * rate` mints `+500` burst tokens at once.
+  4. **The Seatbelt (`?guard=true`):** Toggle **Clock-Jump Guardrail ON** and replay: now on wakeup the process sees `dt >> 100ms`, immediately fences its stale lease (`409 Conflict`), and clamps its rate limiter.
+* **What the Demo Does & What Substrate Gives Us (1m):**
+  * **What the demo does:** Intentionally split-brains a 3-node Raft & distributed lock cluster by suspending its leader across a lease timeout, then fixes the wakeup shock with a clock-jump fence.
+  * **What we learn about Substrate:**
+    * **Substrate freezes process RAM, never the universe's wall clock:** Any actor holding external leases, OAuth tokens, or `time.Since(lastTick)` rate limiters must check for wall-clock jumps on wakeup.
+    * **Know what stays on plain Kubernetes:** Consensus voters (`etcd`, Raft), continuous brokers (`Kafka`), and 100% duty-cycle 60Hz game loops belong on `StatefulSets` and `Deployments`.
 
-### Wrap-Up — The "Secretly Agent-Shaped" Litmus Test (Slide 22)
+### The Closer: "Wait... We Just Built an AI Agent by Accident" (`18:30 - 20:00`)
 
-| Question | If YES -> Substrate Superpower | If NO -> Stick to K8s `Deployment` / `StatefulSet` |
+* **On screen:** One single punchline scorecard stacking all 5 demos together.
+* **Spoken closer:**
+  * *"Look at our five weird non-AI experiments on those three little pods:"*
+    1. **Dungeon 2D:** Messy working memory that needs **checkpoint, undo (`revert`), and parallel branching (`--tag`)**.
+    2. **Coldstart Search:** Heavy 12-second runtimes and indexes that need **100ms `Golden Snapshot` cloning**.
+    3. **TenantDB:** Thousands of isolated per-user `/data` workspaces (`DurableDir`) that **burst for 5 seconds, then sit idle for 20 minutes** while a human thinks.
+    4. **Honeypot:** Untrusted `/bin/sh` execution (`gVisor`) where someone *will* eventually hallucinate `rm -rf`.
+    5. **Timewarp Raft:** Driven by **discrete request/turn bursts**, never a continuous 100ms consensus heartbeat.
+  * **Final punchline:**
+    > *"Put a save-scumming gamer, a slow-booting search index, an idle per-user workspace, and a chaotic `/bin/sh` user in a trench coat... and you just described an **AI agent**. Agent Substrate isn't 'for agents' because someone slapped an LLM logo on Kubernetes. It is the foundation for agents because an agent is the first mainstream workload in history that needs **all four** of those systems superpowers at once."*
+
+## Quick Reference: Demo-to-Substrate Feature Cheat Sheet
+
+| Demo | What the Demo Does | Features We Get from Substrate (`v1.0.0-rc.2`) |
 |---|---|---|
-| **Are instances idle >90% of the time?** | 10x–100x worker multiplexing density + [Request Parking](#) | 1:1 worker pinning (no multiplexing gain) |
-| **Is cold-boot init >2 seconds?** | `ActorTemplate` Golden Snapshot skips init forever | Fast cold boot doesn't need Golden Snapshot |
-| **Is state awkward to serialize to an external DB?** | `FULL` snapshot freezes heap & rootfs in place | Stateless or already in external Postgres/Redis |
-| **Is each instance naturally single-tenant / untrusted?** | Per-actor `gVisor` / `microVM` sandbox + `Atespace` | Multi-tenant stateless worker pool |
-| **Does the process participate in quorum/consensus?** | **DO NOT RUN ON SUBSTRATE** (Split-Brain!) | Use `StatefulSet` |
+| **0. `cmd/slides`** | Presentation deck where each slide is an actor sleeping in GCS | 12 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` |
+| **1. `cmd/dungeon2d`** | Multi-player 8-floor browser roguelike with zero DB code | `WorkerPool` (`ate.dev/v1`), `atenet` Wake-on-HTTP, `SNAPSHOT_FIDELITY_MEMORY`, `save` / `--snapshot-version`, `revert`, `create tag` + `--tag` |
+| **2. `cmd/coldstart`** | 50k-doc in-memory search engine in a `60 QPS` HPA race | `ActorTemplate` + `wakeupProbe` (`/readyz` -> `goldenTag` Golden Snapshot), ~100ms Copy-on-Write heap restore, pod-decoupled scaling |
+| **3. `cmd/tenantdb`** | 1 isolated DB + 16 MB cache per customer across 3 pods | `DurableDir` (`/data`), `suspend --mode=async` (hot RAM) vs. `--mode=sync` (compact WAL, `99.997%` GCS saved), 1-cmd `delete actor` |
+| **4. `cmd/honeypot`** | Per-IP `gVisor` hacker Movie Set + SOC forensic booth | `sandboxClasses: [gvisor]` (`ateworker-gvisor`), OCI rootfs overlay + RAM persistence across pod IPs, `revert` (`rm -rf` undo), `--tag` live clone |
+| **5. `cmd/timewarp`** | 3-node Raft cluster broken by a 5s leader freeze | `suspend`/`resume` wall-clock discontinuity mechanics, wakeup clock-jump fencing (`?guard=true`), `Actor` vs. `StatefulSet` boundary |
+
+## Pocket Q&A Answers (If Time Permits or Hallway Track)
+
+* **Why run `dungeon2d` 60fps movement in the browser instead of on the actor?** Ticking an idle player at 60Hz on the server pins a worker pod `1:1` (Demo 5's anti-pattern). Keeping frame rendering client-side and waking the actor on `atenet` only for Save Shrines, revert, fork, and victory lets 50+ audience phones share 3 pods.
+* **Why does `coldstart` put a custom L7 router in front of K8s `Deployment`?** Fairness! Default `kube-proxy` pins HTTP/1.1 keep-alives to Pod 1 even after Pods 2 and 3 turn Ready. Giving K8s its own endpoint-watching L7 router isolates the 12s cold boot as the *only* difference.
+* **What happens to open TCP connections when an actor suspends?** Inbound HTTP goes through `atenet-router` (`:443` mTLS), which routes to whichever pod wakes the actor. Outbound TCP sockets to external DBs will time out over long freezes, so use HTTP RPCs or let connection pools reconnect lazily on wakeup.
+* **Why `gVisor` instead of Linux CRIU on `runc`?** You cannot run untrusted multi-tenant `/bin/sh` (`honeypot` or AI agents) safely on `runc`, and because gVisor's Sentry is a user-space kernel in Go, serializing kernel + heap + rootfs overlay into one portable snapshot restores cleanly across nodes without host-PID conflicts.
+* **How does this differ from Cloud Run / Knative or Durable Objects / Temporal?** Cloud Run scales to zero by killing your process (wiping RAM and paying the 12s cold boot next time); Durable Objects and Temporal require rewriting code in a custom runtime/SDK. Substrate checkpoints ordinary Linux containers in place.

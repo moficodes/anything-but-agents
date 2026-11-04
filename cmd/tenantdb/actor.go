@@ -435,7 +435,7 @@ func (db *TenantDB) BuildSnapshot(podIP string) TenantSnapshot {
 		ProcessBootedAt:       db.ProcessBootedAt.Format(time.RFC3339Nano),
 		CurrentPodIP:          podIP,
 		PodIPHistory:          historyCopy,
-		GDPRDeleteInstruction: "kubectl ate delete actor <tenant-actor> -a <atespace> --any-state",
+		GDPRDeleteInstruction: "kubectl ate delete actor <tenant-actor> -a <atespace>",
 	}
 }
 

@@ -23,6 +23,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+
+	"github.com/moficodes/anything-but-agents/internal/presenterauth"
 )
 
 func main() {
@@ -57,22 +59,38 @@ func main() {
 		}
 
 	case "gateway":
+		token := *presenterToken
+		if token == "" {
+			token = presenterauth.RandomToken(24)
+		}
 		backend := NewClusterAteBackend(*atespace, *template, *routerURL, *ateEndpoint, *kubectlAteBin)
-		gw := NewGatewayServer(backend, *presenterToken)
+		gw := NewGatewayServer(backend, token)
 		slog.Info("Starting TenantDB Storage & Memory Tiering Gateway (cluster-ate mode)",
 			slog.String("addr", *addr),
 			slog.String("atespace", *atespace),
 			slog.String("router_url", *routerURL))
+		if *presenterToken == "" {
+			slog.Info("PRESENTER_TOKEN is unset; generated presenter key for /dashboard",
+				slog.String("dashboard_url", "/dashboard?key="+gw.PresenterKey()))
+		}
 		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
 			slog.Error("Gateway server exited", slog.Any("err", err))
 			os.Exit(1)
 		}
 
 	case "local":
+		token := *presenterToken
+		if token == "" {
+			token = presenterauth.RandomToken(24)
+		}
 		backend := NewLocalSimulatorBackend(*atespace, *template)
-		gw := NewGatewayServer(backend, *presenterToken)
+		gw := NewGatewayServer(backend, token)
 		slog.Info("Starting TenantDB Storage & Memory Tiering Gateway (local simulator mode)",
 			slog.String("addr", *addr))
+		if *presenterToken == "" {
+			slog.Info("PRESENTER_TOKEN is unset; generated presenter key for /dashboard",
+				slog.String("dashboard_url", "/dashboard?key="+gw.PresenterKey()))
+		}
 		if err := http.ListenAndServe(*addr, gw.Mux()); err != nil {
 			slog.Error("Local gateway server exited", slog.Any("err", err))
 			os.Exit(1)

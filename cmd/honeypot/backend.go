@@ -474,11 +474,14 @@ func (b *ClusterAteBackend) runKubectlAte(ctx context.Context, args ...string) (
 	}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, bin, cmdArgs...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(out), fmt.Errorf("%s %v: %w (%s)", bin, cmdArgs, err, strings.TrimSpace(string(out)))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		combined := strings.TrimSpace(stderr.String() + "\n" + stdout.String())
+		return stdout.String(), fmt.Errorf("%s %v: %w (%s)", bin, cmdArgs, err, combined)
 	}
-	return string(out), nil
+	return stdout.String(), nil
 }
 
 func (b *ClusterAteBackend) ensureTrackerLocked(actorName string) *ActorTrackerState {
@@ -534,6 +537,7 @@ func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 			} `json:"externalSnapshot"`
 			Snapshots []struct {
 				DurableSnapshot struct {
+					State  string `json:"state"`
 					Object struct {
 						SnapshotURI string `json:"snapshotUri"`
 					} `json:"object"`
@@ -555,7 +559,7 @@ func (b *ClusterAteBackend) inspectRunningActor(ctx context.Context, actorName s
 	}
 	uri := parsed.Status.ExternalSnapshot.SnapshotURI
 	for _, s := range parsed.Status.Snapshots {
-		if s.DurableSnapshot.Object.SnapshotURI != "" {
+		if (s.DurableSnapshot.State == "" || s.DurableSnapshot.State == "SNAPSHOT_STORAGE_STATE_COMPLETED") && s.DurableSnapshot.Object.SnapshotURI != "" {
 			uri = s.DurableSnapshot.Object.SnapshotURI
 		}
 	}
@@ -571,7 +575,7 @@ func (b *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor st
 	var honeypotActors []string
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[0] == "NAMESPACE" {
+		if len(fields) < 4 || fields[0] == "ATESPACE" || fields[0] == "NAMESPACE" || strings.HasPrefix(fields[0], "Warning:") {
 			continue
 		}
 		name := fields[1]

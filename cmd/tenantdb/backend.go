@@ -665,7 +665,7 @@ func parseClusterActorsOutput(out string) []clusterActorInfo {
 	var res []clusterActorInfo
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || strings.EqualFold(fields[0], "ATESPACE") {
+		if len(fields) < 4 || strings.EqualFold(fields[0], "ATESPACE") || strings.EqualFold(fields[0], "NAMESPACE") || strings.HasPrefix(fields[0], "Warning:") {
 			continue
 		}
 		info := clusterActorInfo{
@@ -829,11 +829,14 @@ func (b *ClusterAteBackend) runKubectlAte(ctx context.Context, args ...string) (
 		fullArgs = append(fullArgs, "--endpoint", b.ateEndpoint)
 	}
 	cmd := exec.CommandContext(ctx, b.kubectlAteBin, fullArgs...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err := cmd.Run()
-	return strings.TrimSpace(out.String()), err
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		combined := strings.TrimSpace(stderr.String() + "\n" + stdout.String())
+		return combined, err
+	}
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 func (b *ClusterAteBackend) ensureClusterActor(ctx context.Context, actorName string) error {

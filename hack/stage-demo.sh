@@ -16,8 +16,9 @@
 # Live-stage runner & GKE deployer for the "Running Anything But Agents on Substrate" talk.
 #
 # Usage:
-#   ./hack/stage-demo.sh bootstrap-gke   # Provision GKE cluster (default: us-west3 SLC), install Substrate & deploy all 5 demos
-#   ./hack/stage-demo.sh deploy          # Build & deploy WorkerPool + all 5 ActorTemplates onto current cluster
+#   ./hack/stage-demo.sh bootstrap-gke     # Provision GKE cluster (default: us-west3 SLC), install Substrate & deploy all 5 demos
+#   ./hack/stage-demo.sh upgrade-substrate # Upgrade ate-system & local kubectl-ate on current GKE cluster to SUBSTRATE_VERSION
+#   ./hack/stage-demo.sh deploy            # Build & deploy WorkerPool + all 6 ActorTemplates onto current cluster
 #   ./hack/stage-demo.sh run-all         # Run all 5 demos in sequence
 #   ./hack/stage-demo.sh act1-dungeon    # Live Demo 1: "Look Ma, No Database" + Save-Scumming (revert & tag)
 #   ./hack/stage-demo.sh act1b-dungeon2d # Live Demo 1B: 2D Multilevel Dungeon + Live Mission-Control Dashboard
@@ -67,8 +68,11 @@ apply_env_defaults() {
   export BUCKET_NAME="${BUCKET_NAME:-ate-snapshots-${PROJECT_ID}-${GCE_REGION}}"
   export KO_DOCKER_REPO="${KO_DOCKER_REPO:-gcr.io/${PROJECT_ID}/anything-but-agents}"
   export DEMO_DOMAIN="${DEMO_DOMAIN:-substrate.learngke.dev}"
+  export SLIDES_DOMAIN="${SLIDES_DOMAIN:-abs.slides.${DEMO_DOMAIN}}"
   export GATEWAY_IP_NAME="${GATEWAY_IP_NAME:-substrate-learngke-ip}"
   export CERT_MAP_NAME="${CERT_MAP_NAME:-substrate-learngke-map}"
+  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0-rc.2}"
+  export SUBSTRATE_IMAGE_REPO="${SUBSTRATE_IMAGE_REPO:-ghcr.io/agent-substrate/substrate}"
   if [[ -z "${ATE_CREDENTIAL_PROVIDER:-}" ]]; then
     export ATE_CREDENTIAL_PROVIDER='{"name":"k8s.io"}'
   fi
@@ -80,12 +84,25 @@ apply_env_defaults() {
       "${REPO_ROOT}/.." \
       "${REPO_ROOT}/../../agent-substrate/substrate" \
       "${REPO_ROOT}/../../../../agent-substrate/substrate"; do
-      if [[ -d "${candidate}/tools/setup-gcp" ]]; then
+      if [[ -d "${candidate}/cmd/ate-setup" ]]; then
         SUBSTRATE_ROOT="$(cd "${candidate}" && pwd)"
         break
       fi
     done
     export SUBSTRATE_ROOT="${SUBSTRATE_ROOT:-$(cd "${REPO_ROOT}/.." && pwd)}"
+  fi
+  if [[ -z "${SUBSTRATE_GKE_ROOT:-}" ]]; then
+    for candidate in \
+      "${REPO_ROOT}/../../ai-on-gke/substrate-gke" \
+      "${REPO_ROOT}/../../../../ai-on-gke/substrate-gke" \
+      "${REPO_ROOT}/../substrate-gke" \
+      "${SUBSTRATE_ROOT}"; do
+      if [[ -n "${candidate}" && -d "${candidate}/tools/setup-gcp" ]]; then
+        SUBSTRATE_GKE_ROOT="$(cd "${candidate}" && pwd)"
+        break
+      fi
+    done
+    export SUBSTRATE_GKE_ROOT="${SUBSTRATE_GKE_ROOT:-${SUBSTRATE_ROOT}}"
   fi
 
   # Isolate KUBECONFIG and CLOUDSDK_CONFIG so concurrent sessions on the same
@@ -151,16 +168,330 @@ resolve_gke_version() {
   export CLUSTER_VERSION="${detected:-1.36.4-gke.1495000}"
 }
 
+allowed_ingress_spiffe_ids() {
+  echo "spiffe://cluster.local/ns/anything-but-agents/sa/default,spiffe://cluster.local/ns/anything-but-agents/sa/slides-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/dungeon2d-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/coldstart-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/tenantdb-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/honeypot-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/timewarp-gateway"
+}
+
+sync_substrate_root_version() {
+  if [[ -z "${SUBSTRATE_ROOT:-}" || ! -d "${SUBSTRATE_ROOT}/.git" || -z "${SUBSTRATE_VERSION:-}" ]]; then
+    return 0
+  fi
+  (
+    cd "${SUBSTRATE_ROOT}"
+    local target_commit head_commit
+    if ! git rev-parse --verify "${SUBSTRATE_VERSION}^{commit}" >/dev/null 2>&1; then
+      git fetch --tags origin >/dev/null 2>&1 || true
+    fi
+    target_commit="$(git rev-parse --verify "${SUBSTRATE_VERSION}^{commit}" 2>/dev/null || true)"
+    head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "${target_commit}" && "${head_commit}" != "${target_commit}" ]]; then
+      if [[ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+        echo "Switching ${SUBSTRATE_ROOT} to ${SUBSTRATE_VERSION} (${target_commit:0:12})..." >&2
+        git checkout --detach "${SUBSTRATE_VERSION}" >/dev/null 2>&1 || true
+      else
+        echo "WARNING: ${SUBSTRATE_ROOT} has uncommitted tracked changes; staying at ${head_commit:0:12} instead of ${SUBSTRATE_VERSION}." >&2
+      fi
+    fi
+  )
+}
+
+install_local_kubectl_ate() {
+  if [[ -z "${SUBSTRATE_ROOT:-}" || ! -d "${SUBSTRATE_ROOT}/cmd/kubectl-ate" ]]; then
+    echo "Error: SUBSTRATE_ROOT (${SUBSTRATE_ROOT:-}) does not contain cmd/kubectl-ate." >&2
+    exit 1
+  fi
+  sync_substrate_root_version
+  (
+    cd "${SUBSTRATE_ROOT}"
+    local commit build_date
+    commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    build_date="$(git show -s --format=%cI HEAD 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "Installing local kubectl-ate (${SUBSTRATE_VERSION}, commit=${commit:0:12}) from ${SUBSTRATE_ROOT}..."
+    go install -ldflags "-X go.ate.dev/substrate/internal/version.Version=${SUBSTRATE_VERSION} -X go.ate.dev/substrate/internal/version.Commit=${commit} -X go.ate.dev/substrate/internal/version.BuildDate=${build_date}" ./cmd/kubectl-ate
+  )
+}
+
+mirror_gvisor_assets() {
+  local sc_json
+  sc_json="$(kubectl get sandboxconfigs.v1.ate.dev gvisor-default -o json 2>/dev/null || true)"
+  if [[ -z "${sc_json}" ]]; then
+    return 0
+  fi
+  local rows
+  rows="$(SC_JSON="${sc_json}" python3 - <<'PY'
+import json, os
+sc = json.loads(os.environ.get("SC_JSON", "{}"))
+for idx, ver in enumerate(sc.get("spec", {}).get("versions", [])):
+    url = ver.get("assets", {}).get("amd64", {}).get("gvisor", {}).get("url", "")
+    if url.startswith("gs://gvisor/"):
+        print(f"{idx}\t{ver.get('name', idx)}\t{url}")
+PY
+)"
+  if [[ -z "${rows}" ]]; then
+    return 0
+  fi
+  local patched=0
+  while IFS=$'\t' read -r idx ver_name src_url; do
+    [[ -z "${src_url}" ]] && continue
+    local rel_path="${src_url#gs://gvisor/}"
+    local dst_url="gs://${BUCKET_NAME}-assets/${rel_path}"
+    echo "Mirroring gVisor runtime asset (${ver_name}) ${src_url} -> ${dst_url}..."
+    gcloud storage cp --no-clobber --quiet --project="${PROJECT_ID}" "${src_url}" "${dst_url}"
+    kubectl patch sandboxconfigs.v1.ate.dev gvisor-default --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/spec/versions/${idx}/assets/amd64/gvisor/url\",\"value\":\"${dst_url}\"}]"
+    patched=1
+  done <<< "${rows}"
+  if [[ "${patched}" -eq 1 ]]; then
+    kubectl rollout restart daemonset/atelet -n ate-system >/dev/null 2>&1 || true
+    kubectl rollout status daemonset/atelet -n ate-system --timeout=180s
+  fi
+}
+
+reset_node_image_cache() {
+  local target_layout="${1:-3}"
+  if ! kubectl get namespace ate-system >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Ensuring node /var/lib/ate/image-cache matches atelet layout version ${target_layout}..."
+  kubectl delete daemonset/atelet -n ate-system --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  kubectl apply -f - >/dev/null <<EOF
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: atelet-cache-reset
+  namespace: ate-system
+spec:
+  selector:
+    matchLabels:
+      app: atelet-cache-reset
+  template:
+    metadata:
+      labels:
+        app: atelet-cache-reset
+    spec:
+      tolerations:
+      - key: ate.dev/sandboxClass
+        operator: Exists
+        effect: NoSchedule
+      - key: cloud.google.com/compute-class
+        operator: Exists
+        effect: NoSchedule
+      initContainers:
+      - name: reset
+        image: debian:13-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+        command:
+        - sh
+        - -c
+        - |
+          ver="\$(cat /var/lib/ate/image-cache/version 2>/dev/null || true)"
+          if [ -n "\$ver" ] && [ "\$ver" != "${target_layout}" ]; then
+            echo "Resetting /var/lib/ate/image-cache (layout version \$ver -> ${target_layout})"
+            rm -rf /var/lib/ate/image-cache
+          fi
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: ate-base
+          mountPath: /var/lib/ate
+      containers:
+      - name: pause
+        image: debian:13-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+        command: ["sh", "-c", "sleep 3600"]
+      volumes:
+      - name: ate-base
+        hostPath:
+          path: /var/lib/ate
+          type: DirectoryOrCreate
+EOF
+  kubectl rollout status daemonset/atelet-cache-reset -n ate-system --timeout=180s >/dev/null
+  kubectl delete daemonset/atelet-cache-reset -n ate-system --ignore-not-found --wait=true >/dev/null
+}
+
+resolve_kubectl_ate_image() {
+  if [[ -n "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    export KUBECTL_ATE_IMAGE
+    return 0
+  fi
+  if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}/cmd/kubectl-ate" ]]; then
+    sync_substrate_root_version
+    echo "Building kubectl-ate (${SUBSTRATE_VERSION}) container image from ${SUBSTRATE_ROOT}..."
+    KUBECTL_ATE_IMAGE="$(
+      cd "${SUBSTRATE_ROOT}"
+      KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
+    )"
+  else
+    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
+  fi
+  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
+    echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to build the gateway kubectl-ate initContainer image." >&2
+    exit 1
+  fi
+  export KUBECTL_ATE_IMAGE
+}
+
+ensure_presenter_auth() {
+  kubectl apply -f - >/dev/null <<'EOF'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: anything-but-agents
+  labels:
+    ate.dev/api-access: "true"
+EOF
+
+  local session_hmac_secret presenter_token
+  session_hmac_secret="$(kubectl get secret presenter-auth -n anything-but-agents -o jsonpath='{.data.SESSION_HMAC_SECRET}' 2>/dev/null | base64 -d || true)"
+  presenter_token="${PRESENTER_TOKEN:-}"
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(kubectl get secret presenter-auth -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  fi
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  fi
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(kubectl get secret slides-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  fi
+  if [[ -z "${session_hmac_secret}" ]]; then
+    session_hmac_secret="$(openssl rand -hex 32)"
+  fi
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(openssl rand -hex 24)"
+  fi
+
+  local tmp_secret_env tmp_gw_env
+  tmp_secret_env="$(mktemp)"
+  tmp_gw_env="$(mktemp)"
+  chmod 600 "${tmp_secret_env}" "${tmp_gw_env}"
+  printf 'SESSION_HMAC_SECRET=%s\nPRESENTER_TOKEN=%s\n' "${session_hmac_secret}" "${presenter_token}" > "${tmp_secret_env}"
+  printf 'PRESENTER_TOKEN=%s\n' "${presenter_token}" > "${tmp_gw_env}"
+
+  kubectl create secret generic presenter-auth \
+    -n anything-but-agents \
+    --from-env-file="${tmp_secret_env}" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+  for gw_sec in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway; do
+    kubectl create secret generic "${gw_sec}" \
+      -n anything-but-agents \
+      --from-env-file="${tmp_gw_env}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  done
+  rm -f "${tmp_secret_env}" "${tmp_gw_env}"
+
+  local google_client_id="${GOOGLE_CLIENT_ID:-}"
+  local firebase_api_key="${FIREBASE_API_KEY:-}"
+  local allowed_domains="${ALLOWED_GOOGLE_DOMAINS:-}"
+
+  if [[ -z "${allowed_domains}" ]]; then
+    allowed_domains="$(kubectl get configmap presenter-auth -n anything-but-agents -o jsonpath='{.data.ALLOWED_GOOGLE_DOMAINS}' 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${allowed_domains}" ]]; then
+    local access_token=""
+    if [[ -n "${PROJECT_ID:-}" ]]; then
+      access_token="$(gcloud auth application-default print-access-token --quiet 2>/dev/null || gcloud auth print-access-token --quiet 2>/dev/null || true)"
+    fi
+
+    if [[ -n "${access_token}" && -n "${PROJECT_ID:-}" ]]; then
+      if [[ -z "${google_client_id}" ]]; then
+        local idp_json
+        idp_json="$(curl -fsS -H "Authorization: Bearer ${access_token}" -H "x-goog-user-project: ${PROJECT_ID}" \
+          "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/defaultSupportedIdpConfigs/google.com" 2>/dev/null || true)"
+        if [[ -n "${idp_json}" ]]; then
+          google_client_id="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("clientId",""))' <<< "${idp_json}" 2>/dev/null || true)"
+        fi
+      fi
+
+      local cfg_json
+      cfg_json="$(curl -fsS -H "Authorization: Bearer ${access_token}" -H "x-goog-user-project: ${PROJECT_ID}" \
+        "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config" 2>/dev/null || true)"
+      if [[ -n "${cfg_json}" ]]; then
+        if [[ -z "${firebase_api_key}" ]]; then
+          firebase_api_key="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("client",{}).get("apiKey",""))' <<< "${cfg_json}" 2>/dev/null || true)"
+        fi
+        local patch_payload
+        patch_payload="$(CFG_JSON="${cfg_json}" python3 - "${DEMO_DOMAIN}" "${SLIDES_DOMAIN}" <<'PY'
+import json, os, sys
+demo_domain, slides_domain = sys.argv[1], sys.argv[2]
+try:
+    cfg = json.loads(os.environ.get("CFG_JSON", ""))
+except Exception:
+    sys.exit(0)
+existing = list(cfg.get("authorizedDomains", []))
+required = [
+    "localhost",
+    demo_domain,
+    slides_domain,
+    f"slides.{demo_domain}",
+    f"dungeon.{demo_domain}",
+    f"coldstart.{demo_domain}",
+    f"tenantdb.{demo_domain}",
+    f"honeypot.{demo_domain}",
+    f"timewarp.{demo_domain}",
+]
+missing = [d for d in required if d and d not in existing]
+if missing:
+    print(json.dumps({"authorizedDomains": existing + missing}))
+PY
+)"
+        if [[ -n "${patch_payload}" ]]; then
+          echo "Authorizing demo hostnames in Identity Platform authorizedDomains..."
+          if ! curl -fsS -X PATCH \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "x-goog-user-project: ${PROJECT_ID}" \
+            -H "Content-Type: application/json" \
+            -d "${patch_payload}" \
+            "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=authorizedDomains" >/dev/null; then
+            echo "WARNING: Failed to update Identity Platform authorizedDomains; Firebase popup sign-in may fail with auth/unauthorized-domain." >&2
+          fi
+        fi
+      fi
+    fi
+
+    if [[ -z "${google_client_id}" ]]; then
+      google_client_id="$(kubectl get configmap presenter-auth -n anything-but-agents -o jsonpath='{.data.GOOGLE_CLIENT_ID}' 2>/dev/null || true)"
+    fi
+    if [[ -z "${firebase_api_key}" ]]; then
+      firebase_api_key="$(kubectl get configmap presenter-auth -n anything-but-agents -o jsonpath='{.data.FIREBASE_API_KEY}' 2>/dev/null || true)"
+    fi
+
+    local tmp_cm_env
+    tmp_cm_env="$(mktemp)"
+    chmod 600 "${tmp_cm_env}"
+    {
+      printf 'ALLOWED_GOOGLE_DOMAINS=%s\n' "${allowed_domains}"
+      printf 'GOOGLE_CLIENT_ID=%s\n' "${google_client_id}"
+      printf 'FIREBASE_API_KEY=%s\n' "${firebase_api_key}"
+      printf 'FIREBASE_PROJECT_ID=%s\n' "${PROJECT_ID:-}"
+      printf 'COOKIE_DOMAIN=%s\n' "${DEMO_DOMAIN}"
+    } > "${tmp_cm_env}"
+
+    kubectl create configmap presenter-auth \
+      -n anything-but-agents \
+      --from-env-file="${tmp_cm_env}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    rm -f "${tmp_cm_env}"
+    echo "Configured cross-subdomain Google Sign-In (ALLOWED_GOOGLE_DOMAINS=${allowed_domains}, COOKIE_DOMAIN=${DEMO_DOMAIN})"
+  fi
+
+  PRESENTER_AUTH_HASH="$(printf '%s|%s|%s|%s|%s|%s' \
+    "${session_hmac_secret}" "${presenter_token}" "${allowed_domains}" \
+    "${google_client_id}" "${firebase_api_key}" "${DEMO_DOMAIN}" \
+    | sha256sum | awk '{print substr($1,1,16)}')"
+  export PRESENTER_AUTH_HASH
+}
+
 bootstrap_gke() {
   apply_env_defaults
-  if [[ ! -d "${SUBSTRATE_ROOT}/tools/setup-gcp" ]]; then
-    echo "Error: SUBSTRATE_ROOT (${SUBSTRATE_ROOT}) does not contain tools/setup-gcp." >&2
-    echo "Set SUBSTRATE_ROOT in .env to point to your agent-substrate checkout." >&2
+  if [[ ! -d "${SUBSTRATE_GKE_ROOT:-}/tools/setup-gcp" ]]; then
+    echo "Error: SUBSTRATE_GKE_ROOT (${SUBSTRATE_GKE_ROOT:-}) does not contain tools/setup-gcp." >&2
+    echo "Clone https://github.com/ai-on-gke/substrate-gke and set SUBSTRATE_GKE_ROOT in .env." >&2
     exit 1
   fi
 
   banner "Bootstrapping GKE Cluster in ${CLUSTER_LOCATION} (Region: ${GCE_REGION})"
-  export PROJECT_NUMBER="${PROJECT_NUMBER:-$(gcloud projects describe "${PROJECT_ID}" --format="value(projectNumber)")}"
+  export PROJECT_NUMBER="${PROJECT_NUMBER:-$(gcloud projects describe "${PROJECT_ID}" --quiet --format="value(projectNumber)")}"
   resolve_gke_version
 
   echo "Configuration:"
@@ -173,9 +504,11 @@ bootstrap_gke() {
   echo "  ENABLE_NESTED_VIRTUALIZATION = ${ENABLE_NESTED_VIRTUALIZATION}"
   echo "  BUCKET_NAME                  = ${BUCKET_NAME}"
   echo "  KO_DOCKER_REPO               = ${KO_DOCKER_REPO}"
+  echo "  SUBSTRATE_IMAGE_REPO         = ${SUBSTRATE_IMAGE_REPO}"
+  echo "  SUBSTRATE_VERSION            = ${SUBSTRATE_VERSION}"
 
   (
-    cd "${SUBSTRATE_ROOT}"
+    cd "${SUBSTRATE_GKE_ROOT}"
     go run ./tools/setup-gcp bootstrap \
       --project-id="${PROJECT_ID}" \
       --project-number="${PROJECT_NUMBER}" \
@@ -191,7 +524,8 @@ bootstrap_gke() {
 
     gcloud container clusters get-credentials "${CLUSTER_NAME}" \
       --location="${CLUSTER_LOCATION}" \
-      --project="${PROJECT_ID}"
+      --project="${PROJECT_ID}" \
+      --quiet
 
     # Disable node auto-upgrade on the worker pool so GKE maintenance doesn't
     # evict running actors mid-demo.
@@ -199,23 +533,112 @@ bootstrap_gke() {
       --cluster="${CLUSTER_NAME}" \
       --location="${CLUSTER_LOCATION}" \
       --project="${PROJECT_ID}" \
-      --no-enable-autoupgrade || true
+      --no-enable-autoupgrade \
+      --quiet || true
+  )
 
-    go install ./cmd/kubectl-ate
+  install_local_kubectl_ate
 
-    local allowed_spiffe="spiffe://cluster.local/ns/anything-but-agents/sa/default,spiffe://cluster.local/ns/anything-but-agents/sa/dungeon2d-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/coldstart-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/tenantdb-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/honeypot-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/timewarp-gateway"
+  local allowed_spiffe
+  allowed_spiffe="$(allowed_ingress_spiffe_ids)"
 
+  (
+    cd "${SUBSTRATE_ROOT}"
+    local image_flags=()
+    if [[ -n "${SUBSTRATE_IMAGE_REPO:-}" && -n "${SUBSTRATE_VERSION:-}" ]]; then
+      image_flags=(--image-repo="${SUBSTRATE_IMAGE_REPO}" --image-tag="${SUBSTRATE_VERSION}")
+    fi
     go run ./cmd/ate-setup deploy ate-system \
+      --no-dev-env \
+      --sandbox-classes=gvisor \
+      "${image_flags[@]}" \
       --snapshot-location="gs://${BUCKET_NAME}/" \
       --snapshot-transfer-gsa-name="ate-snapshot-transfer" \
       --gcp-project-id="${PROJECT_ID}" \
+      --gcp-cluster-name="${CLUSTER_NAME}" \
+      --gcp-cluster-location="${CLUSTER_LOCATION}" \
       --credential-provider="${ATE_CREDENTIAL_PROVIDER}" \
       --ingress-allowed-spiffe-ids="${allowed_spiffe}"
 
-    go run ./cmd/ate-setup publish worker-images
+    if [[ ${#image_flags[@]} -eq 0 ]]; then
+      go run ./cmd/ate-setup publish worker-images
+    fi
   )
 
+  mirror_gvisor_assets
   deploy_all
+}
+
+upgrade_substrate() {
+  detect_cluster_defaults
+  if [[ ! -d "${SUBSTRATE_ROOT:-}/cmd/ate-setup" ]]; then
+    echo "Error: SUBSTRATE_ROOT (${SUBSTRATE_ROOT:-}) does not contain cmd/ate-setup." >&2
+    exit 1
+  fi
+
+  banner "Upgrading Agent Substrate (ate-system) on ${CLUSTER_NAME} to ${SUBSTRATE_VERSION}"
+  install_local_kubectl_ate
+
+  local current_ver=""
+  current_ver="$(kubectl exec -n ate-system deploy/ate-api-server -- /ko-app/ateapi --version 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+  echo "Current cluster ate-api-server version: ${current_ver:-<none>}"
+  echo "Target SUBSTRATE_VERSION             : ${SUBSTRATE_VERSION}"
+  echo "Target SUBSTRATE_IMAGE_REPO          : ${SUBSTRATE_IMAGE_REPO}"
+
+  if kubectl get crd workerpools.ate.dev >/dev/null 2>&1; then
+    echo "Removing existing WorkerPools before control-plane upgrade..."
+    kubectl delete workerpools --all -A --ignore-not-found --wait=true 2>/dev/null || true
+  fi
+
+  local stored_versions=""
+  stored_versions="$(kubectl get crd workerpools.ate.dev -o jsonpath='{.status.storedVersions[*]}' 2>/dev/null || true)"
+  if [[ "${stored_versions}" == *"v1alpha1"* ]]; then
+    echo "Replacing legacy ate.dev/v1alpha1 CRDs with ate.dev/v1..."
+    for sc in $(kubectl get sandboxconfigs -o name 2>/dev/null || true); do
+      kubectl patch "${sc}" --type=merge -p='{"metadata":{"finalizers":null}}' 2>/dev/null || true
+    done
+    kubectl delete sandboxconfigs --all --ignore-not-found 2>/dev/null || true
+    kubectl delete csidriverconfigs --all --ignore-not-found 2>/dev/null || true
+    kubectl delete crd workerpools.ate.dev sandboxconfigs.ate.dev csidriverconfigs.ate.dev --ignore-not-found
+    rm -rf "${HOME}/.kube/cache/discovery" 2>/dev/null || true
+  fi
+
+  if [[ -n "${current_ver}" && "${current_ver}" != "${SUBSTRATE_VERSION}" ]]; then
+    echo "Resetting bundled ate-system PostgreSQL StatefulSet & PVC for ${SUBSTRATE_VERSION} schema..."
+    kubectl scale deployment/ate-api-server -n ate-system --replicas=0 2>/dev/null || true
+    kubectl delete statefulset/postgres pvc/data-postgres-0 -n ate-system --ignore-not-found --wait=true
+    reset_node_image_cache 3
+  fi
+
+  local allowed_spiffe
+  allowed_spiffe="$(allowed_ingress_spiffe_ids)"
+
+  (
+    cd "${SUBSTRATE_ROOT}"
+    local image_flags=()
+    if [[ -n "${SUBSTRATE_IMAGE_REPO:-}" && -n "${SUBSTRATE_VERSION:-}" ]]; then
+      image_flags=(--image-repo="${SUBSTRATE_IMAGE_REPO}" --image-tag="${SUBSTRATE_VERSION}")
+    fi
+    go run ./cmd/ate-setup deploy ate-system \
+      --no-dev-env \
+      --sandbox-classes=gvisor \
+      --rollout-timeout=180s \
+      "${image_flags[@]}" \
+      --snapshot-location="gs://${BUCKET_NAME}/" \
+      --snapshot-transfer-gsa-name="ate-snapshot-transfer" \
+      --gcp-project-id="${PROJECT_ID}" \
+      --gcp-cluster-name="${CLUSTER_NAME}" \
+      --gcp-cluster-location="${CLUSTER_LOCATION}" \
+      --credential-provider="${ATE_CREDENTIAL_PROVIDER}" \
+      --ingress-allowed-spiffe-ids="${allowed_spiffe}"
+  )
+
+  mirror_gvisor_assets
+
+  echo ""
+  echo "Verified ate-api-server version:"
+  kubectl exec -n ate-system deploy/ate-api-server -- /ko-app/ateapi --version
+  kubectl get sandboxconfigs.v1.ate.dev
 }
 
 detect_cluster_defaults() {
@@ -226,30 +649,24 @@ detect_cluster_defaults() {
     echo "Error: BUCKET_NAME (or PROJECT_ID in .env) must be set." >&2
     exit 1
   fi
-  if [[ -z "${SUBSTRATE_VERSION:-}" ]]; then
-    SUBSTRATE_VERSION="$(kubectl get nodes -o jsonpath='{.items[0].metadata.labels.ate\.dev/substrate-version}' 2>/dev/null || true)"
-  fi
+  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0-rc.2}"
+  export SUBSTRATE_IMAGE_REPO="${SUBSTRATE_IMAGE_REPO:-ghcr.io/agent-substrate/substrate}"
   if [[ -z "${ATEOM_GVISOR_IMAGE:-}" ]]; then
-    # Discover an existing gvisor worker image from the cluster if one is already deployed,
-    # or build it from SUBSTRATE_ROOT.
-    ATEOM_GVISOR_IMAGE="$(kubectl get workerpools -A -o jsonpath='{.items[0].spec.workerImage}' 2>/dev/null || true)"
-    if [[ "${ATEOM_GVISOR_IMAGE}" == *"/ateom-gvisor"* && -d "${SUBSTRATE_ROOT:-}/cmd/ateworker-gvisor" ]]; then
-      ATEOM_GVISOR_IMAGE=""
-    fi
-    if [[ -z "${ATEOM_GVISOR_IMAGE}" && -n "${SUBSTRATE_ROOT:-}" ]]; then
-      if [[ -d "${SUBSTRATE_ROOT}/cmd/ateworker-gvisor" ]]; then
+    if [[ -n "${SUBSTRATE_IMAGE_REPO}" && -n "${SUBSTRATE_VERSION}" ]]; then
+      ATEOM_GVISOR_IMAGE="${SUBSTRATE_IMAGE_REPO}/ateworker-gvisor:${SUBSTRATE_VERSION}"
+    else
+      ATEOM_GVISOR_IMAGE="$(kubectl get workerpools -A -o jsonpath='{.items[0].spec.workerImage}' 2>/dev/null || true)"
+      if [[ -z "${ATEOM_GVISOR_IMAGE}" && -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}/cmd/ateworker-gvisor" ]]; then
         echo "Building ateworker-gvisor worker image via ko..."
         ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateworker-gvisor)"
-      elif [[ -d "${SUBSTRATE_ROOT}/cmd/ateom-gvisor" ]]; then
-        echo "Building ateom-gvisor worker image via ko..."
-        ATEOM_GVISOR_IMAGE="$(cd "${SUBSTRATE_ROOT}" && ko build ./cmd/ateom-gvisor)"
       fi
     fi
   fi
   export DEMO_DOMAIN="${DEMO_DOMAIN:-substrate.learngke.dev}"
+  export SLIDES_DOMAIN="${SLIDES_DOMAIN:-abs.slides.${DEMO_DOMAIN}}"
   export GATEWAY_IP_NAME="${GATEWAY_IP_NAME:-substrate-learngke-ip}"
   export CERT_MAP_NAME="${CERT_MAP_NAME:-substrate-learngke-map}"
-  export BUCKET_NAME SUBSTRATE_VERSION ATEOM_GVISOR_IMAGE DEMO_DOMAIN GATEWAY_IP_NAME CERT_MAP_NAME
+  export BUCKET_NAME SUBSTRATE_VERSION SUBSTRATE_IMAGE_REPO ATEOM_GVISOR_IMAGE DEMO_DOMAIN SLIDES_DOMAIN GATEWAY_IP_NAME CERT_MAP_NAME
 }
 
 wait_for_template_golden_snapshot() {
@@ -260,7 +677,7 @@ wait_for_template_golden_snapshot() {
     yaml_out="$(kubectl ate get actor-template "${tmpl}" -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
     golden_ts="$(echo "${yaml_out}" | awk '/snapshotTime:|takeGoldenSnapshotAt:/ {print $2; exit}')"
     err_msg="$(echo "${yaml_out}" | awk -F': ' '/errorMessage:/ {print $2; exit}')"
-    if [[ -n "${golden_ts}" ]] || grep -q "goldenTag:" <<< "${yaml_out}"; then
+    if grep -q "goldenTag:" <<< "${yaml_out}"; then
       echo "  [READY] ${tmpl} (snapshot ready at: ${golden_ts:-ready})"
       return 0
     fi
@@ -278,7 +695,7 @@ ensure_template_ready() {
   local tmpl="$1"
   local yaml_out
   yaml_out="$(kubectl ate get actor-template "${tmpl}" -a "${ATESPACE}" -o yaml 2>/dev/null || true)"
-  if [[ "${FORCE_REBUILD_TEMPLATES:-0}" != "1" ]] && grep -qE "goldenTag:|snapshotTime:|takeGoldenSnapshotAt:" <<< "${yaml_out}"; then
+  if [[ "${FORCE_REBUILD_TEMPLATES:-0}" != "1" ]] && grep -q "goldenTag:" <<< "${yaml_out}"; then
     echo "ActorTemplate '${tmpl}' Golden Snapshot is already READY."
     return 0
   fi
@@ -313,11 +730,7 @@ deploy_all() {
   envsubst < "${REPO_ROOT}/manifests/workerpool.yaml.tmpl" | kubectl apply -f -
   kubectl rollout status deployment/anything-but-agents -n anything-but-agents --timeout=300s
 
-  if ! kubectl get secret dungeon2d-gateway -n anything-but-agents >/dev/null 2>&1; then
-    kubectl create secret generic dungeon2d-gateway \
-      -n anything-but-agents \
-      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
-  fi
+  ensure_presenter_auth
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
@@ -326,7 +739,7 @@ deploy_all() {
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
 
-  for tmpl in dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
@@ -394,6 +807,65 @@ reset_act_resources() {
         ;;
     esac
   done
+  free_workers
+}
+
+act0_slides() {
+  ensure_router_port_forward
+  banner "DEMO 0: 'Slides on Substrate' — Presentation Deck as gVisor Actors"
+  reset_act_resources slide-01 slide-02
+
+  local gateway_port="${SLIDES_PORT:-8087}"
+  local gateway_url="http://localhost:${gateway_port}"
+  local presenter_token
+  presenter_token="$(kubectl get secret slides-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(openssl rand -hex 24)"
+  fi
+
+  echo "Starting slides Gateway & Presentation Deck on ${gateway_url}..."
+  (
+    cd "${REPO_ROOT}"
+    PRESENTER_TOKEN="${presenter_token}" go run ./cmd/slides \
+      --mode=gateway \
+      --addr=":${gateway_port}" \
+      --atespace="${ATESPACE}" \
+      --template=slides \
+      --router-url="${ROUTER_URL}" >/dev/null 2>&1
+  ) &
+  GATEWAY_PID=$!
+  trap 'kill "${PORT_FORWARD_PID:-}" "${GATEWAY_PID:-}" 2>/dev/null || true' EXIT
+
+  for _ in {1..30}; do
+    if curl -s -o /dev/null --connect-timeout 1 "${gateway_url}/readyz" 2>/dev/null; then
+      break
+    fi
+    sleep 0.3
+  done
+
+  echo ""
+  echo "  Presenter Deck (Live UI) : ${gateway_url}/deck?key=\$(kubectl get secret slides-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+
+  step "1. Fetch Slide 1 ('slide-01') via Gateway -> Wakes slide-01 actor on WorkerPool, increments Go heap views, and returns live telemetry"
+  run_cmd curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${gateway_url}/api/slide/slide-01"
+
+  step "2. Add presenter scratchpad note into slide-01 Go heap memory (POST /api/slide/slide-01/note)"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/slide/slide-01/note" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"notes":"Stage checkpoint: 0/3 workers occupied while reading title"}'
+
+  step "3. Navigate to Slide 2 ('slide-02') -> Wakes slide-02 cleanly while slide-01 suspends asynchronously to GCS"
+  run_cmd curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${gateway_url}/api/slide/slide-02?prev=slide-01"
+
+  step "4. Revert Slide 1 memory (POST /api/slide/slide-01/revert) -> kubectl ate revert actor slide-01 wipes live RAM note"
+  run_cmd curl -fsS -X POST "${gateway_url}/api/slide/slide-01/revert" -H "X-Presenter-Key: ${presenter_token}"
+
+  if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
+    echo ""
+    echo ">>> Presentation Deck (${gateway_url}/deck?key=${presenter_token}) is live!"
+    read -r -p "    [Press Enter when finished exploring the slide deck] " _
+  fi
+
+  kill "${GATEWAY_PID:-}" 2>/dev/null || true
   free_workers
 }
 
@@ -502,34 +974,82 @@ act1b_dungeon2d() {
   free_workers
 }
 
+deploy_slides_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Slides Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  ensure_presenter_auth
+
+  # Ensure live atenet-router includes slides-gateway in --ingress-allowed-spiffe-ids
+  local cur_spiffe spiffe_arg_idx
+  cur_spiffe="$(kubectl get deployment atenet-router -n ate-system -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)"
+  if [[ "${cur_spiffe}" != *"slides-gateway"* ]]; then
+    spiffe_arg_idx="$(kubectl get deployment atenet-router -n ate-system -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}' 2>/dev/null \
+      | awk '/^--ingress-allowed-spiffe-ids=/ {print NR-1; exit}' || true)"
+    if [[ -n "${spiffe_arg_idx}" ]]; then
+      echo "Updating atenet-router ingress allowed SPIFFE IDs with slides-gateway..."
+      kubectl patch deployment atenet-router -n ate-system --type=json \
+        -p="[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args/${spiffe_arg_idx}\",\"value\":\"--ingress-allowed-spiffe-ids=$(allowed_ingress_spiffe_ids)\"}]"
+      kubectl rollout status deployment/atenet-router -n ate-system --timeout=120s
+    fi
+  fi
+
+  if [[ "${FORCE_REBUILD_TEMPLATES:-0}" == "1" ]]; then
+    for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^slide-/ {print $2}' || true); do
+      kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+    done
+  fi
+
+  # Ensure ActorTemplate slides is up to date
+  ensure_template_ready slides
+  resolve_kubectl_ate_image
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/slides-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/slides-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc slides-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Slides Deck (Google SSO) : https://${SLIDES_DOMAIN}/deck"
+  echo "  Slides Deck (Token URL)  : https://${SLIDES_DOMAIN}/deck?key=\$(kubectl get secret slides-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Slides Deck (LB IP)      : http://${lb_ip:-<pending>}/deck"
+  echo ""
+}
+
+cleanup_slides_gateway() {
+  banner "Cleaning up Slides Gateway Deployment & Actors"
+  for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^slide-/ {print $2}' || true); do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount slides-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding slides-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding slides-gateway-ate-client --ignore-not-found
+  free_workers
+}
+
 deploy_dungeon2d_gateway() {
   detect_cluster_defaults
   banner "Deploying In-Cluster Dungeon 2D Gateway & LoadBalancer"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
-
-  if ! kubectl get secret dungeon2d-gateway -n anything-but-agents >/dev/null 2>&1; then
-    kubectl create secret generic dungeon2d-gateway \
-      -n anything-but-agents \
-      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
-  fi
+  ensure_presenter_auth
 
   # Ensure ActorTemplate dungeon2d is up to date
   ensure_template_ready dungeon2d
-
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
-      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
-      KUBECTL_ATE_IMAGE="$(
-        cd "${SUBSTRATE_ROOT}"
-        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
-      )"
-    else
-      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy dungeon2d-gateway." >&2
-      exit 1
-    fi
-  fi
-  export KUBECTL_ATE_IMAGE
+  resolve_kubectl_ate_image
 
   (
     cd "${REPO_ROOT}"
@@ -575,12 +1095,7 @@ deploy_coldstart_hpa() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   free_workers
-
-  if ! kubectl get secret coldstart-gateway -n anything-but-agents >/dev/null 2>&1; then
-    kubectl create secret generic coldstart-gateway \
-      -n anything-but-agents \
-      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
-  fi
+  ensure_presenter_auth
 
   # Ensure ActorTemplate coldstart is up to date
   ensure_template_ready coldstart
@@ -593,22 +1108,7 @@ deploy_coldstart_hpa() {
     fi
   done
 
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
-      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
-      KUBECTL_ATE_IMAGE="$(
-        cd "${SUBSTRATE_ROOT}"
-        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
-      )"
-    else
-      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy coldstart-gateway." >&2
-      exit 1
-    fi
-  fi
-  export KUBECTL_ATE_IMAGE
+  resolve_kubectl_ate_image
 
   (
     cd "${REPO_ROOT}"
@@ -862,31 +1362,10 @@ deploy_tenantdb_gateway() {
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   reset_act_resources db-acme db-globex db-initech db-umbrella
   free_workers
-
-  if ! kubectl get secret tenantdb-gateway -n anything-but-agents >/dev/null 2>&1; then
-    kubectl create secret generic tenantdb-gateway \
-      -n anything-but-agents \
-      --from-literal=PRESENTER_TOKEN="$(openssl rand -hex 24)"
-  fi
+  ensure_presenter_auth
 
   ensure_template_ready tenantdb
-
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
-      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
-      KUBECTL_ATE_IMAGE="$(
-        cd "${SUBSTRATE_ROOT}"
-        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
-      )"
-    else
-      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy tenantdb-gateway." >&2
-      exit 1
-    fi
-  fi
-  export KUBECTL_ATE_IMAGE
+  resolve_kubectl_ate_image
 
   (
     cd "${REPO_ROOT}"
@@ -930,11 +1409,13 @@ act4_honeypot() {
 
   local honeypot_port="${HONEYPOT_PORT:-8084}"
   local honeypot_url="http://localhost:${honeypot_port}"
+  local presenter_token=""
+  presenter_token="$(kubectl get secret honeypot-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
 
   echo "Starting Truman Show Split-Screen Honeypot UI on ${honeypot_url}..."
   (
     cd "${REPO_ROOT}"
-    go run ./cmd/honeypot \
+    PRESENTER_TOKEN="${presenter_token}" go run ./cmd/honeypot \
       --mode=gateway \
       --addr=":${honeypot_port}" \
       --atespace="${ATESPACE}" \
@@ -945,7 +1426,11 @@ act4_honeypot() {
   trap 'kill "${PORT_FORWARD_PID:-}" "${HONEYPOT_GW_PID:-}" 2>/dev/null || true' EXIT
 
   echo ""
-  echo "  Split-Screen Truman Show Director's Booth : ${honeypot_url}"
+  if [[ -n "${presenter_token}" ]]; then
+    echo "  Split-Screen Truman Show Director's Booth : ${honeypot_url}/?key=${presenter_token}"
+  else
+    echo "  Split-Screen Truman Show Director's Booth : ${honeypot_url}/"
+  fi
   echo ""
 
   step "1. Create gVisor honeypot actors for two suspicious scanner IPs"
@@ -986,26 +1471,11 @@ deploy_honeypot_gateway() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   free_workers
+  ensure_presenter_auth
 
   # Ensure ActorTemplate honeypot is rebuilt and Golden Snapshot is READY
   ensure_template_ready honeypot
-
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
-      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
-      KUBECTL_ATE_IMAGE="$(
-        cd "${SUBSTRATE_ROOT}"
-        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
-      )"
-    else
-      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy honeypot-gateway." >&2
-      exit 1
-    fi
-  fi
-  export KUBECTL_ATE_IMAGE
+  resolve_kubectl_ate_image
 
   (
     cd "${REPO_ROOT}"
@@ -1025,8 +1495,8 @@ deploy_honeypot_gateway() {
   done
 
   echo ""
-  echo "  Truman Show Honeypot UI (HTTPS) : https://honeypot.${DEMO_DOMAIN}/"
-  echo "  Truman Show Honeypot UI (LB IP) : http://${lb_ip:-<pending>}/"
+  echo "  Truman Show Honeypot UI (HTTPS) : https://honeypot.${DEMO_DOMAIN}/?key=\$(kubectl get secret honeypot-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Truman Show Honeypot UI (LB IP) : http://${lb_ip:-<pending>}/?key=\$(kubectl get secret honeypot-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
 }
 
@@ -1038,7 +1508,7 @@ cleanup_honeypot_gateway() {
   for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-(honeypot|forensic)/ {print $2}' || true); do
     kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
   done
-  kubectl delete deployment,service,serviceaccount honeypot-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete deployment,service,secret,serviceaccount honeypot-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding honeypot-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding honeypot-gateway-ate-client --ignore-not-found
   free_workers
@@ -1052,6 +1522,8 @@ act5_timewarp() {
   local tw_port="${TIMEWARP_PORT:-8085}"
   local tw_url="http://localhost:${tw_port}"
   local cluster_lb_ip=""
+  local presenter_token=""
+  presenter_token="$(kubectl get secret timewarp-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
   cluster_lb_ip="$(kubectl get svc timewarp-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
 
   if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
@@ -1061,7 +1533,7 @@ act5_timewarp() {
     echo "Starting Chronos Split-Brain & Dual-Clock Lab Gateway on ${tw_url}..."
     (
       cd "${REPO_ROOT}"
-      go run ./cmd/timewarp \
+      PRESENTER_TOKEN="${presenter_token}" go run ./cmd/timewarp \
         --mode=gateway \
         --addr=":${tw_port}" \
         --atespace="${ATESPACE}" \
@@ -1073,7 +1545,11 @@ act5_timewarp() {
   fi
 
   echo ""
-  echo "  Chronos Split-Brain & Dual-Clock Lab UI : ${tw_url}/dashboard"
+  if [[ -n "${presenter_token}" ]]; then
+    echo "  Chronos Split-Brain & Dual-Clock Lab UI : ${tw_url}/dashboard?key=${presenter_token}"
+  else
+    echo "  Chronos Split-Brain & Dual-Clock Lab UI : ${tw_url}/dashboard"
+  fi
   echo ""
 
   step "1. Create 3 consensus actors (raft-node-1..3), elect raft-node-1 as Term 1 LEADER (3s lease), and grant Lock #101 to 'Alice'"
@@ -1113,28 +1589,10 @@ deploy_timewarp_gateway() {
   free_workers
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  ensure_presenter_auth
 
   ensure_template_ready timewarp
-
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    KUBECTL_ATE_IMAGE="$(kubectl get deployment honeypot-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    KUBECTL_ATE_IMAGE="$(kubectl get deployment dungeon2d-gateway -n anything-but-agents -o jsonpath='{.spec.template.spec.initContainers[0].image}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${KUBECTL_ATE_IMAGE:-}" ]]; then
-    if [[ -n "${SUBSTRATE_ROOT:-}" && -d "${SUBSTRATE_ROOT}" ]]; then
-      echo "Building kubectl-ate container image from ${SUBSTRATE_ROOT}..."
-      KUBECTL_ATE_IMAGE="$(
-        cd "${SUBSTRATE_ROOT}"
-        KO_CONFIG_PATH="${REPO_ROOT}/.ko.yaml" ko build ./cmd/kubectl-ate --platform=linux/amd64
-      )"
-    else
-      echo "ERROR: Set KUBECTL_ATE_IMAGE or SUBSTRATE_ROOT to deploy timewarp-gateway." >&2
-      exit 1
-    fi
-  fi
-  export KUBECTL_ATE_IMAGE
+  resolve_kubectl_ate_image
 
   (
     cd "${REPO_ROOT}"
@@ -1154,16 +1612,49 @@ deploy_timewarp_gateway() {
   done
 
   echo ""
-  echo "  Chronos Split-Brain Lab UI (HTTPS) : https://timewarp.${DEMO_DOMAIN}/dashboard"
-  echo "  Chronos Split-Brain Lab UI (LB IP) : http://${lb_ip:-<pending>}/dashboard"
+  echo "  Chronos Split-Brain Lab UI (HTTPS) : https://timewarp.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret timewarp-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Chronos Split-Brain Lab UI (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret timewarp-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
 }
 
 deploy_gateway_tls() {
   detect_cluster_defaults
-  banner "Deploying GKE Gateway API + Certificate Manager TLS (*.${DEMO_DOMAIN})"
+  banner "Deploying GKE Gateway API + Certificate Manager TLS (${SLIDES_DOMAIN} & *.${DEMO_DOMAIN})"
 
   envsubst < "${REPO_ROOT}/manifests/gateway-tls.yaml.tmpl" | kubectl apply -f -
+
+  # Wildcard *.${DEMO_DOMAIN} only covers single-label subdomains (e.g. slides.${DEMO_DOMAIN}).
+  # When SLIDES_DOMAIN uses nested labels (e.g. abs.slides.${DEMO_DOMAIN}), ensure a dedicated
+  # LB-authorized Google-managed Certificate & Certificate Map Entry exist on ${CERT_MAP_NAME}.
+  local slides_prefix="${SLIDES_DOMAIN%.${DEMO_DOMAIN}}"
+  if [[ -n "${PROJECT_ID:-}" && "${SLIDES_DOMAIN}" != "${DEMO_DOMAIN}" && ( "${slides_prefix}" == "${SLIDES_DOMAIN}" || "${slides_prefix}" == *.* ) ]]; then
+    local slug cert_name entry_name
+    slug="$(tr '.:' '--' <<< "${SLIDES_DOMAIN}" | tr '[:upper:]' '[:lower:]' | cut -c1-48)"
+    slug="${slug%-}"
+    cert_name="${SLIDES_CERT_NAME:-${slug}-cert}"
+    entry_name="${SLIDES_CERT_ENTRY_NAME:-${slug}-entry}"
+
+    if ! gcloud certificate-manager certificates describe "${cert_name}" --location=global --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+      echo "Creating Certificate Manager managed certificate '${cert_name}' for ${SLIDES_DOMAIN}..."
+      gcloud certificate-manager certificates create "${cert_name}" \
+        --domains="${SLIDES_DOMAIN}" \
+        --location=global \
+        --project="${PROJECT_ID}" \
+        --async \
+        --quiet
+    fi
+    if ! gcloud certificate-manager maps entries describe "${entry_name}" --map="${CERT_MAP_NAME}" --location=global --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+      echo "Attaching certificate '${cert_name}' to Certificate Map '${CERT_MAP_NAME}' for ${SLIDES_DOMAIN}..."
+      gcloud certificate-manager maps entries create "${entry_name}" \
+        --map="${CERT_MAP_NAME}" \
+        --hostname="${SLIDES_DOMAIN}" \
+        --certificates="${cert_name}" \
+        --location=global \
+        --project="${PROJECT_ID}" \
+        --async \
+        --quiet
+    fi
+  fi
 
   local gw_ip=""
   for _ in {1..45}; do
@@ -1176,12 +1667,14 @@ deploy_gateway_tls() {
 
   echo ""
   echo "  Gateway IP (${GATEWAY_IP_NAME}) : ${gw_ip:-<provisioning>}"
-  echo "  1. Dungeon 2D Roguelike      : https://dungeon.${DEMO_DOMAIN}/play"
-  echo "     Dungeon 2D Dashboard      : https://dungeon.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
-  echo "  2. Cold-Start HPA Race       : https://coldstart.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret coldstart-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
-  echo "  3. TenantDB Storage X-Ray    : https://tenantdb.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret tenantdb-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  0. Slides Presentation Deck  : https://${SLIDES_DOMAIN}/deck"
+  echo "  1. Dungeon 2D Roguelike      : https://dungeon.${DEMO_DOMAIN}/play  (Public QR Game)"
+  echo "     Dungeon 2D Dashboard      : https://dungeon.${DEMO_DOMAIN}/dashboard"
+  echo "  2. Cold-Start HPA Race       : https://coldstart.${DEMO_DOMAIN}/dashboard"
+  echo "  3. TenantDB Storage X-Ray    : https://tenantdb.${DEMO_DOMAIN}/dashboard"
   echo "  4. Truman Show Honeypot      : https://honeypot.${DEMO_DOMAIN}/"
   echo "  5. Chronos Time-Warp Lab     : https://timewarp.${DEMO_DOMAIN}/dashboard"
+  echo "     Fallback Token Query      : ?key=\$(kubectl get secret presenter-auth -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
 }
 
@@ -1195,7 +1688,7 @@ cleanup_timewarp_gateway() {
   for act in raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
     kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
-  kubectl delete deployment,service,serviceaccount timewarp-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete deployment,service,secret,serviceaccount timewarp-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding timewarp-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding timewarp-gateway-ate-client --ignore-not-found
   free_workers
@@ -1203,6 +1696,7 @@ cleanup_timewarp_gateway() {
 
 run_all_acts() {
   ensure_router_port_forward
+  act0_slides
   act1_dungeon
   act1b_dungeon2d
   act2_coldstart
@@ -1213,18 +1707,23 @@ run_all_acts() {
 
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
+  cleanup_slides_gateway
   cleanup_dungeon2d_gateway
   cleanup_coldstart_hpa
   cleanup_tenantdb_gateway
   cleanup_honeypot_gateway
   cleanup_timewarp_gateway
   cleanup_gateway_tls
+  kubectl delete configmap,secret presenter-auth -n anything-but-agents --ignore-not-found
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
+  for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    kubectl ate delete actor "slide-${i}" -a "${ATESPACE}" 2>/dev/null || true
+  done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
   kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
-  for tmpl in dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete atespace "${ATESPACE}" 2>/dev/null || true
@@ -1233,7 +1732,10 @@ cleanup_all() {
 
 case "${1:-}" in
   bootstrap-gke)         bootstrap_gke ;;
+  upgrade-substrate)     upgrade_substrate ;;
   deploy)                deploy_all ;;
+  deploy-slides)         deploy_slides_gateway ;;
+  cleanup-slides)        cleanup_slides_gateway ;;
   deploy-dungeon2d)      deploy_dungeon2d_gateway ;;
   cleanup-dungeon2d)     cleanup_dungeon2d_gateway ;;
   deploy-coldstart-hpa)  deploy_coldstart_hpa ;;
@@ -1247,6 +1749,7 @@ case "${1:-}" in
   deploy-gateway-tls)    deploy_gateway_tls ;;
   cleanup-gateway-tls)   cleanup_gateway_tls ;;
   run-all)               run_all_acts ;;
+  act0-slides)           act0_slides ;;
   act1-dungeon)          act1_dungeon ;;
   act1b-dungeon2d)       act1b_dungeon2d ;;
   act2-coldstart)        act2_coldstart ;;
@@ -1255,7 +1758,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|deploy|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

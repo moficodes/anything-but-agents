@@ -1308,6 +1308,14 @@
             <span>Target</span>
           </button>
         </form>
+        <button id="btnLogout" type="button" class="btn" title="Sign out" aria-label="Sign out">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Sign out</span>
+        </button>
         <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Projector Light Mode vs Dark Mode (Shortcut: T)" aria-label="Toggle Light and Dark Theme">
           <span class="theme-seg active" id="themeSegDark" title="Dark Mode">
             <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2206,5 +2214,6 @@
 
     selectActor(currentActor);
   </script>
+  <script src="/api/auth/presenter.js" defer></script>
 </body>
 </html>
