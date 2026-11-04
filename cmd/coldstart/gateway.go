@@ -182,11 +182,14 @@ type localReplicaSlot struct {
 	name          string
 	backend       string
 	podIP         string
-	state         string // READY | COLD_BOOTING | WAKING | SUSPENDED | OFFLINE
+	state         string // READY | COLD_BOOTING | WAKING | DRAINING | SUSPENDED | OFFLINE
 	bootStartedAt time.Time
+	wakeReadyAt   time.Time
 	wakeLatencyMs int64
+	scaleGen      uint64
 	engine        *WarmHeapEngine
 	mux           *http.ServeMux
+	inFlight      atomic.Int64
 	servedTotal   atomic.Int64
 	shedTotal     atomic.Int64
 	servedWindow  atomic.Int64
@@ -304,10 +307,14 @@ type GatewayServer struct {
 	localSubSlots  []*localReplicaSlot
 	clusterK8sRep  []ReplicaStatus
 	clusterSubRep  []ReplicaStatus
+	slotWakeCh     chan struct{}
+	k8sWaiters     []chan struct{}
+	subWaiters     []chan struct{}
 
-	rrK8s atomic.Uint64
-	rrSub atomic.Uint64
-	qSeq  atomic.Uint64
+	rrK8s             atomic.Uint64
+	rrSub             atomic.Uint64
+	qSeq              atomic.Uint64
+	reclaimingForeign atomic.Bool
 }
 
 func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
@@ -414,7 +421,10 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 			PresenterToken:   presenterKey,
 		}),
 		httpClient: &http.Client{
-			Timeout:   4 * time.Second,
+			// Must exceed atenet-router's --parked-request-budget (5s) plus Envoy's
+			// ext_proc stream timeout (budget + 5s = 10s) so parked requests are never
+			// aborted client-side before atenet finishes parking/waking the actor.
+			Timeout:   12 * time.Second,
 			Transport: httpTransport,
 		},
 		k8sDesired:    defaultMinReplicas,
@@ -422,6 +432,7 @@ func NewGatewayServer(cfg GatewayConfig) *GatewayServer {
 		scenarioPhase: "IDLE",
 		k8sStats:      &backendWindowStats{},
 		subStats:      &backendWindowStats{},
+		slotWakeCh:    make(chan struct{}),
 	}
 	g.initK8sClient()
 	g.initLocalSimulator()
@@ -567,7 +578,7 @@ func (g *GatewayServer) StartBackgroundLoops(ctx context.Context) {
 					k8sAcc -= float64(nK8s)
 					subAcc -= float64(nSub)
 					if nK8s > 0 || nSub > 0 {
-						go g.dispatchBurst(nK8s, nSub)
+						go g.dispatchBurstWithInterval(nK8s, nSub, g.cfg.TickInterval)
 					}
 				} else {
 					k8sAcc = 0
@@ -600,9 +611,13 @@ func (g *GatewayServer) ensureSubstrateActorsLoop(ctx context.Context) {
 		}
 	}
 	// Wake coldstart-1 and capture its real GoldenHeapFingerprint and WorkerPool Pod IP.
-	go g.simulateSubstrateActorWake(g.localSubSlots[0], g.cfg.SubstrateWakeDelay)
+	g.mu.Lock()
+	slot0 := g.localSubSlots[0]
+	gen0 := slot0.scaleGen
+	g.mu.Unlock()
+	go g.simulateSubstrateActorWake(slot0, g.cfg.SubstrateWakeDelay, gen0)
 
-	ticker := time.NewTicker(1500 * time.Millisecond)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
@@ -677,6 +692,70 @@ func (g *GatewayServer) SetTargetQPS(qps float64, phase string) {
 	g.mu.Unlock()
 }
 
+func wakeHeadWaiterLocked(waiters *[]chan struct{}) {
+	if len(*waiters) > 0 {
+		select {
+		case (*waiters)[0] <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func removeWaiterLocked(waiters *[]chan struct{}, target chan struct{}) {
+	for i, ch := range *waiters {
+		if ch == target {
+			*waiters = append((*waiters)[:i], (*waiters)[i+1:]...)
+			return
+		}
+	}
+}
+
+func (g *GatewayServer) notifySlotChangeLocked() {
+	if g.slotWakeCh != nil {
+		close(g.slotWakeCh)
+	}
+	g.slotWakeCh = make(chan struct{})
+	wakeHeadWaiterLocked(&g.k8sWaiters)
+	wakeHeadWaiterLocked(&g.subWaiters)
+}
+
+func (g *GatewayServer) slotQueueBudgetLocked(backend string) time.Duration {
+	budget := g.cfg.WorkerMinQueryDuration * 4
+	if maxFromColdBoot := g.cfg.K8sColdBootDelay / 4; maxFromColdBoot > 0 && budget > maxFromColdBoot {
+		budget = maxFromColdBoot
+	}
+	if budget > 500*time.Millisecond {
+		budget = 500 * time.Millisecond
+	}
+	if backend == "substrate" {
+		// Align Substrate's wake-on-HTTP queue budget with atenet-router's 5s request-parking
+		// window while actor shards are restoring from Golden Snapshot (or evicting idle foreign
+		// actors on the shared WorkerPool), then tighten back to steady-state once settled.
+		waking := !g.spikeTriggeredAt.IsZero() && time.Since(g.spikeTriggeredAt) < 7*time.Second
+		if !waking {
+			for i := 0; i < g.subDesired && i < len(g.localSubSlots); i++ {
+				if g.localSubSlots[i].state != "READY" {
+					waking = true
+					break
+				}
+			}
+		}
+		if waking {
+			wakeBudget := 5 * time.Second
+			if maxWake := g.cfg.K8sColdBootDelay / 2; maxWake > 0 && wakeBudget > maxWake {
+				wakeBudget = maxWake
+			}
+			if wakeBudget > budget {
+				budget = wakeBudget
+			}
+		}
+	}
+	if budget < 50*time.Millisecond {
+		budget = 50 * time.Millisecond
+	}
+	return budget
+}
+
 func (g *GatewayServer) reconcileReplicasLocked(desired int) {
 	now := time.Now()
 
@@ -705,31 +784,82 @@ func (g *GatewayServer) reconcileReplicasLocked(desired int) {
 	}
 
 	// Reconcile local/simulated Substrate actors (1..3)
+	wakingScaleOut := false
 	for i := 0; i < defaultMaxReplicas; i++ {
 		slot := g.localSubSlots[i]
 		if i < desired {
-			if slot.state == "SUSPENDED" || slot.state == "OFFLINE" {
+			if slot.state == "SUSPENDED" || slot.state == "OFFLINE" || slot.state == "DRAINING" {
+				slot.scaleGen++
+				gen := slot.scaleGen
+				wakeDelay := g.cfg.SubstrateWakeDelay + time.Duration(i*7)*time.Millisecond
 				slot.state = "WAKING"
 				slot.bootStartedAt = now
-				wakeDelay := g.cfg.SubstrateWakeDelay + time.Duration(i*7)*time.Millisecond
-				go g.simulateSubstrateActorWake(slot, wakeDelay)
+				slot.wakeReadyAt = now.Add(wakeDelay)
+				if i > 0 {
+					wakingScaleOut = true
+				}
+				go g.simulateSubstrateActorWake(slot, wakeDelay, gen)
 			}
 		} else if i > 0 {
-			if slot.state != "SUSPENDED" {
-				slot.state = "SUSPENDED"
-				slot.engine.initStage.Store("suspended in GCS ($0 compute, Golden Snapshot ready)")
-				if g.cfg.Mode == "gateway" {
-					actorIdx := i + 1
-					go func() {
-						_ = g.runKubectlAte(context.Background(), "suspend", "actor", fmt.Sprintf("coldstart-%d", actorIdx), "-a", g.cfg.Atespace)
-					}()
+			if slot.state != "SUSPENDED" && slot.state != "DRAINING" {
+				slot.scaleGen++
+				gen := slot.scaleGen
+				if slot.inFlight.Load() > 0 {
+					slot.state = "DRAINING"
+					slot.engine.initStage.Store("draining in-flight queries before suspend...")
+				} else {
+					slot.state = "SUSPENDED"
+					slot.engine.initStage.Store("suspended in GCS ($0 compute, Golden Snapshot ready)")
 				}
+				go g.drainAndSuspendSubstrateSlot(slot, gen)
 			}
 		}
 	}
+	g.notifySlotChangeLocked()
 
 	if g.cfg.Mode == "gateway" {
+		if wakingScaleOut {
+			// Proactively suspend any foreign non-coldstart demo actors occupying the shared
+			// 3-replica WorkerPool while atenet-router parks coldstart-2..3's wake requests.
+			go g.reclaimForeignWorkers(context.Background())
+		}
 		go g.syncClusterScales(desired)
+	}
+}
+
+func (g *GatewayServer) drainAndSuspendSubstrateSlot(slot *localReplicaSlot, gen uint64) {
+	deadline := time.Now().Add(3 * time.Second)
+	for slot.inFlight.Load() > 0 && time.Now().Before(deadline) {
+		g.mu.Lock()
+		if slot.scaleGen != gen || slot.index <= g.subDesired {
+			g.mu.Unlock()
+			return
+		}
+		waitCh := g.slotWakeCh
+		g.mu.Unlock()
+
+		timer := time.NewTimer(25 * time.Millisecond)
+		select {
+		case <-waitCh:
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+
+	g.mu.Lock()
+	if slot.scaleGen != gen || slot.index <= g.subDesired {
+		g.mu.Unlock()
+		return
+	}
+	slot.state = "SUSPENDED"
+	slot.engine.initStage.Store("suspended in GCS ($0 compute, Golden Snapshot ready)")
+	actorName := slot.name
+	isGateway := g.cfg.Mode == "gateway"
+	g.notifySlotChangeLocked()
+	g.mu.Unlock()
+
+	if isGateway {
+		_ = g.runKubectlAte(context.Background(), "suspend", "actor", actorName, "-a", g.cfg.Atespace, "--mode=async")
 	}
 }
 
@@ -767,10 +897,11 @@ func (g *GatewayServer) simulateK8sPodColdBoot(slot *localReplicaSlot, bootDelay
 		if g.k8sScaleReadyMs == 0 && !g.spikeTriggeredAt.IsZero() && g.countReadyLocalK8sLocked() == defaultMaxReplicas {
 			g.k8sScaleReadyMs = time.Since(g.spikeTriggeredAt).Milliseconds()
 		}
+		g.notifySlotChangeLocked()
 	}
 }
 
-func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeDelay time.Duration) {
+func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeDelay time.Duration, gen uint64) {
 	actualWakeMs := wakeDelay.Milliseconds()
 	var ws *WorkerStatusResponse
 	if g.cfg.Mode == "gateway" && g.cfg.RouterURL != "" {
@@ -795,7 +926,7 @@ func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeD
 			slot.podIP = ws.CurrentPodIP
 		}
 	}
-	if slot.state == "WAKING" || slot.state == "READY" {
+	if slot.scaleGen == gen && (slot.state == "WAKING" || slot.state == "READY") {
 		slot.state = "READY"
 		slot.wakeLatencyMs = actualWakeMs
 		slot.engine.ready.Store(true)
@@ -803,10 +934,16 @@ func (g *GatewayServer) simulateSubstrateActorWake(slot *localReplicaSlot, wakeD
 		if g.subScaleReadyMs == 0 && !g.spikeTriggeredAt.IsZero() && g.countReadyLocalSubLocked() == defaultMaxReplicas {
 			g.subScaleReadyMs = time.Since(g.spikeTriggeredAt).Milliseconds()
 		}
+		g.notifySlotChangeLocked()
 	}
 }
 
 func (g *GatewayServer) reclaimForeignWorkers(ctx context.Context) {
+	if !g.reclaimingForeign.CompareAndSwap(false, true) {
+		return
+	}
+	defer g.reclaimingForeign.Store(false)
+
 	cmdArgs := []string{"get", "actors", "-a", g.cfg.Atespace}
 	if g.cfg.AteEndpoint != "" {
 		cmdArgs = append(cmdArgs, "--endpoint", g.cfg.AteEndpoint)
@@ -819,6 +956,7 @@ func (g *GatewayServer) reclaimForeignWorkers(ctx context.Context) {
 	if err := cmd.Run(); err != nil {
 		return
 	}
+	var foreign []string
 	for _, line := range strings.Split(stdout.String(), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 4 || fields[0] == "ATESPACE" || fields[0] == "NAMESPACE" || strings.HasPrefix(fields[0], "Warning:") {
@@ -830,9 +968,18 @@ func (g *GatewayServer) reclaimForeignWorkers(ctx context.Context) {
 			continue
 		}
 		if state == "ACTOR_STATE_RUNNING" || state == "ACTOR_STATE_PAUSED" {
-			_ = g.runKubectlAte(ctx, "suspend", "actor", name, "-a", g.cfg.Atespace, "--mode=async")
+			foreign = append(foreign, name)
 		}
 	}
+	var wg sync.WaitGroup
+	for _, name := range foreign {
+		wg.Add(1)
+		go func(actorName string) {
+			defer wg.Done()
+			_ = g.runKubectlAte(ctx, "suspend", "actor", actorName, "-a", g.cfg.Atespace, "--mode=async")
+		}(name)
+	}
+	wg.Wait()
 }
 
 func (g *GatewayServer) wakeSubstrateActorSync(index int) (*WorkerStatusResponse, int64, bool) {
@@ -847,7 +994,6 @@ func (g *GatewayServer) wakeSubstrateActorSync(index int) (*WorkerStatusResponse
 		resp, err := g.httpClient.Do(req)
 		if err != nil {
 			if attempt == 0 {
-				g.httpClient.CloseIdleConnections()
 				continue
 			}
 			return nil, 0, false
@@ -1052,47 +1198,162 @@ func (g *GatewayServer) refreshClusterReplicaStatuses(ctx context.Context) {
 			slot.engine.ready.Store(false)
 		}
 	}
+	g.notifySlotChangeLocked()
 }
 
 func (g *GatewayServer) dispatchBurst(nK8s, nSub int) {
+	g.dispatchBurstWithInterval(nK8s, nSub, 0)
+}
+
+func (g *GatewayServer) dispatchBurstWithInterval(nK8s, nSub int, interval time.Duration) {
 	var wg sync.WaitGroup
 	for i := 0; i < nK8s; i++ {
 		wg.Add(1)
 		q := defaultSearchQueries[int(g.qSeq.Add(1))%len(defaultSearchQueries)]
-		go func(query string) {
+		var delay time.Duration
+		if interval > 0 && nK8s > 1 {
+			delay = (interval * time.Duration(i)) / time.Duration(nK8s)
+		}
+		go func(query string, d time.Duration) {
 			defer wg.Done()
+			if d > 0 {
+				time.Sleep(d)
+			}
 			g.sendOneK8sRequest(query)
-		}(q)
+		}(q, delay)
 	}
 	for i := 0; i < nSub; i++ {
 		wg.Add(1)
 		q := defaultSearchQueries[int(g.qSeq.Add(1))%len(defaultSearchQueries)]
-		go func(query string) {
+		var delay time.Duration
+		if interval > 0 && nSub > 1 {
+			delay = (interval * time.Duration(i)) / time.Duration(nSub)
+		}
+		go func(query string, d time.Duration) {
 			defer wg.Done()
+			if d > 0 {
+				time.Sleep(d)
+			}
 			g.sendOneSubstrateRequest(query)
-		}(q)
+		}(q, delay)
 	}
 	wg.Wait()
+}
+
+// acquireBackendSlot selects the least-loaded eligible replica slot for backend ("k8s" or "substrate")
+// with strict FIFO head-of-line admission so queued callers never starve behind newer arrivals.
+//
+// For "k8s", only READY pods are eligible (matching Kubernetes Service Endpoints).
+// For "substrate", all desired actor shards (0 <= i < subDesired) are immediately eligible—including
+// SUSPENDED and WAKING actors—so inbound requests trigger atenet-router wake-on-HTTP singleflight
+// rather than overloading coldstart-1. When all eligible replicas are at WorkerMaxConcurrent,
+// callers wait in FIFO order up to slotQueueBudgetLocked() before forwarding overflow to shed 429s.
+func (g *GatewayServer) acquireBackendSlot(backend string) (*localReplicaSlot, func()) {
+	maxConc := int64(g.cfg.WorkerMaxConcurrent)
+	if maxConc <= 0 {
+		maxConc = 4
+	}
+	rr := &g.rrSub
+	waiters := &g.subWaiters
+	if backend == "k8s" {
+		rr = &g.rrK8s
+		waiters = &g.k8sWaiters
+	}
+
+	g.mu.Lock()
+	deadline := time.Now().Add(g.slotQueueBudgetLocked(backend))
+	var me chan struct{}
+
+	for {
+		var eligible []*localReplicaSlot
+		if backend == "k8s" {
+			for _, s := range g.localK8sSlots {
+				if s.state == "READY" {
+					eligible = append(eligible, s)
+				}
+			}
+		} else {
+			desired := g.subDesired
+			for i := 0; i < desired && i < len(g.localSubSlots); i++ {
+				eligible = append(eligible, g.localSubSlots[i])
+			}
+		}
+
+		if len(eligible) == 0 {
+			if me != nil {
+				removeWaiterLocked(waiters, me)
+				wakeHeadWaiterLocked(waiters)
+			}
+			g.mu.Unlock()
+			return nil, func() {}
+		}
+
+		var best *localReplicaSlot
+		bestInFlight := int64(math.MaxInt64)
+		startIdx := int(rr.Add(1) % uint64(len(eligible)))
+		for j := 0; j < len(eligible); j++ {
+			cand := eligible[(startIdx+j)%len(eligible)]
+			cur := cand.inFlight.Load()
+			if cur < bestInFlight {
+				best = cand
+				bestInFlight = cur
+			}
+		}
+
+		rem := time.Until(deadline)
+		isHead := (me == nil && len(*waiters) == 0) || (me != nil && len(*waiters) > 0 && (*waiters)[0] == me)
+		if (isHead && bestInFlight < maxConc) || rem <= 0 {
+			if me != nil {
+				removeWaiterLocked(waiters, me)
+				wakeHeadWaiterLocked(waiters)
+			}
+			best.inFlight.Add(1)
+			g.mu.Unlock()
+			var once sync.Once
+			return best, func() {
+				once.Do(func() {
+					best.inFlight.Add(-1)
+					g.mu.Lock()
+					wakeHeadWaiterLocked(waiters)
+					g.notifySlotChangeLocked()
+					g.mu.Unlock()
+				})
+			}
+		}
+
+		if me == nil {
+			me = make(chan struct{}, 1)
+			*waiters = append(*waiters, me)
+			if bestInFlight < maxConc {
+				wakeHeadWaiterLocked(waiters)
+			}
+		}
+		g.mu.Unlock()
+
+		timer := time.NewTimer(rem)
+		select {
+		case <-me:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		case <-timer.C:
+		}
+		g.mu.Lock()
+	}
 }
 
 func (g *GatewayServer) sendOneK8sRequest(query string) {
 	start := time.Now()
 
-	// Pick a READY K8s replica (just like kube-proxy / Service Endpoints only routes to Ready pods)
-	g.mu.Lock()
-	var readySlots []*localReplicaSlot
-	for _, s := range g.localK8sSlots {
-		if s.state == "READY" {
-			readySlots = append(readySlots, s)
-		}
-	}
-	g.mu.Unlock()
-
-	if len(readySlots) == 0 {
+	slot, release := g.acquireBackendSlot("k8s")
+	if slot == nil {
 		g.k8sStats.record(false, float64(time.Since(start).Milliseconds()))
 		return
 	}
-	slot := readySlots[int(g.rrK8s.Add(1))%len(readySlots)]
+	defer release()
 
 	if g.cfg.Mode == "gateway" && (g.k8sToken != "" || strings.HasPrefix(g.cfg.K8sServiceURL, "http://127.0.0.1") || strings.HasPrefix(g.cfg.K8sServiceURL, "http://localhost")) {
 		baseURL := strings.TrimRight(g.cfg.K8sServiceURL, "/")
@@ -1107,8 +1368,11 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 		defer resp.Body.Close()
 		var body map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&body)
-		if ip, ok := body["current_pod_ip"].(string); ok && ip != "" {
-			g.mu.Lock()
+		ip, _ := body["current_pod_ip"].(string)
+		fp, _ := body["golden_heap_fingerprint"].(string)
+
+		g.mu.Lock()
+		if ip != "" {
 			for _, candidate := range g.localK8sSlots {
 				if candidate.podIP == ip {
 					slot = candidate
@@ -1116,21 +1380,24 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 				}
 			}
 			slot.podIP = ip
-			g.mu.Unlock()
 		}
-		if fp, ok := body["golden_heap_fingerprint"].(string); ok && fp != "" {
+		if fp != "" {
 			slot.engine.GoldenHeapFingerprint = fp
 		}
+		slotName := slot.name
+		slotFP := slot.engine.GoldenHeapFingerprint
+		g.mu.Unlock()
+
 		if resp.StatusCode == http.StatusOK {
 			slot.servedTotal.Add(1)
 			slot.servedWindow.Add(1)
 			g.k8sStats.record(true, latMs)
-			g.recordSearchSample("k8s", slot.name, query, http.StatusOK, latMs, body)
+			g.recordSearchSample("k8s", slotName, query, http.StatusOK, latMs, body)
 		} else {
 			slot.shedTotal.Add(1)
 			g.k8sStats.record(false, latMs)
-			g.recordSearchSample("k8s", slot.name, query, resp.StatusCode, latMs, map[string]any{
-				"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+			g.recordSearchSample("k8s", slotName, query, resp.StatusCode, latMs, map[string]any{
+				"golden_heap_fingerprint": slotFP,
 			})
 		}
 		return
@@ -1142,18 +1409,23 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 	slot.mux.ServeHTTP(rec, req)
 	latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
 
+	g.mu.Lock()
+	slotName := slot.name
+	slotFP := slot.engine.GoldenHeapFingerprint
+	g.mu.Unlock()
+
 	if rec.Code == http.StatusOK {
 		slot.servedTotal.Add(1)
 		slot.servedWindow.Add(1)
 		g.k8sStats.record(true, latMs)
 		var body map[string]any
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
-		g.recordSearchSample("k8s", slot.name, query, http.StatusOK, latMs, body)
+		g.recordSearchSample("k8s", slotName, query, http.StatusOK, latMs, body)
 	} else {
 		slot.shedTotal.Add(1)
 		g.k8sStats.record(false, latMs)
-		g.recordSearchSample("k8s", slot.name, query, rec.Code, latMs, map[string]any{
-			"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+		g.recordSearchSample("k8s", slotName, query, rec.Code, latMs, map[string]any{
+			"golden_heap_fingerprint": slotFP,
 		})
 	}
 }
@@ -1161,21 +1433,12 @@ func (g *GatewayServer) sendOneK8sRequest(query string) {
 func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 	start := time.Now()
 
-	g.mu.Lock()
-	desired := g.subDesired
-	var activeSlots []*localReplicaSlot
-	for i := 0; i < desired && i < len(g.localSubSlots); i++ {
-		if g.localSubSlots[i].state == "READY" {
-			activeSlots = append(activeSlots, g.localSubSlots[i])
-		}
-	}
-	g.mu.Unlock()
-
-	if len(activeSlots) == 0 {
+	slot, release := g.acquireBackendSlot("substrate")
+	if slot == nil {
 		g.subStats.record(false, float64(time.Since(start).Milliseconds()))
 		return
 	}
-	slot := activeSlots[int(g.rrSub.Add(1))%len(activeSlots)]
+	defer release()
 
 	if g.cfg.Mode == "gateway" && g.cfg.RouterURL != "" {
 		reqURL := fmt.Sprintf("%s/search?q=%s", strings.TrimRight(g.cfg.RouterURL, "/"), url.QueryEscape(query))
@@ -1188,7 +1451,6 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 		resp, err := g.httpClient.Do(req)
 		latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
 		if err != nil {
-			g.httpClient.CloseIdleConnections()
 			slot.shedTotal.Add(1)
 			g.subStats.record(false, latMs)
 			return
@@ -1199,25 +1461,54 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 		if resp.StatusCode == http.StatusServiceUnavailable && body["status"] != "overloaded" {
 			go g.reclaimForeignWorkers(context.Background())
 		}
-		if fp, ok := body["golden_heap_fingerprint"].(string); ok && fp != "" {
+		fp, _ := body["golden_heap_fingerprint"].(string)
+		ip, _ := body["current_pod_ip"].(string)
+
+		g.mu.Lock()
+		if fp != "" {
 			slot.engine.GoldenHeapFingerprint = fp
 		}
-		if ip, ok := body["current_pod_ip"].(string); ok && ip != "" {
+		if ip != "" {
 			slot.podIP = ip
 		}
+		if resp.StatusCode == http.StatusOK && slot.state == "WAKING" && slot.index <= g.subDesired {
+			slot.state = "READY"
+			if !slot.bootStartedAt.IsZero() {
+				slot.wakeLatencyMs = time.Since(slot.bootStartedAt).Milliseconds()
+			}
+			slot.engine.ready.Store(true)
+			slot.engine.initStage.Store(fmt.Sprintf("restored from Golden Snapshot in %dms", slot.wakeLatencyMs))
+			if g.subScaleReadyMs == 0 && !g.spikeTriggeredAt.IsZero() && g.countReadyLocalSubLocked() == defaultMaxReplicas {
+				g.subScaleReadyMs = time.Since(g.spikeTriggeredAt).Milliseconds()
+			}
+			g.notifySlotChangeLocked()
+		}
+		slotName := slot.name
+		slotFP := slot.engine.GoldenHeapFingerprint
+		g.mu.Unlock()
+
 		if resp.StatusCode == http.StatusOK {
 			slot.servedTotal.Add(1)
 			slot.servedWindow.Add(1)
 			g.subStats.record(true, latMs)
-			g.recordSearchSample("substrate", slot.name, query, http.StatusOK, latMs, body)
+			g.recordSearchSample("substrate", slotName, query, http.StatusOK, latMs, body)
 		} else {
 			slot.shedTotal.Add(1)
 			g.subStats.record(false, latMs)
-			g.recordSearchSample("substrate", slot.name, query, resp.StatusCode, latMs, map[string]any{
-				"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+			g.recordSearchSample("substrate", slotName, query, resp.StatusCode, latMs, map[string]any{
+				"golden_heap_fingerprint": slotFP,
 			})
 		}
 		return
+	}
+
+	// In local simulator mode, hold requests targeting a WAKING actor until wakeReadyAt
+	// to faithfully model atenet-router's ActorResumer singleflight hold during restore.
+	g.mu.Lock()
+	wakeReadyAt := slot.wakeReadyAt
+	g.mu.Unlock()
+	if rem := time.Until(wakeReadyAt); rem > 0 {
+		time.Sleep(rem)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/search?q="+url.QueryEscape(query), nil)
@@ -1225,18 +1516,23 @@ func (g *GatewayServer) sendOneSubstrateRequest(query string) {
 	slot.mux.ServeHTTP(rec, req)
 	latMs := math.Round(float64(time.Since(start).Microseconds())/100.0) / 10.0
 
+	g.mu.Lock()
+	slotName := slot.name
+	slotFP := slot.engine.GoldenHeapFingerprint
+	g.mu.Unlock()
+
 	if rec.Code == http.StatusOK {
 		slot.servedTotal.Add(1)
 		slot.servedWindow.Add(1)
 		g.subStats.record(true, latMs)
 		var body map[string]any
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
-		g.recordSearchSample("substrate", slot.name, query, http.StatusOK, latMs, body)
+		g.recordSearchSample("substrate", slotName, query, http.StatusOK, latMs, body)
 	} else {
 		slot.shedTotal.Add(1)
 		g.subStats.record(false, latMs)
-		g.recordSearchSample("substrate", slot.name, query, rec.Code, latMs, map[string]any{
-			"golden_heap_fingerprint": slot.engine.GoldenHeapFingerprint,
+		g.recordSearchSample("substrate", slotName, query, rec.Code, latMs, map[string]any{
+			"golden_heap_fingerprint": slotFP,
 		})
 	}
 }
@@ -1251,8 +1547,10 @@ func (g *GatewayServer) recordSearchSample(backend, replica, query string, statu
 			sym, _ := first["symbol"].(string)
 			topSym = pkg + "." + sym
 		}
-	} else if status != http.StatusOK {
+	} else if status == http.StatusTooManyRequests {
 		topSym = "429 LOAD SHED (REPLICA SATURATED)"
+	} else if status != http.StatusOK {
+		topSym = fmt.Sprintf("%d UPSTREAM UNAVAILABLE", status)
 	}
 
 	g.mu.Lock()
@@ -1350,6 +1648,7 @@ func (g *GatewayServer) Reset() {
 		prevK8sIP = g.localK8sSlots[0].podIP
 		prevK8sFP = g.localK8sSlots[0].engine.GoldenHeapFingerprint
 	}
+	prevSubSlots := slices.Clone(g.localSubSlots)
 	var prevSubIP, prevSubFP string
 	if len(g.localSubSlots) > 0 {
 		prevSubIP = g.localSubSlots[0].podIP
@@ -1383,13 +1682,31 @@ func (g *GatewayServer) Reset() {
 			}
 		}
 	}
+	g.notifySlotChangeLocked()
 	if g.cfg.Mode == "gateway" {
 		go g.syncClusterScales(defaultMinReplicas)
 		go g.refreshClusterReplicaStatuses(context.Background())
 		for i := 2; i <= defaultMaxReplicas; i++ {
 			actorIdx := i
+			var oldSlot *localReplicaSlot
+			if actorIdx-1 < len(prevSubSlots) {
+				oldSlot = prevSubSlots[actorIdx-1]
+			}
+			newSlot := g.localSubSlots[actorIdx-1]
+			gen := newSlot.scaleGen
 			go func() {
-				_ = g.runKubectlAte(context.Background(), "suspend", "actor", fmt.Sprintf("coldstart-%d", actorIdx), "-a", g.cfg.Atespace)
+				if oldSlot != nil {
+					deadline := time.Now().Add(2 * time.Second)
+					for oldSlot.inFlight.Load() > 0 && time.Now().Before(deadline) {
+						time.Sleep(15 * time.Millisecond)
+					}
+				}
+				g.mu.Lock()
+				stillScaledDown := newSlot.scaleGen == gen && actorIdx > g.subDesired
+				g.mu.Unlock()
+				if stillScaledDown {
+					_ = g.runKubectlAte(context.Background(), "suspend", "actor", fmt.Sprintf("coldstart-%d", actorIdx), "-a", g.cfg.Atespace, "--mode=async")
+				}
 			}()
 		}
 	}
@@ -1516,7 +1833,7 @@ func (g *GatewayServer) StateSnapshot() GatewayStateSnapshot {
 			GoldenHeapFingerprint: st.GoldenHeapFingerprint,
 			HeapAllocMB:           st.HeapAllocMB,
 			PodIP:                 s.podIP,
-			InFlight:              st.InFlight,
+			InFlight:              max(st.InFlight, s.inFlight.Load()),
 			MaxConcurrent:         st.MaxConcurrent,
 			CapacityQPS:           defaultTargetQPSPerPod,
 			ServedCount:           s.servedTotal.Load(),
@@ -1542,7 +1859,7 @@ func (g *GatewayServer) StateSnapshot() GatewayStateSnapshot {
 			GoldenHeapFingerprint: st.GoldenHeapFingerprint,
 			HeapAllocMB:           st.HeapAllocMB,
 			PodIP:                 s.podIP,
-			InFlight:              st.InFlight,
+			InFlight:              max(st.InFlight, s.inFlight.Load()),
 			MaxConcurrent:         st.MaxConcurrent,
 			CapacityQPS:           defaultTargetQPSPerPod,
 			ServedCount:           s.servedTotal.Load(),
@@ -1762,6 +2079,7 @@ type K8sRouterServer struct {
 
 	mu        sync.RWMutex
 	endpoints []string
+	inFlight  map[string]*atomic.Int64
 	rr        atomic.Uint64
 }
 
@@ -1779,8 +2097,9 @@ func NewK8sRouterServer(namespace, serviceName, fallbackURL string) *K8sRouterSe
 		namespace:   namespace,
 		serviceName: serviceName,
 		fallbackURL: strings.TrimRight(fallbackURL, "/"),
+		inFlight:    make(map[string]*atomic.Int64),
 		httpClient: &http.Client{
-			Timeout: 4 * time.Second,
+			Timeout: 12 * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        256,
 				MaxIdleConnsPerHost: 64,
@@ -1886,14 +2205,8 @@ func (r *K8sRouterServer) Mux() *http.ServeMux {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	proxySearch := func(w http.ResponseWriter, req *http.Request) {
-		r.mu.RLock()
-		eps := r.endpoints
-		r.mu.RUnlock()
-
-		targetBase := r.fallbackURL
-		if len(eps) > 0 {
-			targetBase = eps[int(r.rr.Add(1))%len(eps)]
-		}
+		targetBase, release := r.acquireEndpoint()
+		defer release()
 
 		upstreamURL := targetBase + req.URL.Path
 		if req.URL.RawQuery != "" {
@@ -1917,5 +2230,33 @@ func (r *K8sRouterServer) Mux() *http.ServeMux {
 	mux.HandleFunc("/search", proxySearch)
 	mux.HandleFunc("/", proxySearch)
 	return mux
+}
+
+func (r *K8sRouterServer) acquireEndpoint() (string, func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.endpoints) == 0 {
+		return r.fallbackURL, func() {}
+	}
+	startIdx := int(r.rr.Add(1) % uint64(len(r.endpoints)))
+	best := r.endpoints[startIdx]
+	bestLoad := int64(math.MaxInt64)
+	for j := 0; j < len(r.endpoints); j++ {
+		ep := r.endpoints[(startIdx+j)%len(r.endpoints)]
+		cnt := r.inFlight[ep]
+		if cnt == nil {
+			cnt = &atomic.Int64{}
+			r.inFlight[ep] = cnt
+		}
+		if cur := cnt.Load(); cur < bestLoad {
+			best = ep
+			bestLoad = cur
+		}
+	}
+	counter := r.inFlight[best]
+	counter.Add(1)
+	return best, func() {
+		counter.Add(-1)
+	}
 }
 
