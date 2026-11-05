@@ -22,6 +22,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -102,6 +104,7 @@ type ForensicsResponse struct {
 	SandboxIsolation   string            `json:"sandbox_isolation"`
 	GVisorSandboxProof SandboxProof      `json:"gvisor_sandbox_proof"`
 	ScratchDirectory   string            `json:"scratch_directory"`
+	CurrentWorkingDir  string            `json:"current_working_dir"`
 	RootfsDelta        []FileDeltaEntry  `json:"rootfs_delta"`
 	FilesInRootfsTmp   map[string]string `json:"files_in_rootfs_tmp"`
 	CanaryAlerts       []CanaryAlert     `json:"canary_alerts"`
@@ -111,19 +114,26 @@ type ForensicsResponse struct {
 }
 
 type inActorCheckpoint struct {
-	Version      int                    `json:"version"`
-	Reason       string                 `json:"reason"`
-	CreatedAt    time.Time              `json:"created_at"`
-	FilesOnDisk  map[string][]byte      `json:"files_on_disk"`
-	ModesOnDisk  map[string]os.FileMode `json:"modes_on_disk"`
+	Version      int                       `json:"version"`
+	Reason       string                    `json:"reason"`
+	CreatedAt    time.Time                 `json:"created_at"`
+	DirsOnDisk   map[string]os.FileMode    `json:"dirs_on_disk"`
+	FilesOnDisk  map[string][]byte         `json:"files_on_disk"`
+	ModesOnDisk  map[string]os.FileMode    `json:"modes_on_disk"`
 	KnownFiles   map[string]FileDeltaEntry `json:"known_files"`
-	ForensicLog  []ForensicEvent        `json:"forensic_log"`
-	CanaryAlerts []CanaryAlert          `json:"canary_alerts"`
+	CurrentDir   string                    `json:"current_dir"`
+	OldDir       string                    `json:"old_dir"`
+	ShellEnv     map[string]string         `json:"shell_env"`
+	ForensicLog  []ForensicEvent           `json:"forensic_log"`
+	CanaryAlerts []CanaryAlert             `json:"canary_alerts"`
 }
 
 type Honeypot struct {
 	mu           sync.Mutex
 	ScratchDir   string
+	CurrentDir   string
+	OldDir       string
+	ShellEnv     map[string]string
 	Baseline     map[string]FileDeltaEntry
 	KnownFiles   map[string]FileDeltaEntry
 	ForensicLog  []ForensicEvent
@@ -137,6 +147,12 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 	if err := os.MkdirAll(scratchDir, 0o755); err != nil {
 		return nil, err
 	}
+	if resolved, err := filepath.EvalSymlinks(scratchDir); err == nil && resolved != "" {
+		scratchDir = resolved
+	} else if abs, err := filepath.Abs(scratchDir); err == nil && abs != "" {
+		scratchDir = abs
+	}
+
 	seedFiles := map[string]string{
 		decoyCredentialsFile: decoyCredentialsBody,
 		decoyWireBatchFile:   decoyWireBatchBody,
@@ -150,8 +166,31 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 		}
 	}
 
+	pathEnv := os.Getenv("PATH")
+	if pathEnv == "" {
+		pathEnv = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	homeEnv := "/root"
+	if scratchDir != "/tmp/honeypot" {
+		homeEnv = scratchDir
+	} else if envHome := os.Getenv("HOME"); envHome != "" {
+		homeEnv = envHome
+	}
+
 	hp := &Honeypot{
-		ScratchDir:   scratchDir,
+		ScratchDir: scratchDir,
+		CurrentDir: scratchDir,
+		OldDir:     scratchDir,
+		ShellEnv: map[string]string{
+			"PATH":     pathEnv,
+			"HOME":     homeEnv,
+			"USER":     "root",
+			"LOGNAME":  "root",
+			"SHELL":    "/bin/sh",
+			"TERM":     "xterm-256color",
+			"HOSTNAME": "payroll-admin-prod-01",
+			"LANG":     "C.UTF-8",
+		},
 		Baseline:     make(map[string]FileDeltaEntry),
 		KnownFiles:   make(map[string]FileDeltaEntry),
 		ForensicLog:  []ForensicEvent{},
@@ -169,22 +208,49 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 	return hp, nil
 }
 
+func cloneStringMap(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 func (h *Honeypot) saveCheckpointLocked(version int, reason string) inActorCheckpoint {
+	dirsOnDisk := make(map[string]os.FileMode)
 	filesOnDisk := make(map[string][]byte)
 	modesOnDisk := make(map[string]os.FileMode)
-	entries, _ := os.ReadDir(h.ScratchDir)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	_ = filepath.WalkDir(h.ScratchDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || path == h.ScratchDir {
+			return nil
 		}
-		full := filepath.Join(h.ScratchDir, entry.Name())
-		if data, err := os.ReadFile(full); err == nil {
-			filesOnDisk[entry.Name()] = data
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
 		}
-		if info, err := entry.Info(); err == nil {
-			modesOnDisk[entry.Name()] = info.Mode().Perm()
+		rel, relErr := filepath.Rel(h.ScratchDir, path)
+		if relErr != nil || rel == "." {
+			return nil
 		}
-	}
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			perm := os.FileMode(0o755)
+			if info, infoErr := d.Info(); infoErr == nil {
+				perm = info.Mode().Perm()
+			}
+			dirsOnDisk[rel] = perm
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			filesOnDisk[rel] = data
+		}
+		if info, infoErr := d.Info(); infoErr == nil {
+			modesOnDisk[rel] = info.Mode().Perm()
+		}
+		return nil
+	})
 	knownCopy := make(map[string]FileDeltaEntry, len(h.KnownFiles))
 	for k, v := range h.KnownFiles {
 		knownCopy[k] = v
@@ -193,9 +259,13 @@ func (h *Honeypot) saveCheckpointLocked(version int, reason string) inActorCheck
 		Version:      version,
 		Reason:       reason,
 		CreatedAt:    time.Now().UTC(),
+		DirsOnDisk:   dirsOnDisk,
 		FilesOnDisk:  filesOnDisk,
 		ModesOnDisk:  modesOnDisk,
 		KnownFiles:   knownCopy,
+		CurrentDir:   h.CurrentDir,
+		OldDir:       h.OldDir,
+		ShellEnv:     cloneStringMap(h.ShellEnv),
 		ForensicLog:  slices.Clone(h.ForensicLog),
 		CanaryAlerts: slices.Clone(h.CanaryAlerts),
 	}
@@ -242,16 +312,55 @@ func (h *Honeypot) RestoreCheckpoint(targetVersion int, podIP string) (Forensics
 		for _, entry := range entries {
 			_ = os.RemoveAll(filepath.Join(h.ScratchDir, entry.Name()))
 		}
+		dirNames := make([]string, 0, len(cp.DirsOnDisk))
+		for d := range cp.DirsOnDisk {
+			dirNames = append(dirNames, d)
+		}
+		sort.Strings(dirNames)
+		for _, dirRel := range dirNames {
+			cleanRel := filepath.Clean(filepath.FromSlash(dirRel))
+			if cleanRel == "." || strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(cleanRel) {
+				continue
+			}
+			perm := cp.DirsOnDisk[dirRel]
+			if perm == 0 {
+				perm = 0o755
+			}
+			_ = os.MkdirAll(filepath.Join(h.ScratchDir, cleanRel), perm)
+		}
 		for name, data := range cp.FilesOnDisk {
+			cleanRel := filepath.Clean(filepath.FromSlash(name))
+			if cleanRel == "." || strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(cleanRel) {
+				continue
+			}
 			mode := cp.ModesOnDisk[name]
 			if mode == 0 {
 				mode = 0o644
 			}
-			_ = os.WriteFile(filepath.Join(h.ScratchDir, name), data, mode)
+			target := filepath.Join(h.ScratchDir, cleanRel)
+			_ = os.MkdirAll(filepath.Dir(target), 0o755)
+			_ = os.WriteFile(target, data, mode)
 		}
 		h.KnownFiles = make(map[string]FileDeltaEntry, len(cp.KnownFiles))
 		for k, v := range cp.KnownFiles {
 			h.KnownFiles[k] = v
+		}
+		if cp.CurrentDir != "" {
+			if info, err := os.Stat(cp.CurrentDir); err == nil && info.IsDir() {
+				h.CurrentDir = cp.CurrentDir
+			} else {
+				h.CurrentDir = h.ScratchDir
+			}
+		} else {
+			h.CurrentDir = h.ScratchDir
+		}
+		if cp.OldDir != "" {
+			h.OldDir = cp.OldDir
+		} else {
+			h.OldDir = h.ScratchDir
+		}
+		if len(cp.ShellEnv) > 0 {
+			h.ShellEnv = cloneStringMap(cp.ShellEnv)
 		}
 		h.ForensicLog = slices.Clone(cp.ForensicLog)
 		h.CanaryAlerts = slices.Clone(cp.CanaryAlerts)
@@ -302,36 +411,98 @@ func (h *Honeypot) recordPodIPLocked(podIP string) {
 }
 
 func (h *Honeypot) scanScratchDirLocked() (map[string]FileDeltaEntry, map[string]string) {
-	entries, err := os.ReadDir(h.ScratchDir)
-	if err != nil {
-		return map[string]FileDeltaEntry{}, map[string]string{}
-	}
-	snap := make(map[string]FileDeltaEntry, len(entries))
-	rawMap := make(map[string]string, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	snap := make(map[string]FileDeltaEntry)
+	rawMap := make(map[string]string)
+	_ = filepath.WalkDir(h.ScratchDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || path == h.ScratchDir {
+			return nil
 		}
-		fullPath := filepath.Join(h.ScratchDir, entry.Name())
-		b, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		rel, relErr := filepath.Rel(h.ScratchDir, path)
+		if relErr != nil || rel == "." {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			dirKey := rel + "/"
+			mode := "drwxr-xr-x"
+			if info, infoErr := d.Info(); infoErr == nil {
+				mode = info.Mode().String()
+			}
+			snap[dirKey] = FileDeltaEntry{
+				Name:           dirKey,
+				Status:         "UNCHANGED",
+				SizeBytes:      0,
+				Mode:           mode,
+				SHA256:         "directory",
+				ContentPreview: "[directory]",
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		b, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
 		}
 		mode := "-rw-r--r--"
-		if info, err := entry.Info(); err == nil {
+		if info, infoErr := d.Info(); infoErr == nil {
 			mode = info.Mode().String()
 		}
-		rawMap[entry.Name()] = string(b)
-		snap[entry.Name()] = FileDeltaEntry{
-			Name:           entry.Name(),
+		rawMap[rel] = string(b)
+		snap[rel] = FileDeltaEntry{
+			Name:           rel,
 			Status:         "UNCHANGED",
 			SizeBytes:      len(b),
 			Mode:           mode,
 			SHA256:         shortSHA256(b),
 			ContentPreview: previewString(strings.TrimSpace(string(b)), 160),
 		}
-	}
+		return nil
+	})
 	return snap, rawMap
+}
+
+func isTransientShellVar(k string) bool {
+	switch k {
+	case "", "_", "PWD", "OLDPWD", "SHLVL", "PPID", "IFS", "OPTIND":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *Honeypot) displaySandboxPathLocked(realPath string) string {
+	if realPath == "" {
+		return "/tmp/honeypot"
+	}
+	if h.ScratchDir != "" && h.ScratchDir != "/tmp/honeypot" {
+		if realPath == h.ScratchDir {
+			return "/tmp/honeypot"
+		}
+		if strings.HasPrefix(realPath, h.ScratchDir+"/") {
+			return "/tmp/honeypot" + strings.TrimPrefix(realPath, h.ScratchDir)
+		}
+	}
+	return realPath
+}
+
+func (h *Honeypot) deceptiveCwdLocked() string {
+	cwd := h.CurrentDir
+	if cwd == "" || cwd == h.ScratchDir {
+		return "/var/www/payroll-admin/workspace"
+	}
+	if h.ScratchDir != "" && strings.HasPrefix(cwd, h.ScratchDir+"/") {
+		return "/var/www/payroll-admin/workspace" + strings.TrimPrefix(cwd, h.ScratchDir)
+	}
+	disp := h.displaySandboxPathLocked(cwd)
+	if strings.Contains(strings.ToLower(disp), "honeypot") {
+		return "/var/www/payroll-admin/workspace"
+	}
+	return disp
 }
 
 func (h *Honeypot) computeDeltaLocked() ([]FileDeltaEntry, map[string]string) {
@@ -430,8 +601,65 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		execCmd := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
-		execCmd.Dir = h.ScratchDir
+		workDir := h.CurrentDir
+		if workDir == "" {
+			workDir = h.ScratchDir
+		}
+		if info, statErr := os.Stat(workDir); statErr != nil || !info.IsDir() {
+			workDir = h.ScratchDir
+			h.CurrentDir = h.ScratchDir
+		}
+
+		shellCmd := cmd
+		if h.ScratchDir != "" && h.ScratchDir != "/tmp/honeypot" {
+			if strings.Contains(shellCmd, "/tmp/honeypot") {
+				shellCmd = strings.ReplaceAll(shellCmd, "/tmp/honeypot", h.ScratchDir)
+			}
+			trimmedSh := strings.TrimSpace(shellCmd)
+			if workDir == filepath.Dir(filepath.Dir(h.ScratchDir)) {
+				if trimmedSh == "cd honeypot" {
+					shellCmd = "cd " + h.ScratchDir
+				} else if strings.HasPrefix(trimmedSh, "cd honeypot/") {
+					shellCmd = "cd " + h.ScratchDir + strings.TrimPrefix(trimmedSh, "cd honeypot")
+				}
+			}
+		}
+
+		const shStateWrapper = `__aba_dump() {
+  __ec=$?
+  printf '__ABA_V1__\0%s\0%s\0' "$(pwd -P 2>/dev/null)" "${OLDPWD:-}" >&3 2>/dev/null
+  env -0 >&3 2>/dev/null
+  printf '__ABA_END__\0' >&3 2>/dev/null
+  exit "$__ec"
+}
+trap __aba_dump EXIT
+eval "$1"`
+
+		var execCmd *exec.Cmd
+		stateFile, stateErr := os.CreateTemp("", ".aba-sh-*")
+		if stateErr == nil {
+			_ = os.Remove(stateFile.Name())
+			defer stateFile.Close()
+			execCmd = exec.CommandContext(ctx, "/bin/sh", "-c", shStateWrapper, "sh", shellCmd)
+			execCmd.ExtraFiles = []*os.File{stateFile}
+		} else {
+			execCmd = exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
+		}
+
+		execCmd.Dir = workDir
+		envList := make([]string, 0, len(h.ShellEnv)+2)
+		for k, v := range h.ShellEnv {
+			if !isTransientShellVar(k) {
+				envList = append(envList, k+"="+v)
+			}
+		}
+		oldDir := h.OldDir
+		if oldDir == "" {
+			oldDir = workDir
+		}
+		envList = append(envList, "PWD="+workDir, "OLDPWD="+oldDir)
+		execCmd.Env = envList
+
 		var outBuf, errBuf bytes.Buffer
 		execCmd.Stdout = &outBuf
 		execCmd.Stderr = &errBuf
@@ -439,6 +667,10 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 		err := execCmd.Run()
 		stdoutStr = outBuf.String()
 		stderrStr = errBuf.String()
+		if h.ScratchDir != "" && h.ScratchDir != "/tmp/honeypot" {
+			stdoutStr = strings.ReplaceAll(stdoutStr, h.ScratchDir, "/tmp/honeypot")
+			stderrStr = strings.ReplaceAll(stderrStr, h.ScratchDir, "/tmp/honeypot")
+		}
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
@@ -450,6 +682,44 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 				exitCode = 1
 				if stderrStr == "" {
 					stderrStr = err.Error()
+				}
+			}
+		}
+
+		if stateFile != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			_, _ = stateFile.Seek(0, io.SeekStart)
+			if stateBytes, readErr := io.ReadAll(io.LimitReader(stateFile, 64<<10)); readErr == nil && len(stateBytes) > 0 {
+				tokens := strings.Split(string(stateBytes), "\x00")
+				if len(tokens) >= 5 && tokens[0] == "__ABA_V1__" && tokens[len(tokens)-2] == "__ABA_END__" {
+					newPwd := tokens[1]
+					newOldPwd := tokens[2]
+					if h.ScratchDir != "" && h.ScratchDir != "/tmp/honeypot" &&
+						strings.Contains(filepath.Base(filepath.Dir(h.ScratchDir)), "honeypot-local-sim-") &&
+						newPwd == filepath.Dir(h.ScratchDir) {
+						newPwd = filepath.Dir(filepath.Dir(h.ScratchDir))
+					}
+					if newPwd != "" {
+						if info, statErr := os.Stat(newPwd); statErr == nil && info.IsDir() {
+							h.CurrentDir = newPwd
+						} else {
+							h.CurrentDir = h.ScratchDir
+						}
+					}
+					if newOldPwd != "" {
+						h.OldDir = newOldPwd
+					}
+					envTokens := tokens[3 : len(tokens)-2]
+					if len(envTokens) > 0 {
+						updatedEnv := make(map[string]string, len(envTokens))
+						for _, kv := range envTokens {
+							if k, v, ok := strings.Cut(kv, "="); ok && !isTransientShellVar(k) {
+								updatedEnv[k] = v
+							}
+						}
+						if len(updatedEnv) > 0 {
+							h.ShellEnv = updatedEnv
+						}
+					}
 				}
 			}
 		}
@@ -471,6 +741,9 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 		// Compare beforeFiles vs current files to detect added/modified/deleted files from shell command
 		afterFiles, _ := h.scanScratchDirLocked()
 		for name, afterEntry := range afterFiles {
+			if strings.HasSuffix(name, "/") {
+				continue
+			}
 			beforeEntry, existedBefore := beforeFiles[name]
 			if !existedBefore {
 				canaryFired = true
@@ -493,6 +766,9 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 			}
 		}
 		for name := range beforeFiles {
+			if strings.HasSuffix(name, "/") {
+				continue
+			}
 			if _, stillThere := afterFiles[name]; !stillThere {
 				canaryFired = true
 				h.appendCanaryLocked(
@@ -519,17 +795,30 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 	}
 
 	deltas, rawMap := h.computeDeltaLocked()
-	fileList := make([]string, 0, len(rawMap))
-	for name := range rawMap {
-		fileList = append(fileList, name)
+	activeDir := h.CurrentDir
+	if activeDir == "" {
+		activeDir = h.ScratchDir
 	}
-	sort.Strings(fileList)
+	var fileList []string
+	if dirEntries, err := os.ReadDir(activeDir); err == nil {
+		fileList = make([]string, 0, len(dirEntries))
+		for _, entry := range dirEntries {
+			label := entry.Name()
+			if entry.IsDir() {
+				label += "/"
+			}
+			fileList = append(fileList, label)
+		}
+		sort.Strings(fileList)
+	} else {
+		fileList = []string{}
+	}
 
 	shellResp := AttackerShellResponse{
 		Service:      "AcmeCorp Internal Payroll v1.4 (staging-admin.acmecorp.internal)",
 		Hostname:     "payroll-admin-prod-01",
 		DebugMode:    true,
-		Cwd:          "/var/www/payroll-admin/workspace",
+		Cwd:          h.deceptiveCwdLocked(),
 		Command:      cmd,
 		ExitCode:     exitCode,
 		Stdout:       stdoutStr,
@@ -543,6 +832,7 @@ func (h *Honeypot) executeInteractionLocked(dropFile, content, cmd, podIP string
 		SandboxIsolation:   "SANDBOX_CLASS_GVISOR (rootfs overlay + RAM checkpointed on Suspend)",
 		GVisorSandboxProof: detectSandboxProof(),
 		ScratchDirectory:   h.ScratchDir,
+		CurrentWorkingDir:  h.displaySandboxPathLocked(activeDir),
 		RootfsDelta:        deltas,
 		FilesInRootfsTmp:   rawMap,
 		CanaryAlerts:       slices.Clone(h.CanaryAlerts),
@@ -638,6 +928,8 @@ func parseInteractionParams(r *http.Request) (dropFile, content, cmd string) {
 
 func writePrettyJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

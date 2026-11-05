@@ -1470,6 +1470,14 @@ deploy_honeypot_gateway() {
   banner "Deploying In-Cluster Honeypot Split-Screen Gateway & LoadBalancer"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  if [[ "${FORCE_REBUILD_TEMPLATES:-0}" == "1" ]]; then
+    for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^honeypot-/ {print $2}' || true); do
+      kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+    done
+    for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-(honeypot|forensic)/ {print $2}' || true); do
+      kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
+    done
+  fi
   free_workers
   ensure_presenter_auth
 

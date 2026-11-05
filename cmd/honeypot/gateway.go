@@ -85,35 +85,69 @@ func (g *GatewayServer) PresenterKey() string {
 	return g.authGate.PresenterKey()
 }
 
-func shouldAutoCheckpoint(cmd string, forensics *ForensicsResponse) (bool, string) {
+func shouldAutoCheckpoint(cmd string, prev, forensics *ForensicsResponse) (bool, string) {
 	if forensics == nil {
 		return false, ""
 	}
 	trimmed := strings.TrimSpace(cmd)
 	// Never overwrite pre-wipe snapshot when attacker deletes files!
-	if strings.Contains(trimmed, "rm ") || strings.HasPrefix(trimmed, "rm\t") {
+	if strings.Contains(trimmed, "rm ") || strings.HasPrefix(trimmed, "rm\t") || strings.Contains(trimmed, "rmdir ") {
 		return false, ""
 	}
 	for _, d := range forensics.RootfsDelta {
+		if strings.HasSuffix(d.Name, "/") {
+			continue
+		}
 		if d.Status == "DELETED" {
 			return false, ""
 		}
 	}
-	for _, d := range forensics.RootfsDelta {
-		if d.Status == "ADDED" {
-			return true, fmt.Sprintf("Auto-Checkpoint: %s planted in rootfs", d.Name)
+
+	prevFiles := make(map[string]FileDeltaEntry)
+	prevAlerts := 0
+	if prev != nil {
+		for _, d := range prev.RootfsDelta {
+			prevFiles[d.Name] = d
 		}
-		if d.Status == "MODIFIED" {
+		prevAlerts = len(prev.CanaryAlerts)
+	}
+
+	for _, d := range forensics.RootfsDelta {
+		if strings.HasSuffix(d.Name, "/") {
+			continue
+		}
+		old, existed := prevFiles[d.Name]
+		if d.Status == "ADDED" {
+			if !existed || old.Status == "DELETED" {
+				return true, fmt.Sprintf("Auto-Checkpoint: %s planted in rootfs", d.Name)
+			}
+			if old.SHA256 != d.SHA256 {
+				return true, fmt.Sprintf("Auto-Checkpoint: %s modified in rootfs", d.Name)
+			}
+		}
+		if d.Status == "MODIFIED" && (!existed || old.SHA256 != d.SHA256) {
 			return true, fmt.Sprintf("Auto-Checkpoint: %s modified in rootfs", d.Name)
 		}
 	}
-	if len(forensics.CanaryAlerts) > 0 {
-		lastAlert := forensics.CanaryAlerts[len(forensics.CanaryAlerts)-1]
-		if lastAlert.Rule == "DECOY_CREDENTIAL_EXFILTRATION" {
-			return true, "Auto-Checkpoint: Decoy credentials accessed"
+
+	if len(forensics.CanaryAlerts) > prevAlerts {
+		for _, alert := range forensics.CanaryAlerts[prevAlerts:] {
+			if alert.Rule == "DECOY_CREDENTIAL_EXFILTRATION" {
+				return true, "Auto-Checkpoint: Decoy credentials accessed"
+			}
 		}
 	}
 	return false, ""
+}
+
+func (g *GatewayServer) cachedForensics(r *http.Request, actorName string) *ForensicsResponse {
+	actors, _ := g.backend.ListActors(r.Context())
+	for _, a := range actors {
+		if a.ActorName == actorName {
+			return a.LastForensics
+		}
+	}
+	return nil
 }
 
 func (g *GatewayServer) buildActionResponse(r *http.Request, actorName string, autoSaved bool, reason string, shell *AttackerShellResponse, forensics *ForensicsResponse) GatewayActionResponse {
@@ -155,9 +189,17 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/api/state", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		actorName := r.URL.Query().Get("actor")
 		if actorName == "" {
 			actorName = "honeypot-203-0-113-5"
+		}
+		if !isValidActorOrTagName(actorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
 		}
 		wake := r.URL.Query().Get("wake") == "1"
 		var forensics *ForensicsResponse
@@ -198,7 +240,12 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
 		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
+		}
 
+		prevForensics := g.cachedForensics(r, req.ActorName)
 		shellResp, forensicsResp, err := g.backend.ExecShell(r.Context(), req.ActorName, req.Cmd, req.DropFile, req.Content)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -207,7 +254,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 
 		autoSaved := false
 		saveReason := ""
-		if ok, reason := shouldAutoCheckpoint(req.Cmd, forensicsResp); ok {
+		if ok, reason := shouldAutoCheckpoint(req.Cmd, prevForensics, forensicsResp); ok {
 			if _, err := g.backend.SaveActor(r.Context(), req.ActorName, reason); err == nil {
 				autoSaved = true
 				saveReason = reason
@@ -233,6 +280,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
+		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
 		}
 		if req.Reason == "" {
 			req.Reason = "Manual SOC Checkpoint"
@@ -261,6 +312,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
 		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
+		}
 		if err := g.backend.SuspendActor(r.Context(), req.ActorName); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -284,6 +339,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		if req.ActorName == "" {
 			req.ActorName = "honeypot-203-0-113-5"
+		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
 		}
 		forensics, err := g.backend.RevertActor(r.Context(), req.ActorName, req.TargetVersion)
 		if err != nil {
@@ -317,12 +376,56 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if req.TagName == "" {
 			req.TagName = fmt.Sprintf("tag-forensic-%d", time.Now().Unix()%10000)
 		}
+		if !isValidActorOrTagName(req.SourceActor) || !isValidActorOrTagName(req.NewActor) || !isValidActorOrTagName(req.TagName) {
+			http.Error(w, "invalid actor or tag name", http.StatusBadRequest)
+			return
+		}
 		forensics, err := g.backend.CloneActor(r.Context(), req.SourceActor, req.NewActor, req.TagName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		resp := g.buildActionResponse(r, req.NewActor, false, "Cloned live sandbox via tag "+req.TagName, nil, forensics)
+		writePrettyJSON(w, http.StatusOK, resp)
+	}))
+
+	mux.HandleFunc("/api/soc/reset", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ActorName string `json:"actor_name"`
+			Scope     string `json:"scope"`
+		}
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		scope := strings.ToLower(strings.TrimSpace(req.Scope))
+		if scope == "stage" {
+			forensics, err := g.backend.ResetStage(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			resp := g.buildActionResponse(r, defaultHoneypotActors[0], false, "Golden Snapshot Baseline Ready", nil, forensics)
+			writePrettyJSON(w, http.StatusOK, resp)
+			return
+		}
+		if req.ActorName == "" {
+			req.ActorName = defaultHoneypotActors[0]
+		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
+		}
+		forensics, err := g.backend.ResetActor(r.Context(), req.ActorName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resp := g.buildActionResponse(r, req.ActorName, false, fmt.Sprintf("Recreated %s from clean Golden Snapshot", req.ActorName), nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
 	}))
 
@@ -336,8 +439,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		_, _ = w.Write(data)
 	}
 	mux.HandleFunc("/dashboard", serveUI)

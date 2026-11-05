@@ -59,7 +59,31 @@ type HoneypotBackend interface {
 	SuspendActor(ctx context.Context, actorName string) error
 	RevertActor(ctx context.Context, actorName string, targetVersion int) (*ForensicsResponse, error)
 	CloneActor(ctx context.Context, sourceActor, newActor, tagName string) (*ForensicsResponse, error)
+	ResetActor(ctx context.Context, actorName string) (*ForensicsResponse, error)
+	ResetStage(ctx context.Context) (*ForensicsResponse, error)
 	ListActors(ctx context.Context) ([]ActorTrackerState, error)
+}
+
+var defaultHoneypotActors = []string{"honeypot-203-0-113-5", "honeypot-198-51-100-9"}
+
+func isValidActorOrTagName(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		isLowerOrDigit := (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+		if i == 0 || i == len(name)-1 {
+			if !isLowerOrDigit {
+				return false
+			}
+			continue
+		}
+		if !isLowerOrDigit && c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func defaultActorMetadata(actorName string) (ip, label string, isClone bool) {
@@ -224,7 +248,9 @@ func (b *LocalSimulatorBackend) EnsureActor(_ context.Context, actorName string)
 	}
 	sim.checkpoints[1] = b.captureSnapshotLocked(sim, 1, "Golden Snapshot Baseline")
 	b.actors[actorName] = sim
-	b.order = append(b.order, actorName)
+	if !slices.Contains(b.order, actorName) {
+		b.order = append(b.order, actorName)
+	}
 	return nil
 }
 
@@ -357,6 +383,41 @@ func (b *LocalSimulatorBackend) CloneActor(ctx context.Context, sourceActor, new
 	return &forensics, nil
 }
 
+func (b *LocalSimulatorBackend) ResetActor(ctx context.Context, actorName string) (*ForensicsResponse, error) {
+	if !isValidActorOrTagName(actorName) {
+		return nil, fmt.Errorf("invalid actor name %q", actorName)
+	}
+	b.mu.Lock()
+	delete(b.actors, actorName)
+	_ = os.RemoveAll(filepath.Join(b.baseDir, actorName))
+	b.mu.Unlock()
+
+	if err := b.EnsureActor(ctx, actorName); err != nil {
+		return nil, err
+	}
+	return b.GetForensics(ctx, actorName)
+}
+
+func (b *LocalSimulatorBackend) ResetStage(ctx context.Context) (*ForensicsResponse, error) {
+	b.mu.Lock()
+	for name := range b.actors {
+		_ = os.RemoveAll(filepath.Join(b.baseDir, name))
+	}
+	b.actors = make(map[string]*localSimulatedActor)
+	b.order = nil
+	b.tags = make(map[string]localDiskAndRAMSnapshot)
+	b.mu.Unlock()
+
+	for _, name := range defaultHoneypotActors {
+		if err := b.EnsureActor(ctx, name); err != nil {
+			return nil, err
+		}
+	}
+	// Keep secondary baseline actor suspended at $0/hr so stage starts clean
+	_ = b.SuspendActor(ctx, defaultHoneypotActors[1])
+	return b.GetForensics(ctx, defaultHoneypotActors[0])
+}
+
 func (b *LocalSimulatorBackend) ListActors(_ context.Context) ([]ActorTrackerState, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -385,6 +446,7 @@ type ClusterAteBackend struct {
 	trackers      map[string]*ActorTrackerState
 	created       map[string]bool
 	order         []string
+	tags          []string
 }
 
 func normalizeRouterURL(raw string) string {
@@ -791,12 +853,119 @@ func (b *ClusterAteBackend) CloneActor(ctx context.Context, sourceActor, newActo
 	}
 	b.mu.Lock()
 	b.created[newActor] = true
+	if !slices.Contains(b.tags, tagName) {
+		b.tags = append(b.tags, tagName)
+	}
 	tr := b.ensureTrackerLocked(newActor)
 	tr.IsClone = true
 	tr.ClonedFrom = sourceActor
 	tr.Label = fmt.Sprintf("%s [CLONE of %s]", newActor, sourceActor)
 	b.mu.Unlock()
 	return b.GetForensics(ctx, newActor)
+}
+
+func (b *ClusterAteBackend) ResetActor(ctx context.Context, actorName string) (*ForensicsResponse, error) {
+	if !isValidActorOrTagName(actorName) {
+		return nil, fmt.Errorf("invalid actor name %q", actorName)
+	}
+	// Unconditionally delete in Substrate even if created prior to this gateway rollout
+	_, _ = b.runKubectlAte(ctx, "delete", "actor", actorName, "-a", b.atespace)
+
+	b.mu.Lock()
+	delete(b.created, actorName)
+	ip, label, isClone := defaultActorMetadata(actorName)
+	b.trackers[actorName] = &ActorTrackerState{
+		ActorName:       actorName,
+		AttackerIP:      ip,
+		Label:           label,
+		Status:          "SUSPENDED",
+		SnapshotVersion: 1,
+		Snapshots: []SnapshotRecord{
+			{Version: 1, Reason: "Golden Snapshot Baseline", CreatedAt: time.Now().UTC()},
+		},
+		IsClone: isClone,
+	}
+	if !slices.Contains(b.order, actorName) {
+		b.order = append(b.order, actorName)
+	}
+	b.mu.Unlock()
+
+	return b.GetForensics(ctx, actorName)
+}
+
+func (b *ClusterAteBackend) ResetStage(ctx context.Context) (*ForensicsResponse, error) {
+	actorsToDelete := make(map[string]struct{})
+	tagsToDelete := make(map[string]struct{})
+
+	b.mu.Lock()
+	for _, name := range b.order {
+		actorsToDelete[name] = struct{}{}
+	}
+	for _, name := range defaultHoneypotActors {
+		actorsToDelete[name] = struct{}{}
+	}
+	actorsToDelete["honeypot-forensic-lab"] = struct{}{}
+	for _, tag := range b.tags {
+		tagsToDelete[tag] = struct{}{}
+	}
+	b.mu.Unlock()
+
+	if out, err := b.runKubectlAte(ctx, "get", "actors", "-a", b.atespace); err == nil {
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 || fields[0] == "ATESPACE" || fields[0] == "NAMESPACE" || strings.HasPrefix(fields[0], "Warning:") {
+				continue
+			}
+			name := fields[1]
+			if strings.HasPrefix(name, "honeypot-") && isValidActorOrTagName(name) {
+				actorsToDelete[name] = struct{}{}
+			}
+		}
+	}
+
+	if out, err := b.runKubectlAte(ctx, "get", "tags", "-a", b.atespace); err == nil {
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 || fields[0] == "ATESPACE" || fields[0] == "NAMESPACE" || strings.HasPrefix(fields[0], "Warning:") {
+				continue
+			}
+			tag := fields[1]
+			if (strings.HasPrefix(tag, "tag-forensic") || strings.HasPrefix(tag, "tag-honeypot")) && isValidActorOrTagName(tag) {
+				tagsToDelete[tag] = struct{}{}
+			}
+		}
+	}
+
+	for name := range actorsToDelete {
+		_, _ = b.runKubectlAte(ctx, "delete", "actor", name, "-a", b.atespace)
+	}
+	for tag := range tagsToDelete {
+		_, _ = b.runKubectlAte(ctx, "delete", "tag", tag, "-a", b.atespace)
+	}
+
+	b.mu.Lock()
+	b.trackers = make(map[string]*ActorTrackerState, len(defaultHoneypotActors))
+	b.created = make(map[string]bool)
+	b.order = nil
+	b.tags = nil
+	for _, name := range defaultHoneypotActors {
+		ip, label, isClone := defaultActorMetadata(name)
+		b.trackers[name] = &ActorTrackerState{
+			ActorName:       name,
+			AttackerIP:      ip,
+			Label:           label,
+			Status:          "SUSPENDED",
+			SnapshotVersion: 1,
+			Snapshots: []SnapshotRecord{
+				{Version: 1, Reason: "Golden Snapshot Baseline", CreatedAt: time.Now().UTC()},
+			},
+			IsClone: isClone,
+		}
+		b.order = append(b.order, name)
+	}
+	b.mu.Unlock()
+
+	return b.GetForensics(ctx, defaultHoneypotActors[0])
 }
 
 func (b *ClusterAteBackend) ListActors(_ context.Context) ([]ActorTrackerState, error) {

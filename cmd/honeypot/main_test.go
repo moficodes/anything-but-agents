@@ -55,6 +55,15 @@ func TestHoneypotRootfsDropAndForensicTrail(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("expected 2 forensic events, got %d", len(events))
 	}
+
+	// Verify explicit /tmp/honeypot paths in commands map cleanly when ScratchDir is a temp dir (--mode=local)
+	shellAbs, err := hp.InteractShell("", "", "pwd && cat /tmp/honeypot/payroll_db_credentials.env.bak", "10.0.0.12")
+	if err != nil {
+		t.Fatalf("InteractShell with /tmp/honeypot path: %v", err)
+	}
+	if shellAbs.ExitCode != 0 || !strings.Contains(shellAbs.Stdout, "Summer2026!Decoy") || !strings.Contains(shellAbs.Stdout, "/tmp/honeypot") {
+		t.Fatalf("expected /tmp/honeypot path mapping in local temp dir, got code=%d stdout=%q stderr=%q", shellAbs.ExitCode, shellAbs.Stdout, shellAbs.Stderr)
+	}
 }
 
 func TestHoneypotShellVsForensicsSeparationAndRootfsDelta(t *testing.T) {
@@ -279,7 +288,7 @@ func TestHoneypotGatewayAutoCheckpointRevertAndClone(t *testing.T) {
 	}
 
 	// 6. Verify mutating /api/soc/* endpoints reject GET (405) and malformed JSON (400)
-	for _, ep := range []string{"/api/soc/save", "/api/soc/suspend", "/api/soc/revert", "/api/soc/clone"} {
+	for _, ep := range []string{"/api/soc/save", "/api/soc/suspend", "/api/soc/revert", "/api/soc/clone", "/api/soc/reset"} {
 		respGet, err := http.Get(srv.URL + ep)
 		if err != nil {
 			t.Fatalf("GET %s: %v", ep, err)
@@ -299,9 +308,218 @@ func TestHoneypotGatewayAutoCheckpointRevertAndClone(t *testing.T) {
 	}
 }
 
+func TestHoneypotGatewayNoRunawayAutoCheckpointsAndReset(t *testing.T) {
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	gw := NewGatewayServer(backend)
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	// 1. Exfiltrating decoy credentials triggers one auto-checkpoint (v2)
+	exfilBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"cat payroll_db_credentials.env.bak"}`
+	respExfil, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(exfilBody))
+	if err != nil {
+		t.Fatalf("POST exfil: %v", err)
+	}
+	defer respExfil.Body.Close()
+	var exfilRes GatewayActionResponse
+	if err := json.NewDecoder(respExfil.Body).Decode(&exfilRes); err != nil {
+		t.Fatalf("decode exfilRes: %v", err)
+	}
+	if !exfilRes.AutoCheckpointed || exfilRes.SnapshotVersion != 2 {
+		t.Fatalf("expected exfil to auto-checkpoint v2, got AutoCheckpointed=%v ver=%d", exfilRes.AutoCheckpointed, exfilRes.SnapshotVersion)
+	}
+
+	// 2. Subsequent harmless recon command (ls -la) must NOT spam another checkpoint!
+	lsBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"ls -la"}`
+	respLs, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(lsBody))
+	if err != nil {
+		t.Fatalf("POST ls: %v", err)
+	}
+	defer respLs.Body.Close()
+	var lsRes GatewayActionResponse
+	if err := json.NewDecoder(respLs.Body).Decode(&lsRes); err != nil {
+		t.Fatalf("decode lsRes: %v", err)
+	}
+	if lsRes.AutoCheckpointed || lsRes.SnapshotVersion != 2 {
+		t.Fatalf("expected harmless ls NOT to auto-checkpoint, got AutoCheckpointed=%v ver=%d", lsRes.AutoCheckpointed, lsRes.SnapshotVersion)
+	}
+
+	// 3. Planting rootkit.sh triggers v3, and another harmless command stays at v3
+	plantBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"printf '#!/bin/sh\necho hi\n' > rootkit.sh"}`
+	respPlant, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(plantBody))
+	if err != nil {
+		t.Fatalf("POST plant: %v", err)
+	}
+	defer respPlant.Body.Close()
+	var plantRes GatewayActionResponse
+	if err := json.NewDecoder(respPlant.Body).Decode(&plantRes); err != nil {
+		t.Fatalf("decode plantRes: %v", err)
+	}
+	if !plantRes.AutoCheckpointed || plantRes.SnapshotVersion != 3 {
+		t.Fatalf("expected plant to auto-checkpoint v3, got AutoCheckpointed=%v ver=%d", plantRes.AutoCheckpointed, plantRes.SnapshotVersion)
+	}
+
+	respId, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(`{"actor_name":"honeypot-203-0-113-5","cmd":"id"}`))
+	if err != nil {
+		t.Fatalf("POST id: %v", err)
+	}
+	defer respId.Body.Close()
+	var idRes GatewayActionResponse
+	if err := json.NewDecoder(respId.Body).Decode(&idRes); err != nil {
+		t.Fatalf("decode idRes: %v", err)
+	}
+	if idRes.AutoCheckpointed || idRes.SnapshotVersion != 3 {
+		t.Fatalf("expected harmless id after plant NOT to auto-checkpoint, got AutoCheckpointed=%v ver=%d", idRes.AutoCheckpointed, idRes.SnapshotVersion)
+	}
+
+	// 4. Clone honeypot-forensic-lab, then reset single actor (scope="actor")
+	respClone, err := http.Post(srv.URL+"/api/soc/clone", "application/json", strings.NewReader(`{"source_actor":"honeypot-203-0-113-5","new_actor":"honeypot-forensic-lab"}`))
+	if err != nil {
+		t.Fatalf("POST clone: %v", err)
+	}
+	respClone.Body.Close()
+
+	respResetActor, err := http.Post(srv.URL+"/api/soc/reset", "application/json", strings.NewReader(`{"actor_name":"honeypot-203-0-113-5","scope":"actor"}`))
+	if err != nil {
+		t.Fatalf("POST /api/soc/reset actor: %v", err)
+	}
+	defer respResetActor.Body.Close()
+	var resetActorRes GatewayActionResponse
+	if err := json.NewDecoder(respResetActor.Body).Decode(&resetActorRes); err != nil {
+		t.Fatalf("decode resetActorRes: %v", err)
+	}
+	if resetActorRes.SnapshotVersion != 1 {
+		t.Fatalf("expected SnapshotVersion=1 after actor reset, got %d", resetActorRes.SnapshotVersion)
+	}
+	if len(resetActorRes.Forensics.ForensicAuditTrail) != 0 || len(resetActorRes.Forensics.CanaryAlerts) != 0 {
+		t.Fatalf("expected empty audit trail and canary alerts after actor reset, got %+v", resetActorRes.Forensics)
+	}
+	if _, ok := resetActorRes.Forensics.FilesInRootfsTmp["rootkit.sh"]; ok {
+		t.Fatalf("expected rootkit.sh removed after actor reset")
+	}
+	if len(resetActorRes.Actors) != 3 {
+		t.Fatalf("expected forensic clone to remain on single-actor reset (3 actors), got %d", len(resetActorRes.Actors))
+	}
+
+	// 5. Full stage reset (scope="stage") purges forensic clones and resets default actors
+	respResetStage, err := http.Post(srv.URL+"/api/soc/reset", "application/json", strings.NewReader(`{"scope":"stage"}`))
+	if err != nil {
+		t.Fatalf("POST /api/soc/reset stage: %v", err)
+	}
+	defer respResetStage.Body.Close()
+	var resetStageRes GatewayActionResponse
+	if err := json.NewDecoder(respResetStage.Body).Decode(&resetStageRes); err != nil {
+		t.Fatalf("decode resetStageRes: %v", err)
+	}
+	if resetStageRes.ActorName != "honeypot-203-0-113-5" || resetStageRes.SnapshotVersion != 1 {
+		t.Fatalf("expected clean primary actor at v1 after stage reset, got %+v", resetStageRes)
+	}
+	if len(resetStageRes.Actors) != 2 {
+		t.Fatalf("expected 2 baseline actors after stage reset, got %d", len(resetStageRes.Actors))
+	}
+
+	// 6. Reject invalid actor names (400 Bad Request)
+	respBadActor, err := http.Post(srv.URL+"/api/soc/reset", "application/json", strings.NewReader(`{"actor_name":"--flag-injection","scope":"actor"}`))
+	if err != nil {
+		t.Fatalf("POST /api/soc/reset bad actor: %v", err)
+	}
+	respBadActor.Body.Close()
+	if respBadActor.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request on invalid actor name, got %d", respBadActor.StatusCode)
+	}
+}
+
 func jsonNumber(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
+}
+
+func TestHoneypotShellPersistentCwdEnvAndSubdirectories(t *testing.T) {
+	hp, err := newHoneypot(t.TempDir())
+	if err != nil {
+		t.Fatalf("newHoneypot: %v", err)
+	}
+
+	// 1. mkdir loot && cd loot -> verify Cwd persists on the next separate command!
+	if _, err := hp.InteractShell("", "", "mkdir loot", "10.0.0.15"); err != nil {
+		t.Fatalf("mkdir loot: %v", err)
+	}
+	cdResp, err := hp.InteractShell("", "", "cd loot", "10.0.0.15")
+	if err != nil {
+		t.Fatalf("cd loot: %v", err)
+	}
+	if cdResp.Cwd != "/var/www/payroll-admin/workspace/loot" {
+		t.Fatalf("expected deceptive Cwd=/var/www/payroll-admin/workspace/loot after cd, got %q", cdResp.Cwd)
+	}
+
+	pwdResp, err := hp.InteractShell("", "", "pwd", "10.0.0.15")
+	if err != nil {
+		t.Fatalf("pwd after cd: %v", err)
+	}
+	if strings.TrimSpace(pwdResp.Stdout) != "/tmp/honeypot/loot" {
+		t.Fatalf("expected pwd=/tmp/honeypot/loot across turns, got %q", pwdResp.Stdout)
+	}
+
+	// 2. export VAR across separate commands + drop file inside subdirectory
+	if _, err := hp.InteractShell("", "", "export EXFIL_KEY=hunter2", "10.0.0.15"); err != nil {
+		t.Fatalf("export EXFIL_KEY: %v", err)
+	}
+	envResp, err := hp.InteractShell("", "", "printf '%s' \"$EXFIL_KEY\" > stage2.txt && cat stage2.txt", "10.0.0.15")
+	if err != nil {
+		t.Fatalf("use EXFIL_KEY in subdir: %v", err)
+	}
+	if envResp.Stdout != "hunter2" {
+		t.Fatalf("expected EXFIL_KEY=hunter2 persisted across turns, got %q", envResp.Stdout)
+	}
+
+	// 3. Verify recursive ForensicsResponse sees loot/ and loot/stage2.txt + CurrentWorkingDir
+	fSnap := hp.SnapshotForensics("10.0.0.15")
+	if fSnap.CurrentWorkingDir != "/tmp/honeypot/loot" {
+		t.Fatalf("expected CurrentWorkingDir=/tmp/honeypot/loot, got %q", fSnap.CurrentWorkingDir)
+	}
+	if fSnap.FilesInRootfsTmp["loot/stage2.txt"] != "hunter2" {
+		t.Fatalf("expected loot/stage2.txt in FilesInRootfsTmp, got %v", fSnap.FilesInRootfsTmp)
+	}
+
+	// 4. Save checkpoint v2 inside loot/, then cd .. && rm -rf loot, then RestoreCheckpoint(2)
+	cp := hp.SaveCheckpoint(2, "Subdir payload planted")
+	if cp.Version != 2 {
+		t.Fatalf("expected checkpoint v2, got %d", cp.Version)
+	}
+	if _, err := hp.InteractShell("", "", "cd .. && rm -rf loot", "10.0.0.15"); err != nil {
+		t.Fatalf("cd .. && rm -rf loot: %v", err)
+	}
+	fWiped := hp.SnapshotForensics("10.0.0.15")
+	if fWiped.CurrentWorkingDir != "/tmp/honeypot" {
+		t.Fatalf("expected CurrentWorkingDir=/tmp/honeypot after cd .., got %q", fWiped.CurrentWorkingDir)
+	}
+	if _, exists := fWiped.FilesInRootfsTmp["loot/stage2.txt"]; exists {
+		t.Fatalf("expected loot/stage2.txt deleted after rm -rf")
+	}
+
+	fRestored, err := hp.RestoreCheckpoint(2, "10.0.0.15")
+	if err != nil {
+		t.Fatalf("RestoreCheckpoint(2): %v", err)
+	}
+	if fRestored.CurrentWorkingDir != "/tmp/honeypot/loot" {
+		t.Fatalf("expected CurrentWorkingDir restored to /tmp/honeypot/loot, got %q", fRestored.CurrentWorkingDir)
+	}
+	if fRestored.FilesInRootfsTmp["loot/stage2.txt"] != "hunter2" {
+		t.Fatalf("expected loot/stage2.txt restored after Revert, got %v", fRestored.FilesInRootfsTmp)
+	}
+
+	// 5. Verify unclosed quote syntax error exits cleanly (exit != 0) without breaking subsequent turns
+	badSyntax, err := hp.InteractShell("", "", "echo \"unclosed", "10.0.0.15")
+	if err != nil {
+		t.Fatalf("InteractShell bad syntax: %v", err)
+	}
+	if badSyntax.ExitCode == 0 {
+		t.Fatalf("expected non-zero exit code on unclosed quote")
+	}
+	afterSyntax, err := hp.InteractShell("", "", "pwd", "10.0.0.15")
+	if err != nil || strings.TrimSpace(afterSyntax.Stdout) != "/tmp/honeypot/loot" {
+		t.Fatalf("expected shell Cwd intact after syntax error, got err=%v stdout=%q", err, afterSyntax.Stdout)
+	}
 }
 
 func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
@@ -355,6 +573,20 @@ func TestHoneypotGatewayOneWayMirrorUIDesign(t *testing.T) {
 		`socSuspend()`,
 		`socRevert()`,
 		`socClone()`,
+		`socResetActor()`,
+		`socResetStage()`,
+		`data-director="closed"`,
+		`id="directorToggleBtn"`,
+		`toggleDirectorView()`,
+		`id="directorAuditCount"`,
+		`id="resetStageBtn"`,
+		`id="resetActorBtn"`,
+		`id="terminalQuickChips"`,
+		`handleTabComplete(input)`,
+		`KNOWN_SHELL_COMMANDS`,
+		`completePathCandidates(`,
+		`trimmed === "clear"`,
+		`trimmed === "history"`,
 		`[data-theme="light"]`,
 		`id="themeToggleBtn"`,
 		`id="themeSegDark"`,
