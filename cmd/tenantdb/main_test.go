@@ -302,3 +302,45 @@ anything-but-agents   db-initech              anything-but-agents/tenantdb    AC
 	}
 }
 
+func TestNativeSnapshotFidelityVolumesAndDualTemplates(t *testing.T) {
+	ctx := context.Background()
+	sim := NewLocalSimulatorBackend("anything-but-agents", "tenantdb")
+
+	st, err := sim.SeedFleet(ctx, "all")
+	if err != nil {
+		t.Fatalf("SeedFleet: %v", err)
+	}
+
+	byActor := make(map[string]TenantTracker, len(st.Tenants))
+	for _, tr := range st.Tenants {
+		byActor[tr.ActorName] = tr
+	}
+
+	if byActor["db-acme"].Template != "tenantdb" || byActor["db-acme"].PreferredFidelity != "SNAPSHOT_FIDELITY_MEMORY" {
+		t.Fatalf("expected db-acme on tenantdb / SNAPSHOT_FIDELITY_MEMORY, got %+v", byActor["db-acme"])
+	}
+	if byActor["db-initech"].Template != "tenantdb-volumes" || byActor["db-initech"].PreferredFidelity != "SNAPSHOT_FIDELITY_VOLUMES" {
+		t.Fatalf("expected db-initech on tenantdb-volumes / SNAPSHOT_FIDELITY_VOLUMES, got %+v", byActor["db-initech"])
+	}
+
+	// Suspend db-initech -> verify LastSnapshot.SnapshotFidelity is SNAPSHOT_FIDELITY_VOLUMES
+	suspendedTr, err := sim.SuspendTenant(ctx, "db-initech")
+	if err != nil {
+		t.Fatalf("SuspendTenant db-initech: %v", err)
+	}
+	if suspendedTr.LastSnapshot == nil || suspendedTr.LastSnapshot.SnapshotFidelity != "SNAPSHOT_FIDELITY_VOLUMES" {
+		t.Fatalf("expected suspended db-initech snapshot_fidelity=SNAPSHOT_FIDELITY_VOLUMES, got %+v", suspendedTr.LastSnapshot)
+	}
+
+	// Wake db-initech -> verify COLD_DATA_REPLAY and SNAPSHOT_FIDELITY_VOLUMES
+	wakeSnap, err := sim.QueryTenant(ctx, "db-initech", "", "", "", 0)
+	if err != nil {
+		t.Fatalf("QueryTenant db-initech: %v", err)
+	}
+	if wakeSnap.RecoveryMode != "COLD_DATA_REPLAY" || wakeSnap.SnapshotFidelity != "SNAPSHOT_FIDELITY_VOLUMES" {
+		t.Fatalf("expected COLD_DATA_REPLAY + SNAPSHOT_FIDELITY_VOLUMES on wake, got mode=%s fidelity=%s",
+			wakeSnap.RecoveryMode, wakeSnap.SnapshotFidelity)
+	}
+}
+
+

@@ -1,0 +1,50 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Demo 3: Native SNAPSHOT_FIDELITY_VOLUMES ActorTemplate alongside tenantdb
+# (SNAPSHOT_FIDELITY_MEMORY). On suspend, Substrate snapshots only the mounted
+# DurableDir (/data/wal.jsonl, ~480 B) and discards the 16.0 MB disposable RAM
+# buffer pool automatically (99.997% GCS bandwidth saved). On wakeup, PID 1
+# boots fresh with /data attached and replays /data/wal.jsonl in <1ms.
+metadata:
+  atespace: anything-but-agents
+  name: tenantdb-volumes
+workerSelector:
+  matchLabels:
+    workload: anything-but-agents
+containers:
+- name: tenantdb
+  image: ko://github.com/moficodes/anything-but-agents/cmd/tenantdb
+  command:
+  - /ko-app/tenantdb
+  - --data-dir=/data
+  env:
+  - name: SNAPSHOT_FIDELITY
+    value: SNAPSHOT_FIDELITY_VOLUMES
+  wakeupProbe:
+    httpGet:
+      path: /readyz
+      port: 80
+  volumeMounts:
+  - name: data
+    mountPath: /data
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512Mi
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_VOLUMES
+volumes:
+- name: data
+  durableDir: {}

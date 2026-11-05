@@ -739,7 +739,7 @@ deploy_all() {
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
 
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
@@ -751,6 +751,11 @@ deploy_all() {
     )
     wait_for_template_golden_snapshot "${tmpl}"
   done
+
+  kubectl create secret generic payroll-vault-api \
+    -n anything-but-agents \
+    --from-literal=token="decoysupersecret-payroll-vault-2026" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
   echo ""
   kubectl ate get actor-templates -a "${ATESPACE}"
@@ -1365,6 +1370,7 @@ deploy_tenantdb_gateway() {
   ensure_presenter_auth
 
   ensure_template_ready tenantdb
+  ensure_template_ready tenantdb-volumes
   resolve_kubectl_ate_image
 
   (
@@ -1433,9 +1439,11 @@ act4_honeypot() {
   fi
   echo ""
 
-  step "1. Create gVisor honeypot actors for two suspicious scanner IPs"
+  step "1. Create gVisor honeypot actors for two suspicious scanner IPs and attach deny-by-default EgressPolicy"
   run_cmd kubectl ate create actor honeypot-203-0-113-5 -a "${ATESPACE}" --template honeypot
+  run_cmd kubectl ate create egress-policy honeypot-203-0-113-5 -a "${ATESPACE}" -f "${REPO_ROOT}/manifests/honeypot-egress-policy.yaml.tmpl"
   run_cmd kubectl ate create actor honeypot-198-51-100-9 -a "${ATESPACE}" --template honeypot
+  run_cmd kubectl ate create egress-policy honeypot-198-51-100-9 -a "${ATESPACE}" -f "${REPO_ROOT}/manifests/honeypot-egress-policy.yaml.tmpl"
 
   step "2. Attacker 203.0.113.5 exploits /shell (real sh in gVisor), steals decoy DB creds, and plants /tmp/honeypot/rootkit.sh"
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/honeypot-203-0-113-5" \
@@ -1480,6 +1488,11 @@ deploy_honeypot_gateway() {
   fi
   free_workers
   ensure_presenter_auth
+
+  kubectl create secret generic payroll-vault-api \
+    -n anything-but-agents \
+    --from-literal=token="decoysupersecret-payroll-vault-2026" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
   # Ensure ActorTemplate honeypot is rebuilt and Golden Snapshot is READY
   ensure_template_ready honeypot
@@ -1731,7 +1744,8 @@ cleanup_all() {
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
   kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb honeypot timewarp; do
+  kubectl delete secret payroll-vault-api -n anything-but-agents --ignore-not-found
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete atespace "${ATESPACE}" 2>/dev/null || true

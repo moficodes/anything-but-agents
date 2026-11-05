@@ -57,6 +57,7 @@ type MaterializedStats struct {
 
 type TenantSnapshot struct {
 	Engine                string            `json:"engine"`
+	SnapshotFidelity      string            `json:"snapshot_fidelity"`
 	QueryExecuted         string            `json:"query_executed"`
 	RecoveryMode          string            `json:"recovery_mode"`
 	RecoveryExplanation   string            `json:"recovery_explanation"`
@@ -82,6 +83,7 @@ type TenantDB struct {
 	mu                  sync.Mutex
 	DataDir             string
 	WALPath             string
+	PreferredFidelity   string
 	ProcessBootedAt     time.Time
 	BufferPoolTargetB   int
 	RAMBufferPoolSlab   []byte
@@ -106,9 +108,14 @@ func openTenantDBWithConfig(dataDir string, bufferPoolBytes int) (*TenantDB, err
 	if bufferPoolBytes <= 0 {
 		bufferPoolBytes = defaultBufferPoolBytes
 	}
+	fidelity := strings.TrimSpace(os.Getenv("SNAPSHOT_FIDELITY"))
+	if fidelity == "" {
+		fidelity = "SNAPSHOT_FIDELITY_MEMORY"
+	}
 	db := &TenantDB{
 		DataDir:           dataDir,
 		WALPath:           filepath.Join(dataDir, "wal.jsonl"),
+		PreferredFidelity: fidelity,
 		ProcessBootedAt:   time.Now().UTC(),
 		BufferPoolTargetB: bufferPoolBytes,
 		RAMBufferPool:     make(map[string]Row),
@@ -397,11 +404,17 @@ func (db *TenantDB) BuildSnapshot(podIP string) TenantSnapshot {
 		savingsPct = math.Round(savingsPct*1000) / 1000
 	}
 
+	snapshotFidelity := strings.TrimSpace(db.PreferredFidelity)
+	if snapshotFidelity == "" {
+		snapshotFidelity = "SNAPSHOT_FIDELITY_MEMORY"
+	}
+
 	explanation := "Hot RAM Buffer Pool (16.0 MB) and Materialized View served directly from process heap (0 WAL entries replayed)."
 	switch db.LastRecoveryMode {
 	case "COLD_DATA_REPLAY":
+		snapshotFidelity = "SNAPSHOT_FIDELITY_VOLUMES"
 		explanation = fmt.Sprintf(
-			"DATA-Scope Restore: 16.0 MB dirty RAM heap was discarded on GCS commit (%.3f%% bandwidth saved); %d committed rows replayed from %s (%d B) in <1ms.",
+			"SNAPSHOT_FIDELITY_VOLUMES (DATA-Scope Restore): 16.0 MB dirty RAM heap was discarded on GCS commit (%.3f%% bandwidth saved); %d committed rows replayed from %s (%d B) in <1ms.",
 			savingsPct, db.WALReplayedOnBoot, db.WALPath, walBytes,
 		)
 	case "FRESH_BOOT":
@@ -417,6 +430,7 @@ func (db *TenantDB) BuildSnapshot(podIP string) TenantSnapshot {
 
 	return TenantSnapshot{
 		Engine:                "Substrate Per-Tenant Embedded DB (DurableDir + Split-Scope Engine)",
+		SnapshotFidelity:      snapshotFidelity,
 		QueryExecuted:         "SELECT * FROM tenant_records; -- Zero WHERE tenant_id clause (Hardware & DurableDir isolated)",
 		RecoveryMode:          db.LastRecoveryMode,
 		RecoveryExplanation:   explanation,
@@ -443,6 +457,7 @@ func (db *TenantDB) Snapshot(podIP string) map[string]any {
 	s := db.BuildSnapshot(podIP)
 	return map[string]any{
 		"engine":                   s.Engine,
+		"snapshot_fidelity":        s.SnapshotFidelity,
 		"query_executed":           s.QueryExecuted,
 		"recovery_mode":            s.RecoveryMode,
 		"recovery_explanation":     s.RecoveryExplanation,

@@ -57,6 +57,7 @@ type HoneypotBackend interface {
 	GetForensics(ctx context.Context, actorName string) (*ForensicsResponse, error)
 	SaveActor(ctx context.Context, actorName, reason string) (int, error)
 	SuspendActor(ctx context.Context, actorName string) error
+	CrashActor(ctx context.Context, actorName string) (*ForensicsResponse, error)
 	RevertActor(ctx context.Context, actorName string, targetVersion int) (*ForensicsResponse, error)
 	CloneActor(ctx context.Context, sourceActor, newActor, tagName string) (*ForensicsResponse, error)
 	ResetActor(ctx context.Context, actorName string) (*ForensicsResponse, error)
@@ -105,16 +106,17 @@ func defaultActorMetadata(actorName string) (ip, label string, isClone bool) {
 // --- LocalSimulatorBackend (--mode=local & unit tests) ---
 
 type localDiskAndRAMSnapshot struct {
-	version      int
-	reason       string
-	createdAt    time.Time
-	filesOnDisk  map[string][]byte
-	modesOnDisk  map[string]os.FileMode
-	knownFiles   map[string]FileDeltaEntry
-	forensicLog  []ForensicEvent
-	canaryAlerts []CanaryAlert
-	podIPHistory []string
-	currentPodIP string
+	version       int
+	reason        string
+	createdAt     time.Time
+	filesOnDisk   map[string][]byte
+	modesOnDisk   map[string]os.FileMode
+	knownFiles    map[string]FileDeltaEntry
+	forensicLog   []ForensicEvent
+	canaryAlerts  []CanaryAlert
+	blockedEgress int
+	podIPHistory  []string
+	currentPodIP  string
 }
 
 type localSimulatedActor struct {
@@ -174,16 +176,17 @@ func (b *LocalSimulatorBackend) captureSnapshotLocked(sim *localSimulatedActor, 
 		knownCopy[k] = v
 	}
 	return localDiskAndRAMSnapshot{
-		version:      version,
-		reason:       reason,
-		createdAt:    time.Now().UTC(),
-		filesOnDisk:  filesOnDisk,
-		modesOnDisk:  modesOnDisk,
-		knownFiles:   knownCopy,
-		forensicLog:  slices.Clone(sim.hp.ForensicLog),
-		canaryAlerts: slices.Clone(sim.hp.CanaryAlerts),
-		podIPHistory: slices.Clone(sim.hp.PodIPHistory),
-		currentPodIP: sim.hp.CurrentPodIP,
+		version:       version,
+		reason:        reason,
+		createdAt:     time.Now().UTC(),
+		filesOnDisk:   filesOnDisk,
+		modesOnDisk:   modesOnDisk,
+		knownFiles:    knownCopy,
+		forensicLog:   slices.Clone(sim.hp.ForensicLog),
+		canaryAlerts:  slices.Clone(sim.hp.CanaryAlerts),
+		blockedEgress: sim.hp.BlockedEgress,
+		podIPHistory:  slices.Clone(sim.hp.PodIPHistory),
+		currentPodIP:  sim.hp.CurrentPodIP,
 	}
 }
 
@@ -208,6 +211,7 @@ func (b *LocalSimulatorBackend) restoreSnapshotLocked(sim *localSimulatedActor, 
 	}
 	sim.hp.ForensicLog = slices.Clone(snap.forensicLog)
 	sim.hp.CanaryAlerts = slices.Clone(snap.canaryAlerts)
+	sim.hp.BlockedEgress = snap.blockedEgress
 	sim.hp.PodIPHistory = slices.Clone(snap.podIPHistory)
 	sim.hp.CurrentPodIP = snap.currentPodIP
 }
@@ -259,9 +263,31 @@ func (b *LocalSimulatorBackend) ExecShell(ctx context.Context, actorName, cmd, d
 		return nil, nil, err
 	}
 	b.mu.Lock()
+	sim := b.actors[actorName]
+	if sim.tracker.Status == "CRASHED" {
+		b.mu.Unlock()
+		return nil, nil, fmt.Errorf("ACTOR_STATE_CRASHED: container PID 1 exited non-zero (SIGKILL / exit 137); atenet-router refuses wakeup until operator runs 'kubectl ate revert actor %s -a %s'", actorName, b.atespace)
+	}
+	if isCrashCommand(cmd) {
+		b.mu.Unlock()
+		forensicsResp, err := b.CrashActor(ctx, actorName)
+		if err != nil {
+			return nil, nil, err
+		}
+		shellResp := &AttackerShellResponse{
+			Service:      "AcmeCorp Internal Payroll v1.4 (staging-admin.acmecorp.internal)",
+			Hostname:     "payroll-admin-prod-01",
+			DebugMode:    true,
+			Cwd:          "/var/www/payroll-admin/workspace",
+			Command:      cmd,
+			ExitCode:     137,
+			Stderr:       "Killed (SIGKILL -> PID 1 exited with code 137; actor transitioned to ACTOR_STATE_CRASHED)",
+			CurrentPodIP: forensicsResp.CurrentWorkerPodIP,
+		}
+		return shellResp, forensicsResp, nil
+	}
 	defer b.mu.Unlock()
 
-	sim := b.actors[actorName]
 	if sim.tracker.Status == "SUSPENDED" {
 		// Migrate to next worker pod IP on wakeup!
 		sim.podIdx = (sim.podIdx + 1) % len(simulatedWorkerPodIPs)
@@ -287,11 +313,26 @@ func (b *LocalSimulatorBackend) GetForensics(ctx context.Context, actorName stri
 	defer b.mu.Unlock()
 
 	sim := b.actors[actorName]
-	if sim.tracker.Status == "SUSPENDED" && sim.tracker.LastForensics != nil {
+	if (sim.tracker.Status == "SUSPENDED" || sim.tracker.Status == "CRASHED") && sim.tracker.LastForensics != nil {
 		return sim.tracker.LastForensics, nil
 	}
 	podIP := simulatedWorkerPodIPs[sim.podIdx]
 	forensicsResp := sim.hp.SnapshotForensics(podIP)
+	sim.tracker.LastForensics = &forensicsResp
+	return &forensicsResp, nil
+}
+
+func (b *LocalSimulatorBackend) CrashActor(ctx context.Context, actorName string) (*ForensicsResponse, error) {
+	if err := b.EnsureActor(ctx, actorName); err != nil {
+		return nil, err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	sim := b.actors[actorName]
+	podIP := simulatedWorkerPodIPs[sim.podIdx]
+	forensicsResp := sim.hp.TriggerCrash("kill -9 1", podIP)
+	sim.tracker.Status = "CRASHED"
 	sim.tracker.LastForensics = &forensicsResp
 	return &forensicsResp, nil
 }
@@ -567,6 +608,33 @@ func (b *ClusterAteBackend) ensureTrackerLocked(actorName string) *ActorTrackerS
 	return tr
 }
 
+func (b *ClusterAteBackend) applyEgressPolicy(ctx context.Context, actorName string) {
+	policyYAML := fmt.Sprintf(`metadata:
+  atespace: %s
+  name: default
+rules:
+- http:
+    hostnames:
+    - honeypot-gateway.%s.svc.cluster.local
+- https:
+    hostnames:
+    - payroll-vault.acmecorp.internal
+    effects:
+      replaceHeaders:
+      - header: Authorization
+        prefix: "Bearer "
+        credentialUri: %s
+`, b.atespace, b.atespace, decoySecretURI)
+	tmp, err := os.CreateTemp("", "honeypot-egress-*.yaml")
+	if err != nil {
+		return
+	}
+	defer os.Remove(tmp.Name())
+	_, _ = tmp.WriteString(policyYAML)
+	_ = tmp.Close()
+	_, _ = b.runKubectlAte(ctx, "create", "egress-policy", actorName, "-a", b.atespace, "-f", tmp.Name())
+}
+
 func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) error {
 	b.mu.Lock()
 	b.ensureTrackerLocked(actorName)
@@ -580,6 +648,7 @@ func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) e
 	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 		return err
 	}
+	b.applyEgressPolicy(ctx, actorName)
 
 	b.mu.Lock()
 	b.created[actorName] = true
@@ -718,6 +787,30 @@ func (b *ClusterAteBackend) ExecShell(ctx context.Context, actorName, cmd, dropF
 	if err := b.EnsureActor(ctx, actorName); err != nil {
 		return nil, nil, err
 	}
+	b.mu.Lock()
+	tr := b.ensureTrackerLocked(actorName)
+	crashed := tr.Status == "CRASHED"
+	b.mu.Unlock()
+	if crashed {
+		return nil, nil, fmt.Errorf("ACTOR_STATE_CRASHED: container PID 1 exited non-zero (SIGKILL / exit 137); atenet-router refuses wakeup until operator runs 'kubectl ate revert actor %s -a %s'", actorName, b.atespace)
+	}
+	if isCrashCommand(cmd) {
+		forensicsResp, err := b.CrashActor(ctx, actorName)
+		if err != nil {
+			return nil, nil, err
+		}
+		shellResp := &AttackerShellResponse{
+			Service:      "AcmeCorp Internal Payroll v1.4 (staging-admin.acmecorp.internal)",
+			Hostname:     "payroll-admin-prod-01",
+			DebugMode:    true,
+			Cwd:          "/var/www/payroll-admin/workspace",
+			Command:      cmd,
+			ExitCode:     137,
+			Stderr:       "Killed (SIGKILL -> PID 1 exited with code 137; actor transitioned to ACTOR_STATE_CRASHED)",
+			CurrentPodIP: forensicsResp.CurrentWorkerPodIP,
+		}
+		return shellResp, forensicsResp, nil
+	}
 	payload := map[string]string{
 		"cmd":       cmd,
 		"drop_file": dropFile,
@@ -736,7 +829,7 @@ func (b *ClusterAteBackend) ExecShell(ctx context.Context, actorName, cmd, dropF
 		return nil, nil, err
 	}
 	b.mu.Lock()
-	tr := b.ensureTrackerLocked(actorName)
+	tr = b.ensureTrackerLocked(actorName)
 	tr.Status = "RUNNING"
 	tr.LastShell = &shellResp
 	tr.LastForensics = &forensicsResp
@@ -748,6 +841,15 @@ func (b *ClusterAteBackend) GetForensics(ctx context.Context, actorName string) 
 	if err := b.EnsureActor(ctx, actorName); err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	tr := b.ensureTrackerLocked(actorName)
+	if tr.Status == "CRASHED" && tr.LastForensics != nil {
+		cached := tr.LastForensics
+		b.mu.Unlock()
+		return cached, nil
+	}
+	b.mu.Unlock()
+
 	workerIP, _, _ := b.inspectRunningActor(ctx, actorName)
 	var forensicsResp ForensicsResponse
 	if err := b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", workerIP, nil, &forensicsResp); err != nil {
@@ -760,8 +862,33 @@ func (b *ClusterAteBackend) GetForensics(ctx context.Context, actorName string) 
 		}
 	}
 	b.mu.Lock()
-	tr := b.ensureTrackerLocked(actorName)
+	tr = b.ensureTrackerLocked(actorName)
 	tr.Status = "RUNNING"
+	tr.LastForensics = &forensicsResp
+	b.mu.Unlock()
+	return &forensicsResp, nil
+}
+
+func (b *ClusterAteBackend) CrashActor(ctx context.Context, actorName string) (*ForensicsResponse, error) {
+	if err := b.EnsureActor(ctx, actorName); err != nil {
+		return nil, err
+	}
+	var forensicsResp ForensicsResponse
+	if err := b.callActorJSON(ctx, actorName, http.MethodPost, "/crash", "", map[string]string{"cmd": "kill -9 1"}, &forensicsResp); err != nil {
+		return nil, err
+	}
+	// Wait briefly for the actor's PID 1 exit (code 137) to register as ACTOR_STATE_CRASHED in Substrate
+	for i := 0; i < 6; i++ {
+		time.Sleep(150 * time.Millisecond)
+		if out, err := b.runKubectlAte(ctx, "get", "actors", actorName, "-a", b.atespace); err == nil {
+			if strings.Contains(out, "CRASHED") {
+				break
+			}
+		}
+	}
+	b.mu.Lock()
+	tr := b.ensureTrackerLocked(actorName)
+	tr.Status = "CRASHED"
 	tr.LastForensics = &forensicsResp
 	b.mu.Unlock()
 	return &forensicsResp, nil
@@ -809,12 +936,17 @@ func (b *ClusterAteBackend) SuspendActor(ctx context.Context, actorName string) 
 }
 
 func (b *ClusterAteBackend) RevertActor(ctx context.Context, actorName string, targetVersion int) (*ForensicsResponse, error) {
-	// Revert running actor to its last committed GCS snapshot (if suspended, wake first so revert succeeds)
+	// Revert running or crashed actor to its last committed GCS snapshot (if suspended, wake first so revert succeeds)
 	if _, err := b.runKubectlAte(ctx, "revert", "actor", actorName, "-a", b.atespace); err != nil {
 		var tmp ForensicsResponse
 		_ = b.callActorJSON(ctx, actorName, http.MethodGet, "/forensics", "", nil, &tmp)
 		_, _ = b.runKubectlAte(ctx, "revert", "actor", actorName, "-a", b.atespace)
 	}
+
+	b.mu.Lock()
+	tr := b.ensureTrackerLocked(actorName)
+	tr.Status = "SUSPENDED"
+	b.mu.Unlock()
 
 	workerIP, _, _ := b.inspectRunningActor(ctx, actorName)
 	var forensicsResp ForensicsResponse
@@ -831,7 +963,7 @@ func (b *ClusterAteBackend) RevertActor(ctx context.Context, actorName string, t
 	}
 
 	b.mu.Lock()
-	tr := b.ensureTrackerLocked(actorName)
+	tr = b.ensureTrackerLocked(actorName)
 	if targetVersion > 0 {
 		tr.SnapshotVersion = targetVersion
 	}

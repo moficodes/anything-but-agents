@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/moficodes/anything-but-agents/internal/presenterauth"
 )
@@ -46,6 +47,12 @@ func main() {
 		if err != nil {
 			slog.Error("Failed to initialize honeypot", slog.Any("err", err))
 			os.Exit(1)
+		}
+		hp.OnCrash = func(code int) {
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				os.Exit(code)
+			}()
 		}
 		slog.Info("Starting Truman Show Honeypot actor server", slog.String("addr", *addr), slog.String("scratch_dir", *scratchDir))
 		if err := http.ListenAndServe(*addr, newMux(hp)); err != nil {

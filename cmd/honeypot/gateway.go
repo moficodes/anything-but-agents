@@ -90,8 +90,8 @@ func shouldAutoCheckpoint(cmd string, prev, forensics *ForensicsResponse) (bool,
 		return false, ""
 	}
 	trimmed := strings.TrimSpace(cmd)
-	// Never overwrite pre-wipe snapshot when attacker deletes files!
-	if strings.Contains(trimmed, "rm ") || strings.HasPrefix(trimmed, "rm\t") || strings.Contains(trimmed, "rmdir ") {
+	// Never overwrite pre-wipe or pre-crash snapshot when attacker deletes files or crashes PID 1!
+	if strings.Contains(trimmed, "rm ") || strings.HasPrefix(trimmed, "rm\t") || strings.Contains(trimmed, "rmdir ") || isCrashCommand(trimmed) {
 		return false, ""
 	}
 	for _, d := range forensics.RootfsDelta {
@@ -248,7 +248,11 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		prevForensics := g.cachedForensics(r, req.ActorName)
 		shellResp, forensicsResp, err := g.backend.ExecShell(r.Context(), req.ActorName, req.Cmd, req.DropFile, req.Content)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			status := http.StatusInternalServerError
+			if strings.Contains(err.Error(), "ACTOR_STATE_CRASHED") {
+				status = http.StatusConflict
+			}
+			http.Error(w, err.Error(), status)
 			return
 		}
 
@@ -262,6 +266,34 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		resp := g.buildActionResponse(r, req.ActorName, autoSaved, saveReason, shellResp, forensicsResp)
+		writePrettyJSON(w, http.StatusOK, resp)
+	}))
+
+	mux.HandleFunc("/api/soc/crash", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ActorName string `json:"actor_name"`
+		}
+		if err := decodeOptionalJSON(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.ActorName == "" {
+			req.ActorName = "honeypot-203-0-113-5"
+		}
+		if !isValidActorOrTagName(req.ActorName) {
+			http.Error(w, "invalid actor name", http.StatusBadRequest)
+			return
+		}
+		forensics, err := g.backend.CrashActor(r.Context(), req.ActorName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resp := g.buildActionResponse(r, req.ActorName, false, "PID 1 exited non-zero (137) -> ACTOR_STATE_CRASHED", nil, forensics)
 		writePrettyJSON(w, http.StatusOK, resp)
 	}))
 

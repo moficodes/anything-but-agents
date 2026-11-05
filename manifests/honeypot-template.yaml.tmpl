@@ -26,10 +26,29 @@ containers:
   image: ko://github.com/moficodes/anything-but-agents/cmd/honeypot
   command:
   - /ko-app/honeypot
+  env:
+  - name: SSL_CERT_FILE
+    value: /run/ate/trust-bundle.pem
+  - name: SSL_CERT_DIR
+    value: /run/ate
+  - name: PAYROLL_API_TOKEN
+    value: ate-secret://k8s.io/default/anything-but-agents/payroll-vault-api/token
+  volumeMounts:
+  - name: system-info
+    mountPath: /run/ate
   wakeupProbe:
     httpGet:
       path: /readyz
       port: 80
+volumes:
+- name: system-info
+  systemInfo:
+    dataSources:
+    - trustBundle:
+        names:
+        - egress-mitm.ate.dev
+        - system-roots.ate.dev
+        path: trust-bundle.pem
 resources:
   limits:
     cpuMillicores: 1000

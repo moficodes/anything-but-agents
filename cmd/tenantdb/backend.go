@@ -43,21 +43,25 @@ type SeedRowSpec struct {
 }
 
 type TenantCatalogEntry struct {
-	ActorName   string
-	CompanyName string
-	Industry    string
-	Tier        string
-	Region      string
-	DefaultRows []SeedRowSpec
+	ActorName         string
+	CompanyName       string
+	Industry          string
+	Tier              string
+	Region            string
+	Template          string
+	PreferredFidelity string
+	DefaultRows       []SeedRowSpec
 }
 
 var defaultTenantCatalog = []TenantCatalogEntry{
 	{
-		ActorName:   "db-acme",
-		CompanyName: "Acme Corp",
-		Industry:    "Enterprise Retail",
-		Tier:        "Enterprise Plus",
-		Region:      "us-west3-slc",
+		ActorName:         "db-acme",
+		CompanyName:       "Acme Corp",
+		Industry:          "Enterprise Retail",
+		Tier:              "Enterprise Plus",
+		Region:            "us-west3-slc",
+		Template:          "tenantdb",
+		PreferredFidelity: "SNAPSHOT_FIDELITY_MEMORY",
 		DefaultRows: []SeedRowSpec{
 			{Table: "subscriptions", Key: "tier", Value: "enterprise", AmountUSD: 48000},
 			{Table: "settings", Key: "region", Value: "us-west3-slc", AmountUSD: 0},
@@ -65,11 +69,13 @@ var defaultTenantCatalog = []TenantCatalogEntry{
 		},
 	},
 	{
-		ActorName:   "db-globex",
-		CompanyName: "Globex Logistics",
-		Industry:    "Supply Chain & Freight",
-		Tier:        "Enterprise",
-		Region:      "us-east1-va",
+		ActorName:         "db-globex",
+		CompanyName:       "Globex Logistics",
+		Industry:          "Supply Chain & Freight",
+		Tier:              "Enterprise",
+		Region:            "us-east1-va",
+		Template:          "tenantdb",
+		PreferredFidelity: "SNAPSHOT_FIDELITY_MEMORY",
 		DefaultRows: []SeedRowSpec{
 			{Table: "subscriptions", Key: "tier", Value: "freight-scale", AmountUSD: 32000},
 			{Table: "settings", Key: "region", Value: "us-east1-va", AmountUSD: 0},
@@ -77,11 +83,13 @@ var defaultTenantCatalog = []TenantCatalogEntry{
 		},
 	},
 	{
-		ActorName:   "db-initech",
-		CompanyName: "Initech FinTech",
-		Industry:    "Core Banking",
-		Tier:        "Regulated Sovereign",
-		Region:      "eu-central1-fra",
+		ActorName:         "db-initech",
+		CompanyName:       "Initech FinTech",
+		Industry:          "Core Banking",
+		Tier:              "Regulated Sovereign",
+		Region:            "eu-central1-fra",
+		Template:          "tenantdb-volumes",
+		PreferredFidelity: "SNAPSHOT_FIDELITY_VOLUMES",
 		DefaultRows: []SeedRowSpec{
 			{Table: "subscriptions", Key: "tier", Value: "sovereign-vault", AmountUSD: 85000},
 			{Table: "settings", Key: "region", Value: "eu-central1-fra", AmountUSD: 0},
@@ -89,11 +97,13 @@ var defaultTenantCatalog = []TenantCatalogEntry{
 		},
 	},
 	{
-		ActorName:   "db-umbrella",
-		CompanyName: "Umbrella Biotech",
-		Industry:    "Genomics R&D",
-		Tier:        "Growth Lab",
-		Region:      "ap-northeast1-tyo",
+		ActorName:         "db-umbrella",
+		CompanyName:       "Umbrella Biotech",
+		Industry:          "Genomics R&D",
+		Tier:              "Growth Lab",
+		Region:            "ap-northeast1-tyo",
+		Template:          "tenantdb-volumes",
+		PreferredFidelity: "SNAPSHOT_FIDELITY_VOLUMES",
 		DefaultRows: []SeedRowSpec{
 			{Table: "subscriptions", Key: "tier", Value: "genomics-pro", AmountUSD: 24000},
 			{Table: "settings", Key: "region", Value: "ap-northeast1-tyo", AmountUSD: 0},
@@ -109,11 +119,13 @@ func lookupCatalogEntry(actorName string) TenantCatalogEntry {
 		}
 	}
 	return TenantCatalogEntry{
-		ActorName:   actorName,
-		CompanyName: strings.ToUpper(strings.TrimPrefix(actorName, "db-")),
-		Industry:    "SaaS Customer",
-		Tier:        "Standard",
-		Region:      "us-west3-slc",
+		ActorName:         actorName,
+		CompanyName:       strings.ToUpper(strings.TrimPrefix(actorName, "db-")),
+		Industry:          "SaaS Customer",
+		Tier:              "Standard",
+		Region:            "us-west3-slc",
+		Template:          "tenantdb",
+		PreferredFidelity: "SNAPSHOT_FIDELITY_MEMORY",
 		DefaultRows: []SeedRowSpec{
 			{Table: "subscriptions", Key: "tier", Value: "standard", AmountUSD: 12000},
 		},
@@ -133,19 +145,21 @@ type GDPRDeleteReceipt struct {
 }
 
 type TenantTracker struct {
-	ActorName     string             `json:"actor_name"`
-	CompanyName   string             `json:"company_name"`
-	Industry      string             `json:"industry"`
-	Tier          string             `json:"tier"`
-	Region        string             `json:"region"`
-	Status        string             `json:"status"` // UNINITIALIZED | RUNNING | PAUSED_FULL | SUSPENDED_DATA | GDPR_SHREDDED
-	OnPauseScope  string             `json:"on_pause_scope"`
-	OnCommitScope string             `json:"on_commit_scope"`
-	WorkerSlot    int                `json:"worker_slot"`
-	WorkerPodIP   string             `json:"worker_pod_ip,omitempty"`
-	LastSnapshot  *TenantSnapshot    `json:"last_snapshot,omitempty"`
-	GDPRReceipt   *GDPRDeleteReceipt `json:"gdpr_receipt,omitempty"`
-	UpdatedAt     time.Time          `json:"updated_at"`
+	ActorName         string             `json:"actor_name"`
+	CompanyName       string             `json:"company_name"`
+	Industry          string             `json:"industry"`
+	Tier              string             `json:"tier"`
+	Region            string             `json:"region"`
+	Template          string             `json:"template"`
+	PreferredFidelity string             `json:"preferred_fidelity"`
+	Status            string             `json:"status"` // UNINITIALIZED | RUNNING | PAUSED_FULL | SUSPENDED_DATA | GDPR_SHREDDED
+	OnPauseScope      string             `json:"on_pause_scope"`
+	OnCommitScope     string             `json:"on_commit_scope"`
+	WorkerSlot        int                `json:"worker_slot"`
+	WorkerPodIP       string             `json:"worker_pod_ip,omitempty"`
+	LastSnapshot      *TenantSnapshot    `json:"last_snapshot,omitempty"`
+	GDPRReceipt       *GDPRDeleteReceipt `json:"gdpr_receipt,omitempty"`
+	UpdatedAt         time.Time          `json:"updated_at"`
 }
 
 type WorkerSlotStatus struct {
@@ -284,15 +298,17 @@ func (b *LocalSimulatorBackend) initCatalogLocked() {
 			dataDir:   dir,
 			podCursor: idx % len(simulatedWorkerPoolIPs),
 			tracker: TenantTracker{
-				ActorName:     c.ActorName,
-				CompanyName:   c.CompanyName,
-				Industry:      c.Industry,
-				Tier:          c.Tier,
-				Region:        c.Region,
-				Status:        "UNINITIALIZED",
-				OnPauseScope:  "SNAPSHOT_CONTENT_SCOPE_FULL",
-				OnCommitScope: "SNAPSHOT_CONTENT_SCOPE_DATA",
-				UpdatedAt:     time.Now().UTC(),
+				ActorName:         c.ActorName,
+				CompanyName:       c.CompanyName,
+				Industry:          c.Industry,
+				Tier:              c.Tier,
+				Region:            c.Region,
+				Template:          c.Template,
+				PreferredFidelity: c.PreferredFidelity,
+				Status:            "UNINITIALIZED",
+				OnPauseScope:      "SNAPSHOT_CONTENT_SCOPE_FULL",
+				OnCommitScope:     "SNAPSHOT_CONTENT_SCOPE_DATA",
+				UpdatedAt:         time.Now().UTC(),
 			},
 		}
 		b.order = append(b.order, c.ActorName)
@@ -323,15 +339,17 @@ func (b *LocalSimulatorBackend) ensureNodeLocked(actorName string) *localTenantN
 		dataDir:   dir,
 		podCursor: len(b.order) % len(simulatedWorkerPoolIPs),
 		tracker: TenantTracker{
-			ActorName:     c.ActorName,
-			CompanyName:   c.CompanyName,
-			Industry:      c.Industry,
-			Tier:          c.Tier,
-			Region:        c.Region,
-			Status:        "UNINITIALIZED",
-			OnPauseScope:  "SNAPSHOT_CONTENT_SCOPE_FULL",
-			OnCommitScope: "SNAPSHOT_CONTENT_SCOPE_DATA",
-			UpdatedAt:     time.Now().UTC(),
+			ActorName:         c.ActorName,
+			CompanyName:       c.CompanyName,
+			Industry:          c.Industry,
+			Tier:              c.Tier,
+			Region:            c.Region,
+			Template:          c.Template,
+			PreferredFidelity: c.PreferredFidelity,
+			Status:            "UNINITIALIZED",
+			OnPauseScope:      "SNAPSHOT_CONTENT_SCOPE_FULL",
+			OnCommitScope:     "SNAPSHOT_CONTENT_SCOPE_DATA",
+			UpdatedAt:         time.Now().UTC(),
 		},
 	}
 	b.nodes[actorName] = node
@@ -412,6 +430,9 @@ func (b *LocalSimulatorBackend) wakeAndQueryLocked(node *localTenantNode, table,
 		db, err := openTenantDB(node.dataDir)
 		if err != nil {
 			return nil, err
+		}
+		if node.tracker.PreferredFidelity != "" {
+			db.PreferredFidelity = node.tracker.PreferredFidelity
 		}
 		node.db = db
 	}
@@ -538,6 +559,7 @@ func (b *LocalSimulatorBackend) SuspendTenant(_ context.Context, actorName strin
 	node.tracker.WorkerSlot = 0
 	if node.tracker.LastSnapshot != nil {
 		snapCopy := *node.tracker.LastSnapshot
+		snapCopy.SnapshotFidelity = "SNAPSHOT_FIDELITY_VOLUMES"
 		snapCopy.RAMBufferPoolStatus = "DISCARDED_ON_DATA_COMMIT"
 		snapCopy.RAMBufferPoolBytes = 0
 		snapCopy.RAMBufferPoolMB = 0
@@ -551,7 +573,7 @@ func (b *LocalSimulatorBackend) SuspendTenant(_ context.Context, actorName strin
 	if node.tracker.LastSnapshot != nil {
 		walBytes = node.tracker.LastSnapshot.DurableWALBytes
 	}
-	b.appendAuditLocked(actorName, "SUSPEND_ACTOR", "SNAPSHOT_CONTENT_SCOPE_DATA",
+	b.appendAuditLocked(actorName, "SUSPEND_ACTOR", "SNAPSHOT_FIDELITY_VOLUMES",
 		fmt.Sprintf("kubectl ate suspend actor %s -> Discarded 16.0 MB RAM heap; committed ONLY /data/wal.jsonl (%d B, 99.997%% saved) to GCS",
 			actorName, walBytes))
 	cp := node.tracker
@@ -765,15 +787,17 @@ func (b *ClusterAteBackend) initTrackersLocked() {
 	b.order = nil
 	for _, c := range defaultTenantCatalog {
 		b.trackers[c.ActorName] = &TenantTracker{
-			ActorName:     c.ActorName,
-			CompanyName:   c.CompanyName,
-			Industry:      c.Industry,
-			Tier:          c.Tier,
-			Region:        c.Region,
-			Status:        "UNINITIALIZED",
-			OnPauseScope:  "SNAPSHOT_CONTENT_SCOPE_FULL",
-			OnCommitScope: "SNAPSHOT_CONTENT_SCOPE_DATA",
-			UpdatedAt:     time.Now().UTC(),
+			ActorName:         c.ActorName,
+			CompanyName:       c.CompanyName,
+			Industry:          c.Industry,
+			Tier:              c.Tier,
+			Region:            c.Region,
+			Template:          c.Template,
+			PreferredFidelity: c.PreferredFidelity,
+			Status:            "UNINITIALIZED",
+			OnPauseScope:      "SNAPSHOT_CONTENT_SCOPE_FULL",
+			OnCommitScope:     "SNAPSHOT_CONTENT_SCOPE_DATA",
+			UpdatedAt:         time.Now().UTC(),
 		}
 		b.order = append(b.order, c.ActorName)
 	}
@@ -785,15 +809,17 @@ func (b *ClusterAteBackend) ensureTrackerLocked(actorName string) *TenantTracker
 	}
 	c := lookupCatalogEntry(actorName)
 	tr := &TenantTracker{
-		ActorName:     c.ActorName,
-		CompanyName:   c.CompanyName,
-		Industry:      c.Industry,
-		Tier:          c.Tier,
-		Region:        c.Region,
-		Status:        "UNINITIALIZED",
-		OnPauseScope:  "SNAPSHOT_CONTENT_SCOPE_FULL",
-		OnCommitScope: "SNAPSHOT_CONTENT_SCOPE_DATA",
-		UpdatedAt:     time.Now().UTC(),
+		ActorName:         c.ActorName,
+		CompanyName:       c.CompanyName,
+		Industry:          c.Industry,
+		Tier:              c.Tier,
+		Region:            c.Region,
+		Template:          c.Template,
+		PreferredFidelity: c.PreferredFidelity,
+		Status:            "UNINITIALIZED",
+		OnPauseScope:      "SNAPSHOT_CONTENT_SCOPE_FULL",
+		OnCommitScope:     "SNAPSHOT_CONTENT_SCOPE_DATA",
+		UpdatedAt:         time.Now().UTC(),
 	}
 	b.trackers[actorName] = tr
 	b.order = append(b.order, actorName)
@@ -844,9 +870,20 @@ func (b *ClusterAteBackend) ensureClusterActor(ctx context.Context, actorName st
 	if err == nil && strings.Contains(out, actorName) {
 		return nil
 	}
-	out, err = b.runKubectlAte(ctx, "create", "actor", actorName, "-a", b.atespace, "--template", b.template)
+	c := lookupCatalogEntry(actorName)
+	tmpl := strings.TrimSpace(c.Template)
+	if tmpl == "" || (b.template != "" && b.template != "tenantdb") {
+		tmpl = b.template
+	}
+	out, err = b.runKubectlAte(ctx, "create", "actor", actorName, "-a", b.atespace, "--template", tmpl)
 	if err != nil && !strings.Contains(strings.ToLower(out), "already exists") {
-		return fmt.Errorf("kubectl-ate create actor %s: %w (%s)", actorName, err, out)
+		if tmpl != b.template && b.template != "" {
+			// Fall back to default template if tenantdb-volumes has not been registered yet.
+			out, err = b.runKubectlAte(ctx, "create", "actor", actorName, "-a", b.atespace, "--template", b.template)
+		}
+		if err != nil && !strings.Contains(strings.ToLower(out), "already exists") {
+			return fmt.Errorf("kubectl-ate create actor %s: %w (%s)", actorName, err, out)
+		}
 	}
 	return nil
 }
@@ -1089,7 +1126,7 @@ func (b *ClusterAteBackend) QueryTenant(ctx context.Context, actorName, table, k
 	}
 
 	resumeHint := ""
-	if prevStatus == "SUSPENDED_DATA" {
+	if prevStatus == "SUSPENDED_DATA" && tr.PreferredFidelity != "SNAPSHOT_FIDELITY_VOLUMES" {
 		resumeHint = "suspend_data"
 	}
 
@@ -1125,7 +1162,7 @@ func (b *ClusterAteBackend) PauseTenant(ctx context.Context, actorName string) (
 	tr := b.ensureTrackerLocked(actorName)
 	tr.Status = "PAUSED_FULL"
 	tr.UpdatedAt = time.Now().UTC()
-	b.appendAuditLocked(actorName, "PAUSE_ACTOR", "SNAPSHOT_CONTENT_SCOPE_FULL",
+	b.appendAuditLocked(actorName, "PAUSE_ACTOR", "SNAPSHOT_FIDELITY_MEMORY",
 		fmt.Sprintf("kubectl ate suspend actor %s --mode=async -> 16.0 MB RAM Buffer Pool & /data/wal.jsonl frozen on node", actorName))
 	cp := *tr
 	return &cp, nil
@@ -1144,6 +1181,7 @@ func (b *ClusterAteBackend) SuspendTenant(ctx context.Context, actorName string)
 	if tr.LastSnapshot != nil {
 		walBytes = tr.LastSnapshot.DurableWALBytes
 		snapCopy := *tr.LastSnapshot
+		snapCopy.SnapshotFidelity = "SNAPSHOT_FIDELITY_VOLUMES"
 		snapCopy.RAMBufferPoolStatus = "DISCARDED_ON_DATA_COMMIT"
 		snapCopy.RAMBufferPoolBytes = 0
 		snapCopy.RAMBufferPoolMB = 0
@@ -1152,7 +1190,7 @@ func (b *ClusterAteBackend) SuspendTenant(ctx context.Context, actorName string)
 		tr.LastSnapshot = &snapCopy
 	}
 	tr.UpdatedAt = time.Now().UTC()
-	b.appendAuditLocked(actorName, "SUSPEND_ACTOR", "SNAPSHOT_CONTENT_SCOPE_DATA",
+	b.appendAuditLocked(actorName, "SUSPEND_ACTOR", "SNAPSHOT_FIDELITY_VOLUMES",
 		fmt.Sprintf("kubectl ate suspend actor %s --mode=sync -> Discarded 16.0 MB RAM heap; committed ONLY /data/wal.jsonl (%d B) to GCS", actorName, walBytes))
 	cp := *tr
 	return &cp, nil
@@ -1224,6 +1262,13 @@ func (b *ClusterAteBackend) GetFleetState(ctx context.Context) (*FleetStateRespo
 			}
 			if a.WorkerIP != "" {
 				tr.WorkerPodIP = a.WorkerIP
+			}
+			if strings.Contains(a.Template, "tenantdb-volumes") {
+				tr.Template = "tenantdb-volumes"
+				tr.PreferredFidelity = "SNAPSHOT_FIDELITY_VOLUMES"
+			} else if strings.Contains(a.Template, "tenantdb") {
+				tr.Template = "tenantdb"
+				tr.PreferredFidelity = "SNAPSHOT_FIDELITY_MEMORY"
 			}
 			switch {
 			case strings.Contains(a.State, "RUN") || strings.Contains(a.State, "READY"):

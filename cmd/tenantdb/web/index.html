@@ -775,7 +775,7 @@
             <span>SUBSTRATE TENANTDB // ONE DATABASE PER CUSTOMER</span>
           </div>
           <div class="brand-sub">
-            DurableDir (/data/wal.jsonl) + Split Snapshot Scopes (onPause: FULL vs. onCommit: DATA)
+            DurableDir (/data/wal.jsonl) + Dual ActorTemplate Fidelity (SNAPSHOT_FIDELITY_MEMORY vs. SNAPSHOT_FIDELITY_VOLUMES)
           </div>
         </div>
       </div>
@@ -901,7 +901,7 @@
                 </svg>
                 <span>TIER 1: GO HEAP RAM BUFFER POOL &amp; CACHE (16.0 MB)</span>
               </div>
-              <span class="scope-tag scope-full">onPause: SNAPSHOT_CONTENT_SCOPE_FULL</span>
+              <span class="scope-tag scope-full" id="tier1-fidelity-tag">SNAPSHOT_FIDELITY_MEMORY (Pause / Warm)</span>
             </div>
 
             <div class="slab-grid" id="ram-slab-grid"></div>
@@ -936,7 +936,7 @@
                 </svg>
                 <span>TIER 2: DURABLEDIR MICRO-VOLUME (/data/wal.jsonl)</span>
               </div>
-              <span class="scope-tag scope-data">onCommit: SNAPSHOT_CONTENT_SCOPE_DATA</span>
+              <span class="scope-tag scope-data" id="tier2-fidelity-tag">SNAPSHOT_FIDELITY_VOLUMES (DurableDir /data)</span>
             </div>
 
             <div class="tier-stats">
@@ -1197,12 +1197,13 @@
         const podInfo = (t.status === 'RUNNING' || t.status === 'PAUSED_FULL') && t.worker_pod_ip
           ? `Pod ${escapeHTML(t.worker_pod_ip)}`
           : (isShredded ? 'SHREDDED (404)' : 'GCS / Unmounted');
+        const tmplBadge = t.preferred_fidelity === 'SNAPSHOT_FIDELITY_VOLUMES' ? 'VOLUMES' : 'MEMORY';
         card.innerHTML = `
           <div class="tenant-card-top">
             <span class="tenant-actor-id">${escapeHTML(t.actor_name)}</span>
             <span class="status-badge status-${escapeHTML(t.status)}">${escapeHTML(t.status)}</span>
           </div>
-          <div class="tenant-company">${escapeHTML(t.company_name)} <span style="color:var(--text-secondary);font-size:11px;">(${escapeHTML(t.industry)})</span></div>
+          <div class="tenant-company">${escapeHTML(t.company_name)} <span style="color:var(--text-secondary);font-size:11px;">(${escapeHTML(t.industry)} &middot; ${escapeHTML(tmplBadge)})</span></div>
           <div class="tenant-meta">
             <span>Rows: ${escapeHTML(rowsCount)} | ARR: ${escapeHTML(arr)}</span>
             <span>${podInfo}</span>
@@ -1231,18 +1232,20 @@
     }
 
     function renderXRay(tenant) {
+      const tmplName = tenant.template || 'tenantdb';
+      const prefFidelity = tenant.preferred_fidelity || 'SNAPSHOT_FIDELITY_MEMORY';
       document.getElementById('xray-header-title').textContent =
-        `TWO-TIER STORAGE VS. RAM X-RAY // ${tenant.actor_name} (${tenant.company_name})`;
+        `TWO-TIER STORAGE VS. RAM X-RAY // ${tenant.actor_name} (${tenant.company_name}) [${tmplName}]`;
       document.getElementById('controls-header-title').textContent =
-        `STAGE CONTROLS // ${tenant.actor_name} (${tenant.company_name})`;
+        `STAGE CONTROLS // ${tenant.actor_name} (${prefFidelity})`;
       const badge = document.getElementById('xray-status-badge');
       badge.className = 'status-badge status-' + tenant.status;
       badge.textContent = tenant.status;
 
       document.getElementById('pause-btn-label').textContent =
-        `kubectl ate pause actor ${tenant.actor_name} (FULL Scope)`;
+        `kubectl ate suspend actor ${tenant.actor_name} --mode=async (SNAPSHOT_FIDELITY_MEMORY)`;
       document.getElementById('suspend-btn-label').textContent =
-        `kubectl ate suspend actor ${tenant.actor_name} (DATA Scope)`;
+        `kubectl ate suspend actor ${tenant.actor_name} --mode=sync (SNAPSHOT_FIDELITY_VOLUMES)`;
       document.getElementById('gdpr-btn-label').textContent =
         `kubectl ate delete actor ${tenant.actor_name}`;
 

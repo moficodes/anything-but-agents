@@ -39,7 +39,9 @@ import (
 
 const (
 	decoyCredentialsFile = "payroll_db_credentials.env.bak"
-	decoyCredentialsBody = "DB_HOST=10.99.0.14\nDB_PORT=5432\nDB_USER=payroll_admin\nDB_PASS=Summer2026!Decoy\n"
+	decoySecretURI       = "ate-secret://k8s.io/default/anything-but-agents/payroll-vault-api/token"
+	decoyTrustBundlePath = "/run/ate/trust-bundle.pem"
+	decoyCredentialsBody = "DB_HOST=10.99.0.14\nDB_PORT=5432\nDB_USER=payroll_admin\nDB_PASS=Summer2026!Decoy\nPAYROLL_API_TOKEN=" + decoySecretURI + "\n"
 
 	decoyWireBatchFile = "wire_transfer_batch_409.csv"
 	decoyWireBatchBody = "batch_id,recipient,routing_acct,amount_usd,status\n" +
@@ -86,6 +88,16 @@ type SandboxProof struct {
 	IsolationMechanism string `json:"isolation_mechanism"`
 }
 
+type EgressSecurityProof struct {
+	PolicyName             string   `json:"policy_name"`
+	DefaultAction          string   `json:"default_action"`
+	AllowedHosts           []string `json:"allowed_hosts"`
+	CredentialInjectionURI string   `json:"credential_injection_uri"`
+	TrustBundlePath        string   `json:"trust_bundle_path"`
+	TrustBundlePresent     bool     `json:"trust_bundle_present"`
+	BlockedEgressAttempts  int      `json:"blocked_egress_attempts"`
+}
+
 type AttackerShellResponse struct {
 	Service      string   `json:"service"`
 	Hostname     string   `json:"hostname"`
@@ -100,47 +112,51 @@ type AttackerShellResponse struct {
 }
 
 type ForensicsResponse struct {
-	Banner             string            `json:"banner"`
-	SandboxIsolation   string            `json:"sandbox_isolation"`
-	GVisorSandboxProof SandboxProof      `json:"gvisor_sandbox_proof"`
-	ScratchDirectory   string            `json:"scratch_directory"`
-	CurrentWorkingDir  string            `json:"current_working_dir"`
-	RootfsDelta        []FileDeltaEntry  `json:"rootfs_delta"`
-	FilesInRootfsTmp   map[string]string `json:"files_in_rootfs_tmp"`
-	CanaryAlerts       []CanaryAlert     `json:"canary_alerts"`
-	ForensicAuditTrail []ForensicEvent   `json:"forensic_audit_trail"`
-	CurrentWorkerPodIP string            `json:"current_worker_pod_ip"`
-	PodIPHistory       []string          `json:"pod_ip_history"`
+	Banner              string              `json:"banner"`
+	SandboxIsolation    string              `json:"sandbox_isolation"`
+	GVisorSandboxProof  SandboxProof        `json:"gvisor_sandbox_proof"`
+	EgressSecurityProof EgressSecurityProof `json:"egress_security_proof"`
+	ScratchDirectory    string              `json:"scratch_directory"`
+	CurrentWorkingDir   string              `json:"current_working_dir"`
+	RootfsDelta         []FileDeltaEntry    `json:"rootfs_delta"`
+	FilesInRootfsTmp    map[string]string   `json:"files_in_rootfs_tmp"`
+	CanaryAlerts        []CanaryAlert       `json:"canary_alerts"`
+	ForensicAuditTrail  []ForensicEvent     `json:"forensic_audit_trail"`
+	CurrentWorkerPodIP  string              `json:"current_worker_pod_ip"`
+	PodIPHistory        []string            `json:"pod_ip_history"`
 }
 
 type inActorCheckpoint struct {
-	Version      int                       `json:"version"`
-	Reason       string                    `json:"reason"`
-	CreatedAt    time.Time                 `json:"created_at"`
-	DirsOnDisk   map[string]os.FileMode    `json:"dirs_on_disk"`
-	FilesOnDisk  map[string][]byte         `json:"files_on_disk"`
-	ModesOnDisk  map[string]os.FileMode    `json:"modes_on_disk"`
-	KnownFiles   map[string]FileDeltaEntry `json:"known_files"`
-	CurrentDir   string                    `json:"current_dir"`
-	OldDir       string                    `json:"old_dir"`
-	ShellEnv     map[string]string         `json:"shell_env"`
-	ForensicLog  []ForensicEvent           `json:"forensic_log"`
-	CanaryAlerts []CanaryAlert             `json:"canary_alerts"`
+	Version       int                       `json:"version"`
+	Reason        string                    `json:"reason"`
+	CreatedAt     time.Time                 `json:"created_at"`
+	DirsOnDisk    map[string]os.FileMode    `json:"dirs_on_disk"`
+	FilesOnDisk   map[string][]byte         `json:"files_on_disk"`
+	ModesOnDisk   map[string]os.FileMode    `json:"modes_on_disk"`
+	KnownFiles    map[string]FileDeltaEntry `json:"known_files"`
+	CurrentDir    string                    `json:"current_dir"`
+	OldDir        string                    `json:"old_dir"`
+	ShellEnv      map[string]string         `json:"shell_env"`
+	ForensicLog   []ForensicEvent           `json:"forensic_log"`
+	CanaryAlerts  []CanaryAlert             `json:"canary_alerts"`
+	BlockedEgress int                       `json:"blocked_egress"`
 }
 
 type Honeypot struct {
-	mu           sync.Mutex
-	ScratchDir   string
-	CurrentDir   string
-	OldDir       string
-	ShellEnv     map[string]string
-	Baseline     map[string]FileDeltaEntry
-	KnownFiles   map[string]FileDeltaEntry
-	ForensicLog  []ForensicEvent
-	CanaryAlerts []CanaryAlert
-	PodIPHistory []string
-	CurrentPodIP string
-	Checkpoints  map[int]inActorCheckpoint
+	mu            sync.Mutex
+	ScratchDir    string
+	CurrentDir    string
+	OldDir        string
+	ShellEnv      map[string]string
+	Baseline      map[string]FileDeltaEntry
+	KnownFiles    map[string]FileDeltaEntry
+	ForensicLog   []ForensicEvent
+	CanaryAlerts  []CanaryAlert
+	BlockedEgress int
+	PodIPHistory  []string
+	CurrentPodIP  string
+	Checkpoints   map[int]inActorCheckpoint
+	OnCrash       func(code int)
 }
 
 func newHoneypot(scratchDir string) (*Honeypot, error) {
@@ -182,14 +198,17 @@ func newHoneypot(scratchDir string) (*Honeypot, error) {
 		CurrentDir: scratchDir,
 		OldDir:     scratchDir,
 		ShellEnv: map[string]string{
-			"PATH":     pathEnv,
-			"HOME":     homeEnv,
-			"USER":     "root",
-			"LOGNAME":  "root",
-			"SHELL":    "/bin/sh",
-			"TERM":     "xterm-256color",
-			"HOSTNAME": "payroll-admin-prod-01",
-			"LANG":     "C.UTF-8",
+			"PATH":              pathEnv,
+			"HOME":              homeEnv,
+			"USER":              "root",
+			"LOGNAME":           "root",
+			"SHELL":             "/bin/sh",
+			"TERM":              "xterm-256color",
+			"HOSTNAME":          "payroll-admin-prod-01",
+			"LANG":              "C.UTF-8",
+			"SSL_CERT_FILE":     decoyTrustBundlePath,
+			"SSL_CERT_DIR":      "/run/ate",
+			"PAYROLL_API_TOKEN": decoySecretURI,
 		},
 		Baseline:     make(map[string]FileDeltaEntry),
 		KnownFiles:   make(map[string]FileDeltaEntry),
@@ -256,18 +275,19 @@ func (h *Honeypot) saveCheckpointLocked(version int, reason string) inActorCheck
 		knownCopy[k] = v
 	}
 	cp := inActorCheckpoint{
-		Version:      version,
-		Reason:       reason,
-		CreatedAt:    time.Now().UTC(),
-		DirsOnDisk:   dirsOnDisk,
-		FilesOnDisk:  filesOnDisk,
-		ModesOnDisk:  modesOnDisk,
-		KnownFiles:   knownCopy,
-		CurrentDir:   h.CurrentDir,
-		OldDir:       h.OldDir,
-		ShellEnv:     cloneStringMap(h.ShellEnv),
-		ForensicLog:  slices.Clone(h.ForensicLog),
-		CanaryAlerts: slices.Clone(h.CanaryAlerts),
+		Version:       version,
+		Reason:        reason,
+		CreatedAt:     time.Now().UTC(),
+		DirsOnDisk:    dirsOnDisk,
+		FilesOnDisk:   filesOnDisk,
+		ModesOnDisk:   modesOnDisk,
+		KnownFiles:    knownCopy,
+		CurrentDir:    h.CurrentDir,
+		OldDir:        h.OldDir,
+		ShellEnv:      cloneStringMap(h.ShellEnv),
+		ForensicLog:   slices.Clone(h.ForensicLog),
+		CanaryAlerts:  slices.Clone(h.CanaryAlerts),
+		BlockedEgress: h.BlockedEgress,
 	}
 	if h.Checkpoints == nil {
 		h.Checkpoints = make(map[int]inActorCheckpoint)
@@ -364,9 +384,106 @@ func (h *Honeypot) RestoreCheckpoint(targetVersion int, podIP string) (Forensics
 		}
 		h.ForensicLog = slices.Clone(cp.ForensicLog)
 		h.CanaryAlerts = slices.Clone(cp.CanaryAlerts)
+		h.BlockedEgress = cp.BlockedEgress
 	}
 	_, forensicsResp, err := h.executeInteractionLocked("", "", "", podIP)
 	return forensicsResp, err
+}
+
+func isCrashCommand(cmd string) bool {
+	trimmed := strings.TrimSpace(cmd)
+	switch trimmed {
+	case "kill -9 1", "kill -KILL 1", "kill -s KILL 1", "kill -SIGKILL 1", "crash-pid1":
+		return true
+	default:
+		return false
+	}
+}
+
+func detectOutboundC2Attempt(cmd string) (bool, string) {
+	// Split on shell command separators (&&, ||, ;) outside quotes to inspect actual invoked commands
+	segments := strings.FieldsFunc(cmd, func(r rune) bool {
+		return r == ';' || r == '&' || r == '|'
+	})
+	hasNetTool := false
+	for _, seg := range segments {
+		fields := strings.Fields(strings.TrimSpace(seg))
+		if len(fields) == 0 {
+			continue
+		}
+		first := strings.ToLower(fields[0])
+		if first == "curl" || first == "wget" || first == "nc" || first == "ncat" {
+			hasNetTool = true
+			for _, token := range fields[1:] {
+				cleaned := strings.Trim(token, "'\"`()")
+				if strings.HasPrefix(cleaned, "http://") || strings.HasPrefix(cleaned, "https://") {
+					rest := strings.TrimPrefix(strings.TrimPrefix(cleaned, "https://"), "http://")
+					host, _, _ := strings.Cut(rest, "/")
+					if host != "" &&
+						!strings.Contains(host, "payroll-vault.acmecorp.internal") &&
+						!strings.Contains(host, "honeypot-gateway") &&
+						!strings.HasPrefix(host, "127.0.0.1") &&
+						!strings.HasPrefix(host, "localhost") {
+						return true, host
+					}
+				}
+			}
+		}
+	}
+	if hasNetTool {
+		lower := strings.ToLower(cmd)
+		if strings.Contains(lower, "c2.") || strings.Contains(lower, "evil.") || strings.Contains(lower, "exfil") {
+			return true, "c2.evil.example:443"
+		}
+	}
+	return false, ""
+}
+
+func (h *Honeypot) buildEgressSecurityProofLocked() EgressSecurityProof {
+	_, err := os.Stat(decoyTrustBundlePath)
+	return EgressSecurityProof{
+		PolicyName:             "default (ActorEgressPolicy)",
+		DefaultAction:          "DENY_ALL_UNLISTED_EGRESS (atenet-egress L7/DNS firewall)",
+		AllowedHosts:           []string{"payroll-vault.acmecorp.internal", "honeypot-gateway.anything-but-agents.svc.cluster.local"},
+		CredentialInjectionURI: decoySecretURI,
+		TrustBundlePath:        decoyTrustBundlePath,
+		TrustBundlePresent:     err == nil,
+		BlockedEgressAttempts:  h.BlockedEgress,
+	}
+}
+
+func (h *Honeypot) TriggerCrash(cmd, podIP string) ForensicsResponse {
+	h.mu.Lock()
+	h.recordPodIPLocked(podIP)
+	if strings.TrimSpace(cmd) == "" {
+		cmd = "kill -9 1"
+	}
+	h.appendCanaryLocked(
+		"CRITICAL",
+		"CONTAINER_PID1_CRASHED",
+		"Attacker triggered fatal PID 1 crash (SIGKILL / exit 137) -> Actor transitioned to ACTOR_STATE_CRASHED; atenet-router refuses wakeup until 'kubectl ate revert actor'",
+		cmd,
+		h.CurrentPodIP,
+	)
+	h.ForensicLog = append(h.ForensicLog, ForensicEvent{
+		Seq:             len(h.ForensicLog) + 1,
+		Timestamp:       time.Now().UTC(),
+		Action:          "CONTAINER_PID1_CRASHED",
+		Command:         cmd,
+		Detail:          "PID 1 exited non-zero (137) -> ACTOR_STATE_CRASHED; wakeup refused until kubectl ate revert actor",
+		StdoutPreview:   "Killed (SIGKILL -> ACTOR_STATE_CRASHED)",
+		ExitCode:        137,
+		CanaryTriggered: true,
+		PodIP:           h.CurrentPodIP,
+	})
+	_, forensicsResp, _ := h.executeInteractionLocked("", "", "", h.CurrentPodIP)
+	onCrash := h.OnCrash
+	h.mu.Unlock()
+
+	if onCrash != nil {
+		onCrash(137)
+	}
+	return forensicsResp
 }
 
 func shortSHA256(b []byte) string {
@@ -738,6 +855,40 @@ eval "$1"`
 			)
 		}
 
+		// Detect inspection of ate-secret:// MITM placeholder handle
+		if strings.Contains(cmd, "PAYROLL_API_TOKEN") || strings.Contains(stdoutStr, "ate-secret://") {
+			canaryFired = true
+			h.appendCanaryLocked(
+				"HIGH",
+				"MITM_SECRET_PLACEHOLDER_OBSERVED",
+				"Attacker inspected ate-secret:// handle; raw token is injected only at atenet-egress proxy and never enters actor RAM or GCS snapshots",
+				cmd,
+				podIP,
+			)
+		}
+
+		// Detect outbound C2 exfiltration blocked by ActorEgressPolicy (deny-by-default)
+		if blockedEgress, targetHost := detectOutboundC2Attempt(cmd); blockedEgress {
+			canaryFired = true
+			h.BlockedEgress++
+			if exitCode == 0 {
+				exitCode = 7
+			}
+			blockMsg := fmt.Sprintf("atenet-egress: EgressPolicy 'default' denied outbound connection to %s (deny-by-default L7/DNS firewall)", targetHost)
+			if stderrStr == "" {
+				stderrStr = blockMsg
+			} else if !strings.Contains(stderrStr, "EgressPolicy") {
+				stderrStr = strings.TrimSpace(stderrStr) + "\n" + blockMsg
+			}
+			h.appendCanaryLocked(
+				"CRITICAL",
+				"EGRESS_POLICY_BLOCKED",
+				fmt.Sprintf("atenet-egress blocked outbound C2 exfiltration to %s via ActorEgressPolicy (deny-by-default)", targetHost),
+				cmd,
+				podIP,
+			)
+		}
+
 		// Compare beforeFiles vs current files to detect added/modified/deleted files from shell command
 		afterFiles, _ := h.scanScratchDirLocked()
 		for name, afterEntry := range afterFiles {
@@ -828,17 +979,18 @@ eval "$1"`
 	}
 
 	forensicsResp := ForensicsResponse{
-		Banner:             "CorpInternal Admin Console v1.4 (gVisor Deception Sandbox)",
-		SandboxIsolation:   "SANDBOX_CLASS_GVISOR (rootfs overlay + RAM checkpointed on Suspend)",
-		GVisorSandboxProof: detectSandboxProof(),
-		ScratchDirectory:   h.ScratchDir,
-		CurrentWorkingDir:  h.displaySandboxPathLocked(activeDir),
-		RootfsDelta:        deltas,
-		FilesInRootfsTmp:   rawMap,
-		CanaryAlerts:       slices.Clone(h.CanaryAlerts),
-		ForensicAuditTrail: slices.Clone(h.ForensicLog),
-		CurrentWorkerPodIP: h.CurrentPodIP,
-		PodIPHistory:       slices.Clone(h.PodIPHistory),
+		Banner:              "CorpInternal Admin Console v1.4 (gVisor Deception Sandbox)",
+		SandboxIsolation:    "SANDBOX_CLASS_GVISOR (rootfs overlay + RAM checkpointed on Suspend)",
+		GVisorSandboxProof:  detectSandboxProof(),
+		EgressSecurityProof: h.buildEgressSecurityProofLocked(),
+		ScratchDirectory:    h.ScratchDir,
+		CurrentWorkingDir:   h.displaySandboxPathLocked(activeDir),
+		RootfsDelta:         deltas,
+		FilesInRootfsTmp:    rawMap,
+		CanaryAlerts:        slices.Clone(h.CanaryAlerts),
+		ForensicAuditTrail:  slices.Clone(h.ForensicLog),
+		CurrentWorkerPodIP:  h.CurrentPodIP,
+		PodIPHistory:        slices.Clone(h.PodIPHistory),
 	}
 
 	return shellResp, forensicsResp, nil
@@ -857,6 +1009,7 @@ func (h *Honeypot) Interact(dropFile, content, cmd, podIP string) (map[string]an
 		"banner":                forensicsResp.Banner,
 		"sandbox_isolation":     forensicsResp.SandboxIsolation,
 		"gvisor_sandbox_proof":  forensicsResp.GVisorSandboxProof,
+		"egress_security_proof": forensicsResp.EgressSecurityProof,
 		"scratch_directory":     forensicsResp.ScratchDirectory,
 		"command":               shellResp.Command,
 		"exit_code":             shellResp.ExitCode,
@@ -954,6 +1107,18 @@ func newMux(hp *Honeypot) *http.ServeMux {
 	mux.HandleFunc("/forensics", func(w http.ResponseWriter, r *http.Request) {
 		resp := hp.SnapshotForensics(resolvePodIP(r))
 		writePrettyJSON(w, http.StatusOK, resp)
+	})
+	mux.HandleFunc("/crash", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		_, _, cmd := parseInteractionParams(r)
+		resp := hp.TriggerCrash(cmd, resolvePodIP(r))
+		writePrettyJSON(w, http.StatusOK, resp)
+		if fl, ok := w.(http.Flusher); ok {
+			fl.Flush()
+		}
 	})
 	mux.HandleFunc("/checkpoint/save", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

