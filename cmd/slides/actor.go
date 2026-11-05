@@ -493,11 +493,11 @@ func AllSlideDefs() []SlideDef {
 			DemoURL:  "https://tenantdb.substrate.learngke.dev/dashboard",
 			SubstrateFeatures: []string{
 				"DurableDir (/data)",
-				"Async vs Sync Suspend",
+				"MEMORY vs VOLUMES Fidelity",
 				"WAL Replay (<1ms)",
 				"Single-Command Tenant Delete",
 			},
-			SpeakerNotes: "Pocket Piece #3: DurableDir volumes, hot vs. compact suspend modes, and single-command tenant deletion. Now what if the user is an attacker?",
+			SpeakerNotes: "Pocket Piece #3: DurableDir volumes, SNAPSHOT_FIDELITY_MEMORY (db-acme/db-globex) vs. native SNAPSHOT_FIDELITY_VOLUMES (db-initech/db-umbrella), and single-command tenant deletion. Now what if the user is an attacker?",
 		},
 		{
 			ID:               "slide-09",
@@ -562,7 +562,7 @@ func AllSlideDefs() []SlideDef {
 				"kubectl ate revert",
 				"Forensic Tag Cloning (--tag)",
 			},
-			SpeakerNotes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. Next, let's see what breaks when we freeze Raft.",
+			SpeakerNotes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. (Q&A tip: SOC Director View also has Crash PID 1 -> STATE=CRASHED revert and Preset #5 Egress Block + ate-secret://.) Next, let's see what breaks when we freeze Raft.",
 		},
 		{
 			ID:               "slide-11",
@@ -715,7 +715,7 @@ func AllSlideDefs() []SlideDef {
 				"ate-secret:// MITM Secrets",
 				"OpenFGA + microVM + Model",
 			},
-			SpeakerNotes: "Let the three remaining Substrate pieces animate in one by one: ActorEgressPolicy outbound firewall, ate-secret:// proxy credential injection so API keys never land in GCS memory dumps, and OpenFGA authz plus microVM and CSI options. Pause on the empty center slot, then watch the Model + agent loop drop in!",
+			SpeakerNotes: "Let the three remaining Substrate pieces animate in one by one: ActorEgressPolicy outbound firewall, ate-secret:// proxy credential injection so API keys never land in GCS memory dumps, and OpenFGA authz plus microVM and CSI options. Pause on the empty center slot, then watch the Model + agent loop drop in! (Q&A tip: Honeypot Preset #5 demonstrates ActorEgressPolicy + ate-secret:// live.)",
 		},
 		{
 			ID:               "slide-16",

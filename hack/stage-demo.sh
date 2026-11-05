@@ -691,6 +691,18 @@ wait_for_template_golden_snapshot() {
   return 1
 }
 
+# Release all worker pods in the shared 3-replica WorkerPool by suspending any
+# RUNNING, RESUMING, or PAUSED actors in the atespace.
+free_workers() {
+  local active_actors
+  active_actors="$(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null \
+    | awk '$4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_RESUMING" || $4 == "ACTOR_STATE_PAUSED" || ($1 != "ATESPACE" && $5 != "" && $5 != "<none>") {print $2}' || true)"
+  for actor in ${active_actors}; do
+    echo "Suspending active actor '${actor}' to free worker capacity..."
+    kubectl ate suspend actor "${actor}" -a "${ATESPACE}" >/dev/null 2>&1 || true
+  done
+}
+
 ensure_template_ready() {
   local tmpl="$1"
   local yaml_out
@@ -699,6 +711,7 @@ ensure_template_ready() {
     echo "ActorTemplate '${tmpl}' Golden Snapshot is already READY."
     return 0
   fi
+  free_workers
   kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   (
     cd "${REPO_ROOT}"
@@ -784,18 +797,6 @@ ensure_router_port_forward() {
       sleep 0.5
     done
   fi
-}
-
-# Release all worker pods in the shared 3-replica WorkerPool by suspending any
-# RUNNING, RESUMING, or PAUSED actors in the atespace.
-free_workers() {
-  local active_actors
-  active_actors="$(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null \
-    | awk '$4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_RESUMING" || $4 == "ACTOR_STATE_PAUSED" || ($1 != "ATESPACE" && $5 != "" && $5 != "<none>") {print $2}' || true)"
-  for actor in ${active_actors}; do
-    echo "Suspending active actor '${actor}' to free worker capacity..."
-    kubectl ate suspend actor "${actor}" -a "${ATESPACE}" >/dev/null 2>&1 || true
-  done
 }
 
 # Reset specific actors (and optional tag:<name> entries) before an act starts

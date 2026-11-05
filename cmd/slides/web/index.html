@@ -3823,8 +3823,8 @@
         ],
         demo_name: "Revisit TenantDB console",
         demo_url: "https://tenantdb.substrate.learngke.dev/dashboard",
-        substrate_features: ["DurableDir (/data)", "Async vs Sync Suspend", "WAL Replay (<1ms)", "Single-Command Tenant Delete"],
-        speaker_notes: "Pocket Piece #3: DurableDir volumes, hot vs. compact suspend modes, and single-command tenant deletion. Now what if the user is an attacker?"
+        substrate_features: ["DurableDir (/data)", "MEMORY vs VOLUMES Fidelity", "WAL Replay (<1ms)", "Single-Command Tenant Delete"],
+        speaker_notes: "Pocket Piece #3: DurableDir volumes, SNAPSHOT_FIDELITY_MEMORY (db-acme/db-globex) vs. native SNAPSHOT_FIDELITY_VOLUMES (db-initech/db-umbrella), and single-command tenant deletion. Now what if the user is an attacker?"
       },
       {
         id: "slide-09",
@@ -3880,7 +3880,7 @@
         demo_name: "Revisit Honeypot console",
         demo_url: "https://honeypot.substrate.learngke.dev/",
         substrate_features: ["gVisor Application Kernel", "Rootfs Overlay Snapshots", "kubectl ate revert", "Forensic Tag Cloning (--tag)"],
-        speaker_notes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. Next, let's see what breaks when we freeze Raft."
+        speaker_notes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. (Q&A tip: SOC Director View also has Crash PID 1 -> STATE=CRASHED revert and Preset #5 Egress Block + ate-secret://.) Next, let's see what breaks when we freeze Raft."
       },
       {
         id: "slide-11",
@@ -4013,7 +4013,7 @@
           "Drop your model and tool loop into the center slot to complete the agent."
         ],
         substrate_features: ["ActorEgressPolicy", "ate-secret:// MITM Secrets", "OpenFGA + microVM + Model"],
-        speaker_notes: "Let the three remaining Substrate pieces animate in one by one: ActorEgressPolicy outbound firewall, ate-secret:// proxy credential injection so API keys never land in GCS memory dumps, and OpenFGA authz plus microVM and CSI options. Pause on the empty center slot, then watch the Model + agent loop drop in!"
+        speaker_notes: "Let the three remaining Substrate pieces animate in one by one: ActorEgressPolicy outbound firewall, ate-secret:// proxy credential injection so API keys never land in GCS memory dumps, and OpenFGA authz plus microVM and CSI options. Pause on the empty center slot, then watch the Model + agent loop drop in! (Q&A tip: Honeypot Preset #5 demonstrates ActorEgressPolicy + ate-secret:// live.)"
       },
       {
         id: "slide-16",
