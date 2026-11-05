@@ -44,6 +44,8 @@ const (
 	PresenterCookieName = "slides_presenter"
 	// PresenterHeaderName carries the presenter token for CLI scripts and tests.
 	PresenterHeaderName = presenterauth.PresenterHeaderName
+	// defaultAudienceQRURL is the public Dungeon 2D /play endpoint encoded into the stage QR modal.
+	defaultAudienceQRURL = "https://dungeon.substrate.learngke.dev/play"
 )
 
 // GatewayServer serves the presentation deck web UI and proxies API calls to slide actors.
@@ -62,7 +64,7 @@ func NewGatewayServer(backend SlidesBackend, presenterToken string) *GatewayServ
 		backend: backend,
 		authGate: presenterauth.NewGate(presenterauth.GateConfig{
 			Title:            "Demo 0: Slides on Substrate",
-			Subtitle:         "Sign in with an authorized Google Workspace or event account to present the live 15-slide Agent Substrate Day deck and control sleeping slide actors.",
+			Subtitle:         "Sign in with an authorized Google Workspace or event account to present the live 16-slide Agent Substrate Day deck and control sleeping slide actors.",
 			SecretName:       "slides-gateway",
 			LegacyCookieName: PresenterCookieName,
 			PresenterToken:   token,
@@ -156,6 +158,34 @@ func (g *GatewayServer) handleStaticAsset(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (g *GatewayServer) handleQRSVG(w http.ResponseWriter, r *http.Request) {
+	setSecurityHeaders(w)
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	target := strings.TrimSpace(r.URL.Query().Get("url"))
+	if target == "" {
+		target = defaultAudienceQRURL
+	}
+	if len(target) > 104 {
+		writeJSONError(w, http.StatusBadRequest, "qr url exceeds 104-byte encoder limit")
+		return
+	}
+	parsed, err := url.Parse(target)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+		writeJSONError(w, http.StatusBadRequest, "qr url must be an absolute http(s) URL")
+		return
+	}
+	svg := RenderQRSVG(target)
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write([]byte(svg))
+	}
+}
+
 // Mux builds the HTTP router for the slides gateway.
 func (g *GatewayServer) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -186,6 +216,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("/deck", g.handleDeckPage)
+	mux.HandleFunc("/api/qr.svg", g.requireAuth(g.handleQRSVG))
 
 	mux.HandleFunc("/api/slides", g.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

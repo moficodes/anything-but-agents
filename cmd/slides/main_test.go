@@ -26,8 +26,8 @@ import (
 
 func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 	slides := AllSlideDefs()
-	if len(slides) != 15 {
-		t.Fatalf("expected 15 slides, got %d", len(slides))
+	if len(slides) != 16 {
+		t.Fatalf("expected 16 slides, got %d", len(slides))
 	}
 
 	validLayouts := map[string]bool{
@@ -54,8 +54,8 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 		if s.Index != i+1 {
 			t.Errorf("slide %s has index %d, expected %d", s.ID, s.Index, i+1)
 		}
-		if s.Total != 15 {
-			t.Errorf("slide %s has total %d, expected 15", s.ID, s.Total)
+		if s.Total != 16 {
+			t.Errorf("slide %s has total %d, expected 16", s.ID, s.Total)
 		}
 		if !validLayouts[s.Layout] {
 			t.Errorf("slide %s has unexpected layout %q", s.ID, s.Layout)
@@ -228,8 +228,8 @@ func TestLocalSimulatorBackendLifecycleAndRevert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSlides failed: %v", err)
 	}
-	if len(summaries) != 15 {
-		t.Fatalf("expected 15 summaries, got %d", len(summaries))
+	if len(summaries) != 16 {
+		t.Fatalf("expected 16 summaries, got %d", len(summaries))
 	}
 
 	// GetSlide
@@ -356,8 +356,8 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 	if err := json.Unmarshal(sRec.Body.Bytes(), &slidesResp); err != nil {
 		t.Fatalf("failed to unmarshal /api/slides: %v", err)
 	}
-	if len(slidesResp.Slides) != 15 || slidesResp.Total != 15 || !slidesResp.IsPresenter {
-		t.Errorf("expected 15 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
+	if len(slidesResp.Slides) != 16 || slidesResp.Total != 16 || !slidesResp.IsPresenter {
+		t.Errorf("expected 16 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
 	}
 
 	// 5. GET /api/slide/slide-01 with cookie -> 200
@@ -434,12 +434,51 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 	if csrfRec.Code != http.StatusUnauthorized && csrfRec.Code != http.StatusForbidden {
 		t.Errorf("expected 401 or 403 for cross-origin cookie mutation, got %d", csrfRec.Code)
 	}
+
+	// 12. GET /api/qr.svg auth + input validation + SVG output
+	unauthQRReq := httptest.NewRequest(http.MethodGet, "/api/qr.svg", nil)
+	unauthQRRec := httptest.NewRecorder()
+	mux.ServeHTTP(unauthQRRec, unauthQRReq)
+	if unauthQRRec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauthenticated /api/qr.svg, got %d", unauthQRRec.Code)
+	}
+
+	qrReq := httptest.NewRequest(http.MethodGet, "/api/qr.svg", nil)
+	qrReq.AddCookie(presenterCookie)
+	qrRec := httptest.NewRecorder()
+	mux.ServeHTTP(qrRec, qrReq)
+	if qrRec.Code != http.StatusOK {
+		t.Errorf("expected 200 for authenticated /api/qr.svg, got %d", qrRec.Code)
+	}
+	if ct := qrRec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Errorf("expected image/svg+xml Content-Type, got %q", ct)
+	}
+	if !strings.Contains(qrRec.Body.String(), "<svg") || !strings.Contains(qrRec.Body.String(), "<path") {
+		t.Errorf("expected valid QR <svg><path> body from /api/qr.svg")
+	}
+
+	badSchemeReq := httptest.NewRequest(http.MethodGet, "/api/qr.svg?url=javascript:void(0)", nil)
+	badSchemeReq.AddCookie(presenterCookie)
+	badSchemeRec := httptest.NewRecorder()
+	mux.ServeHTTP(badSchemeRec, badSchemeReq)
+	if badSchemeRec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-http(s) QR URL scheme, got %d", badSchemeRec.Code)
+	}
+
+	tooLongURL := "https://dungeon.substrate.learngke.dev/play?" + strings.Repeat("x", 120)
+	longReq := httptest.NewRequest(http.MethodGet, "/api/qr.svg?url="+tooLongURL, nil)
+	longReq.AddCookie(presenterCookie)
+	longRec := httptest.NewRecorder()
+	mux.ServeHTTP(longRec, longReq)
+	if longRec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for >104-byte QR URL, got %d", longRec.Code)
+	}
 }
 
 func TestIndexHTMLDesignAndConventions(t *testing.T) {
 	html := string(indexHTML)
 
-	// Check Agent Substrate Day official template branding, palette, typography, and jigsaw puzzle UI
+	// Check Agent Substrate Day official template branding, palette, typography, ate.dev grid/viz, and jigsaw puzzle UI
 	for _, token := range []string{
 		"#07090D",
 		"#56FD5A",
@@ -454,14 +493,29 @@ func TestIndexHTMLDesignAndConventions(t *testing.T) {
 		"ActorEgressPolicy",
 		"ate-secret://",
 		"OpenFGA",
+		"asd-grid-layer",
+		"as-viz",
+		"legendModal",
+		"legendGrid",
+		"chrome-hidden",
+		"toggleChrome",
+		"slideCounter",
+		"qrModal",
+		"hudPoolSlots",
+		"buildHeroRightVisual",
+		"buildMultiverseTimeline",
+		"buildTieringCompressionViz",
+		"startTerminalTypewriter",
+		"asd-pz-shockwave-ring",
+		"asd-mascot-welcome",
 	} {
 		if !strings.Contains(html, token) {
 			t.Errorf("expected official template token %q in index.html", token)
 		}
 	}
 
-	// Ensure safe DOM construction (no innerHTML / native alert / confirm)
-	for _, forbidden := range []string{".innerHTML", "alert(", "confirm("} {
+	// Ensure safe DOM construction (no innerHTML / outerHTML / native alert / confirm)
+	for _, forbidden := range []string{".innerHTML", ".outerHTML", "insertAdjacentHTML", "document.write", "alert(", "confirm("} {
 		if strings.Contains(html, forbidden) {
 			t.Errorf("unexpected unsafe/blocking browser API %q in index.html", forbidden)
 		}
@@ -504,7 +558,7 @@ func TestIndexHTMLDesignAndConventions(t *testing.T) {
 		t.Errorf("expected LOCAL CACHE FALLBACK status string in JavaScript")
 	}
 
-	// Check that all 12 slide IDs are pre-bundled in STATIC_SLIDES
+	// Check that all 16 slide IDs are pre-bundled in STATIC_SLIDES
 	for _, def := range AllSlideDefs() {
 		if !strings.Contains(html, def.ID) {
 			t.Errorf("expected slide ID %s in HTML cache", def.ID)
