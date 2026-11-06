@@ -71,7 +71,7 @@ apply_env_defaults() {
   export SLIDES_DOMAIN="${SLIDES_DOMAIN:-abs.slides.${DEMO_DOMAIN}}"
   export GATEWAY_IP_NAME="${GATEWAY_IP_NAME:-substrate-learngke-ip}"
   export CERT_MAP_NAME="${CERT_MAP_NAME:-substrate-learngke-map}"
-  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0-rc.2}"
+  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0}"
   export SUBSTRATE_IMAGE_REPO="${SUBSTRATE_IMAGE_REPO:-ghcr.io/agent-substrate/substrate}"
   if [[ -z "${ATE_CREDENTIAL_PROVIDER:-}" ]]; then
     export ATE_CREDENTIAL_PROVIDER='{"name":"k8s.io"}'
@@ -649,7 +649,7 @@ detect_cluster_defaults() {
     echo "Error: BUCKET_NAME (or PROJECT_ID in .env) must be set." >&2
     exit 1
   fi
-  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0-rc.2}"
+  export SUBSTRATE_VERSION="${SUBSTRATE_VERSION:-v1.0.0}"
   export SUBSTRATE_IMAGE_REPO="${SUBSTRATE_IMAGE_REPO:-ghcr.io/agent-substrate/substrate}"
   if [[ -z "${ATEOM_GVISOR_IMAGE:-}" ]]; then
     if [[ -n "${SUBSTRATE_IMAGE_REPO}" && -n "${SUBSTRATE_VERSION}" ]]; then
@@ -755,6 +755,7 @@ deploy_all() {
   for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
+    free_workers
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
     (
       cd "${REPO_ROOT}"
@@ -769,6 +770,20 @@ deploy_all() {
     -n anything-but-agents \
     --from-literal=token="decoysupersecret-payroll-vault-2026" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+  resolve_kubectl_ate_image
+  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway; do
+    if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
+      echo "Updating ${gw} copy-kubectl-ate initContainer to ${SUBSTRATE_VERSION}..."
+      kubectl set image "deployment/${gw}" -n anything-but-agents "copy-kubectl-ate=${KUBECTL_ATE_IMAGE}" >/dev/null
+      kubectl rollout restart "deployment/${gw}" -n anything-but-agents >/dev/null
+    fi
+  done
+  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway; do
+    if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
+      kubectl rollout status "deployment/${gw}" -n anything-but-agents --timeout=120s
+    fi
+  done
 
   echo ""
   kubectl ate get actor-templates -a "${ATESPACE}"

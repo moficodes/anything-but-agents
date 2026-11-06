@@ -70,7 +70,7 @@ Always run `go test ./...` after modifying any file under `cmd/`.
 1. **Environment configuration**:
    Copy `.env.example` to `.env` and set `PROJECT_ID`. (`.env` is gitignored; never commit credentials or project-specific `.env` files.)
    - Default region/zone: `us-west3` / `us-west3-a` (Salt Lake City).
-   - Default Agent Substrate release: `SUBSTRATE_VERSION=v1.0.0-rc.2` from `SUBSTRATE_IMAGE_REPO=ghcr.io/agent-substrate/substrate`.
+   - Default Agent Substrate release: `SUBSTRATE_VERSION=v1.0.0` from `SUBSTRATE_IMAGE_REPO=ghcr.io/agent-substrate/substrate`.
    - `SUBSTRATE_ROOT`: Path to the `agent-substrate` checkout (needed for `bootstrap-gke`, `upgrade-substrate`, or building `kubectl-ate` initContainer images via `ko`; auto-detected from `..` or `../../agent-substrate/*` if unset).
 2. **Stage script (`hack/stage-demo.sh`)**:
    ```bash

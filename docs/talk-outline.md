@@ -44,7 +44,7 @@ flowchart LR
 
 ## Pre-Stage Setup Checklist
 
-1. **Cluster & Golden Snapshots (`v1.0.0-rc.2`):** Confirm `kubectl get workerpool anything-but-agents -n anything-but-agents` shows `3/3` ready `ateworker-gvisor` pods and `kubectl ate get actor-templates -a anything-but-agents` has `goldenTag` populated on all templates.
+1. **Cluster & Golden Snapshots (`v1.0.0`):** Confirm `kubectl get workerpool anything-but-agents -n anything-but-agents` shows `3/3` ready `ateworker-gvisor` pods and `kubectl ate get actor-templates -a anything-but-agents` has `goldenTag` populated on all templates.
 2. **Browser tabs pre-opened left-to-right (sign in once with Google on Tab 0 to unlock all 6 tabs via cross-subdomain SSO, click the top-right Sun icon for Projector Light Mode if the room is bright, and press `H` on Tab 0 to hide the top bar and bottom Substrate HUD until the `slide-16` reveal):**
    - Tab 0: `https://abs.slides.substrate.learngke.dev/deck` (Live Slide Deck)
    - Tab 1: `https://dungeon.substrate.learngke.dev/dashboard` (with QR modal open!) + mobile `/play` tab
@@ -195,7 +195,7 @@ sequenceDiagram
 
 ## Quick Reference: Demo-to-Substrate Feature Cheat Sheet
 
-| Demo | What the Demo Does | Features We Get from Substrate (`v1.0.0-rc.2`) |
+| Demo | What the Demo Does | Features We Get from Substrate (`v1.0.0`) |
 |---|---|---|
 | **0. `cmd/slides`** | Presentation deck where each slide (`slide-01..16`) is an actor sleeping in GCS | 16 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` + `asd-puzzle` finale |
 | **1. `cmd/dungeon2d`** | Multi-player 8-floor browser roguelike with zero DB code | `WorkerPool` (`ate.dev/v1`), `atenet` Wake-on-HTTP, `SNAPSHOT_FIDELITY_MEMORY`, `save` / `--snapshot-version`, `revert`, `create tag` + `--tag` |
@@ -204,7 +204,7 @@ sequenceDiagram
 | **4. `cmd/honeypot`** | Per-IP `gVisor` hacker Movie Set + SOC forensic booth | `sandboxClasses: [gvisor]` (`ateworker-gvisor`), OCI rootfs overlay + RAM persistence across pod IPs, `revert` (`rm -rf` undo & `STATE=CRASHED` recovery), `--tag` live clone, `ActorEgressPolicy`, `ate-secret://` MITM injection |
 | **5. `cmd/timewarp`** | 3-node Raft cluster broken by a 5s leader freeze | Turn-driven `atenet` Wake-on-HTTP + request parking, wakeup clock-jump fencing (`?guard=true`), `Actor` vs. `StatefulSet` boundary |
 
-## Complete Agent Substrate (`v1.0.0-rc.2`) Feature Coverage Matrix
+## Complete Agent Substrate (`v1.0.0`) Feature Coverage Matrix
 
 | Substrate Primitive | API / CLI Surface | Demonstrated In | How the Talk Uses It |
 |---|---|---|---|

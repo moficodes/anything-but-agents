@@ -228,14 +228,14 @@ If you need a fresh GKE cluster with Agent Substrate (`ate-system`) and all 5 de
 ./hack/stage-demo.sh bootstrap-gke
 ```
 
-*(If you already have an Agent Substrate cluster running, run `./hack/stage-demo.sh upgrade-substrate` to upgrade `ate-system` to `v1.0.0-rc.2` if needed, then `./hack/stage-demo.sh deploy`.)*
+*(If you already have an Agent Substrate cluster running, run `./hack/stage-demo.sh upgrade-substrate` to upgrade `ate-system` to `v1.0.0` if needed, then `./hack/stage-demo.sh deploy`.)*
 
 ### 3. Run the Live Stage Demos
 
 `hack/stage-demo.sh` automatically port-forwards `svc/atenet-router` on `localhost:8000` if needed. Each step pauses for `<Enter>` so you can narrate on stage (set `PAUSE_BETWEEN_STEPS=0` to run non-interactively):
 
 ```bash
-./hack/stage-demo.sh upgrade-substrate  # Upgrade ate-system on an existing GKE cluster to SUBSTRATE_VERSION (v1.0.0-rc.2)
+./hack/stage-demo.sh upgrade-substrate  # Upgrade ate-system on an existing GKE cluster to SUBSTRATE_VERSION (v1.0.0)
 ./hack/stage-demo.sh run-all           # Run all 5 demos in sequence (or run them individually below)
 
 ./hack/stage-demo.sh act0-slides           # Act 0: Slides Presentation Deck + Go heap view counter & revert

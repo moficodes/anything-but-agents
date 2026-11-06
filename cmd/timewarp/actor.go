@@ -201,7 +201,7 @@ func (n *NaiveClusterNode) ObserveClock(now time.Time, podIP string) {
 
 // wallClockSub returns the wall-clock (CLOCK_REALTIME) delta between a and b by
 // stripping Go's monotonic clock reading (.Round(0)). In gVisor 20261102.0+
-// (Agent Substrate v1.0.0-rc.2, SandboxConfig v7), CLOCK_MONOTONIC pauses while
+// (Agent Substrate v1.0.0+, SandboxConfig v7), CLOCK_MONOTONIC pauses while
 // an actor is checkpointed, whereas CLOCK_REALTIME jumps forward by the full
 // suspend duration.
 func wallClockSub(a, b time.Time) time.Duration {
