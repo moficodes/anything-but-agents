@@ -101,14 +101,66 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, st)
 	}))
 
-	actorParam := func(r *http.Request, fallback string) string {
-		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
+	type tenantRequestPayload struct {
+		Actor     string `json:"actor"`
+		Tenant    string `json:"tenant"`
+		TenantID  string `json:"tenant_id"`
+		Table     string `json:"table"`
+		Key       string `json:"key"`
+		Val       string `json:"val"`
+		Value     string `json:"value"`
+		AmountUSD int    `json:"amount"`
+	}
+
+	parseTenantRequest := func(r *http.Request, fallback string) (actor, table, key, val string, amountUSD int) {
+		var body tenantRequestPayload
+		if r.Body != nil && r.ContentLength != 0 {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		actor = strings.TrimSpace(r.URL.Query().Get("actor"))
 		if actor == "" {
 			actor = strings.TrimSpace(r.URL.Query().Get("tenant"))
 		}
 		if actor == "" {
-			return fallback
+			actor = strings.TrimSpace(r.URL.Query().Get("tenant_id"))
 		}
+		if actor == "" {
+			actor = strings.TrimSpace(body.Actor)
+		}
+		if actor == "" {
+			actor = strings.TrimSpace(body.Tenant)
+		}
+		if actor == "" {
+			actor = strings.TrimSpace(body.TenantID)
+		}
+		if actor == "" {
+			actor = fallback
+		}
+
+		table = strings.TrimSpace(r.URL.Query().Get("table"))
+		if table == "" {
+			table = strings.TrimSpace(body.Table)
+		}
+		key = strings.TrimSpace(r.URL.Query().Get("key"))
+		if key == "" {
+			key = strings.TrimSpace(body.Key)
+		}
+		val = r.URL.Query().Get("val")
+		if val == "" {
+			val = body.Val
+		}
+		if val == "" {
+			val = body.Value
+		}
+		amountUSD, _ = strconv.Atoi(r.URL.Query().Get("amount"))
+		if amountUSD == 0 {
+			amountUSD = body.AmountUSD
+		}
+		return actor, table, key, val, amountUSD
+	}
+
+	actorParam := func(r *http.Request, fallback string) string {
+		actor, _, _, _, _ := parseTenantRequest(r, fallback)
 		return actor
 	}
 
@@ -131,11 +183,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		actor := actorParam(r, "db-acme")
-		table := strings.TrimSpace(r.URL.Query().Get("table"))
-		key := strings.TrimSpace(r.URL.Query().Get("key"))
-		val := r.URL.Query().Get("val")
-		amountUSD, _ := strconv.Atoi(r.URL.Query().Get("amount"))
+		actor, table, key, val, amountUSD := parseTenantRequest(r, "db-acme")
 
 		snap, err := g.backend.QueryTenant(r.Context(), actor, table, key, val, amountUSD)
 		if err != nil {

@@ -341,6 +341,27 @@ func TestNativeSnapshotFidelityVolumesAndDualTemplates(t *testing.T) {
 		t.Fatalf("expected COLD_DATA_REPLAY + SNAPSHOT_FIDELITY_VOLUMES on wake, got mode=%s fidelity=%s",
 			wakeSnap.RecoveryMode, wakeSnap.SnapshotFidelity)
 	}
+
+	// Verify GatewayServer POST /api/tenant/query accepts JSON body {"tenant_id":"db-initech"}
+	gw := NewGatewayServer(sim, "secret-stage-key")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/tenant/query", strings.NewReader(`{"tenant_id":"db-initech"}`))
+	req.Header.Set("X-Presenter-Key", "secret-stage-key")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/tenant/query JSON body: %v", err)
+	}
+	defer res.Body.Close()
+	var bodySnap TenantSnapshot
+	if err := json.NewDecoder(res.Body).Decode(&bodySnap); err != nil {
+		t.Fatalf("decode TenantSnapshot: %v", err)
+	}
+	if bodySnap.SnapshotFidelity != "SNAPSHOT_FIDELITY_VOLUMES" {
+		t.Fatalf("expected SNAPSHOT_FIDELITY_VOLUMES for JSON body tenant_id=db-initech, got %s", bodySnap.SnapshotFidelity)
+	}
 }
 
 

@@ -774,8 +774,13 @@ deploy_all() {
   resolve_kubectl_ate_image
   for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway; do
     if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
-      echo "Updating ${gw} copy-kubectl-ate initContainer to ${SUBSTRATE_VERSION}..."
-      kubectl set image "deployment/${gw}" -n anything-but-agents "copy-kubectl-ate=${KUBECTL_ATE_IMAGE}" >/dev/null
+      echo "Rebuilding & applying ${gw} deployment with ${SUBSTRATE_VERSION}..."
+      (
+        cd "${REPO_ROOT}"
+        envsubst < "manifests/${gw}.yaml.tmpl" \
+          | ko resolve --platform=linux/amd64 -f - \
+          | kubectl apply -f - >/dev/null
+      )
       kubectl rollout restart "deployment/${gw}" -n anything-but-agents >/dev/null
     fi
   done

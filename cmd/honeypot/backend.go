@@ -767,6 +767,13 @@ func (b *ClusterAteBackend) callActorJSON(ctx context.Context, actorName, method
 		}
 		rawResp, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound && strings.Contains(strings.ToLower(string(rawResp)), "not found") && attempt == 0 {
+			b.mu.Lock()
+			delete(b.created, actorName)
+			b.mu.Unlock()
+			_ = b.EnsureActor(ctx, actorName)
+			continue
+		}
 		if resp.StatusCode == http.StatusServiceUnavailable && attempt == 0 {
 			b.reclaimWorkerSlots(ctx, actorName)
 			time.Sleep(250 * time.Millisecond)
