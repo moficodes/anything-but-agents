@@ -61,7 +61,7 @@ flowchart LR
 * **On screen:** Walk on stage with `slide-01` ("Running anything *but* agents on Agent Substrate") on `abs.slides.substrate.learngke.dev/deck` featuring the **Yolo** mascot, talk title, and your name (`Mofi Rahman • Lead DevRel GKE, Google Cloud`). Advance (`→`) to `slide-02` ("Every talk today is about agents, so let's run *anything else*", showing the live `ate.dev` 120-actor multiplexer `.as-viz` on the right), then press **`Q`** (or click **Show QR (Q)**; press **`L`** anytime for the keyboard shortcuts legend) to pop up the scannable `dungeon.substrate.learngke.dev/play` QR modal before switching to Tab 1 (`dungeon2d` `/dashboard`).
 * **Light spoken hook:**
   * *"We are at Agent Substrate Day, so every other talk today is about agents or how Agent Substrate works for agents. For the next 18 minutes, we are going to be rebels and run five workloads that have nothing to do with AI."*
-  * *"We'll run a 2D game, a search engine, customer databases, an SSH honeypot, and a Raft cluster on one 3-pod WorkerPool, and keep one Agent Substrate feature from each demo."*
+  * *"We'll run a 2D game, an HPA cold-start race, customer databases, an SSH honeypot, and a Raft cluster on one 3-pod WorkerPool, and keep one Agent Substrate feature from each demo."*
   * *(Keep the fact that this 16-slide presentation deck itself is running on Agent Substrate as a surprise reveal for `slide-16`!)*
 
 ### Demo 1: "I Was Too Lazy to Set Up Postgres" (`01:30 - 05:00`, `cmd/dungeon2d`)

@@ -287,7 +287,7 @@ func AllSlideDefs() []SlideDef {
 			Kind:             "chapter",
 			HighlightPhrases: []string{"*anything else*", "3-pod WorkerPool"},
 			Points: []string{
-				"A 2D game, search engine, customer DBs, SSH honeypot, and Raft cluster.",
+				"A 2D game, HPA cold-start race, customer DBs, SSH honeypot, and Raft cluster.",
 				"All five workloads share one 3-pod WorkerPool with 1 vCPU per pod.",
 				"After each demo, we keep the Substrate feature that made it work.",
 			},
