@@ -20,7 +20,7 @@ metadata:
   name: honeypot
 workerSelector:
   matchLabels:
-    workload: anything-but-agents
+    workload: honeypot
 containers:
 - name: honeypot
   image: ko://github.com/moficodes/anything-but-agents/cmd/honeypot
@@ -51,7 +51,7 @@ volumes:
         path: trust-bundle.pem
 resources:
   limits:
-    cpuMillicores: 1000
-    memoryBytes: 536870912 # 512Mi
+    cpuMillicores: 500
+    memoryBytes: 201326592 # 192Mi (fits 2 concurrent sandboxes per 512Mi wp-honeypot pod)
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY

@@ -20,7 +20,7 @@ cmd/
 internal/
   presenterauth/ # Shared zero-dependency Google Sign-In (ALLOWED_GOOGLE_DOMAINS) + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
-  workerpool.yaml.tmpl          # Shared 3-worker gVisor WorkerPool (`anything-but-agents`)
+  workerpool.yaml.tmpl          # 6 per-workload gVisor WorkerPools (`wp-slides` .. `wp-timewarp`)
   slides-template.yaml.tmpl     # ActorTemplate for presentation deck slides (FULL pause, FULL commit)
   slides-gateway.yaml.tmpl      # K8s Deployment + LoadBalancer Service for presentation deck web UI
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)

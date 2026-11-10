@@ -321,8 +321,8 @@ func (c *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor st
 		}
 		name := fields[1]
 		state := fields[3]
-		if name != keepActor && strings.Contains(state, "RUNNING") {
-			slog.Info("Reclaiming worker slot: suspending non-target actor", slog.String("actor", name))
+		if name != keepActor && strings.HasPrefix(name, "slide-") && strings.Contains(state, "RUNNING") {
+			slog.Info("Reclaiming wp-slides slot: suspending non-target slide actor", slog.String("actor", name))
 			_, _ = c.runAte(ctx, "suspend", "actor", name, "-a", c.atespace, "--mode=async")
 		}
 	}

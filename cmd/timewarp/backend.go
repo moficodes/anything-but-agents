@@ -794,7 +794,6 @@ func (b *ClusterAteBackend) freeWorkerSlotFor(ctx context.Context, keepActors ..
 	if err != nil {
 		return
 	}
-	var nonTimewarp []string
 	var timewarpCandidates []string
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -803,22 +802,15 @@ func (b *ClusterAteBackend) freeWorkerSlotFor(ctx context.Context, keepActors ..
 		}
 		name := fields[1]
 		state := fields[3]
-		if state == "ACTOR_STATE_SUSPENDED" {
+		if state == "ACTOR_STATE_SUSPENDED" || !strings.HasPrefix(name, "raft-") {
 			continue
 		}
 		if slices.Contains(keepActors, name) {
 			continue
 		}
-		if strings.HasPrefix(name, "raft-node-") {
-			timewarpCandidates = append(timewarpCandidates, name)
-		} else {
-			nonTimewarp = append(nonTimewarp, name)
-		}
+		timewarpCandidates = append(timewarpCandidates, name)
 	}
-	for _, name := range nonTimewarp {
-		_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace, "--mode=async")
-	}
-	if len(nonTimewarp) == 0 && len(timewarpCandidates) > 0 {
+	if len(timewarpCandidates) > 0 {
 		victim := timewarpCandidates[len(timewarpCandidates)-1]
 		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim, "-a", b.atespace, "--mode=async")
 	}

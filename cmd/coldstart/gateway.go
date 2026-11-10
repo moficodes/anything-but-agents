@@ -964,7 +964,14 @@ func (g *GatewayServer) reclaimForeignWorkers(ctx context.Context) {
 		}
 		name := fields[1]
 		state := fields[3]
+		workerPod := ""
+		if len(fields) >= 5 {
+			workerPod = fields[4]
+		}
 		if strings.HasPrefix(name, "coldstart-") {
+			continue
+		}
+		if strings.Contains(workerPod, "/wp-") && !strings.Contains(workerPod, "/wp-coldstart-") {
 			continue
 		}
 		if state == "ACTOR_STATE_RUNNING" || state == "ACTOR_STATE_PAUSED" {

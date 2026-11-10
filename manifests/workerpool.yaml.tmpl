@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Shared WorkerPool for all 5 "Anything But Agents" demos.
-# Notice that we only run 3 warm worker pods (`replicas: 3`), yet we will
-# multiplex Dungeon instances, Cold-Start Clones, Per-Tenant Databases,
-# Honeypots, and Time-Warp nodes across these same 3 workers!
+# Dedicated per-workload WorkerPools for "Anything But Agents".
+# Isolating each demo into its own labeled WorkerPool prevents high-traffic
+# audience workloads (like Dungeon2D) from starving or evicting stage demos,
+# while multi-actor bin-packing per ateworker-gvisor pod multiplies concurrent
+# actor slots on a small node footprint.
+# Note: ateworker-gvisor reserves 64Mi per worker pod (32Mi worker + 2x16Mi
+# checkpoint write headroom) from limits.memory when advertising capacity.
 
 apiVersion: v1
 kind: Namespace
@@ -25,24 +28,151 @@ metadata:
     ate.dev/api-access: "true"
 
 ---
-
+# Demo 0: Slides on Substrate (3 pods x 3 concurrent slides/pod = 9 slots)
 apiVersion: ate.dev/v1
 kind: WorkerPool
 metadata:
-  name: anything-but-agents
+  name: wp-slides
   namespace: anything-but-agents
   labels:
-    workload: anything-but-agents
+    workload: slides
 spec:
   replicas: 3
   workerImage: ${ATEOM_GVISOR_IMAGE}
   sandboxClasses:
   - name: gvisor
   template:
+    labels:
+      workload: slides
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+---
+# Demo 1 & 1B: Dungeon & Dungeon2D (3 pods x 5 concurrent players/pod = 15 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-dungeon
+  namespace: anything-but-agents
+  labels:
+    workload: dungeon
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: dungeon
     resources:
       limits:
         cpu: "1"
         memory: 1Gi
       requests:
-        cpu: 250m
+        cpu: 150m
         memory: 1Gi
+
+---
+# Demo 2: Cold-Start HPA QPS Race (3 pods x 1 dedicated 1-vCPU shard/pod = 3 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-coldstart
+  namespace: anything-but-agents
+  labels:
+    workload: coldstart
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: coldstart
+    resources:
+      limits:
+        cpu: "1"
+        memory: 768Mi
+      requests:
+        cpu: 100m
+        memory: 768Mi
+
+---
+# Demo 3: TenantDB (3 pods x 1 slot/pod = 3 slots for 4-tenant multiplexing)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-tenantdb
+  namespace: anything-but-agents
+  labels:
+    workload: tenantdb
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: tenantdb
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+---
+# Demo 4: Truman Show Honeypot (2 pods x 2 sandboxes/pod = 4 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-honeypot
+  namespace: anything-but-agents
+  labels:
+    workload: honeypot
+spec:
+  replicas: 2
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: honeypot
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+---
+# Demo 5: Time-Warp Raft Lab (3 pods x 3 actors/pod = 9 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-timewarp
+  namespace: anything-but-agents
+  labels:
+    workload: timewarp
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: timewarp
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi

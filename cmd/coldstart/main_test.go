@@ -774,6 +774,48 @@ func TestSubstrateColdGCSWake60QPSSpikeZeroShed(t *testing.T) {
 	}
 }
 
+func TestReclaimForeignWorkersSkipsDedicatedPools(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "suspended.log")
+	fakeAtePath := filepath.Join(tmpDir, "fake-kubectl-ate.sh")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"actors\" ]; then\n" +
+		"  echo 'ATESPACE NAME TEMPLATE STATE WORKER_POD WORKER_IPS'\n" +
+		"  echo 'anything-but-agents slide-15 anything-but-agents/slides ACTOR_STATE_RUNNING anything-but-agents/wp-slides-abc 10.120.0.10'\n" +
+		"  echo 'anything-but-agents d2d-player anything-but-agents/dungeon2d ACTOR_STATE_RUNNING anything-but-agents/wp-dungeon-xyz 10.120.0.20'\n" +
+		"  echo 'anything-but-agents clone-1 anything-but-agents/coldstart ACTOR_STATE_RUNNING anything-but-agents/wp-coldstart-123 10.120.0.30'\n" +
+		"  echo 'anything-but-agents coldstart-1 anything-but-agents/coldstart ACTOR_STATE_RUNNING anything-but-agents/wp-coldstart-456 10.120.0.31'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"suspend\" ] && [ \"$2\" = \"actor\" ]; then\n" +
+		"  echo \"$3\" >> \"" + logPath + "\"\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeAtePath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake kubectl-ate: %v", err)
+	}
+
+	gw := NewGatewayServer(GatewayConfig{
+		Mode:          "gateway",
+		Atespace:      "anything-but-agents",
+		KubectlAteBin: fakeAtePath,
+		CorpusDocs:    50,
+		SieveLimit:    50,
+	})
+	gw.reclaimForeignWorkers(context.Background())
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read suspended log: %v", err)
+	}
+	got := strings.Fields(string(raw))
+	if len(got) != 1 || got[0] != "clone-1" {
+		t.Fatalf("expected only wp-coldstart non-shard actor clone-1 to be suspended, got %v", got)
+	}
+}
+
+
 
 
 

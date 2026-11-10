@@ -20,7 +20,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -934,6 +937,64 @@ func TestAllEightFloorsFullyExplorableAndElevatedVisuals(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterAteBackendWorkerPoolIsolation(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "suspended.log")
+	fakeAtePath := filepath.Join(tmpDir, "fake-kubectl-ate.sh")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"workers\" ]; then\n" +
+		"  cat <<'EOF'\n" +
+		"{\"workers\":[\n" +
+		"  {\"labels\":{\"workload\":\"slides\"},\"workerPool\":\"wp-slides\",\"workerPod\":\"wp-slides-1\",\"nodeName\":\"node-a\",\"status\":{\"state\":\"WORKER_STATE_ACTIVE\",\"ips\":[\"10.120.0.10\"]}},\n" +
+		"  {\"labels\":{\"workload\":\"dungeon\"},\"workerPool\":\"wp-dungeon\",\"workerPod\":\"wp-dungeon-1\",\"nodeName\":\"node-a\",\"status\":{\"state\":\"WORKER_STATE_ACTIVE\",\"ips\":[\"10.120.1.21\"]}},\n" +
+		"  {\"labels\":{\"workload\":\"dungeon\"},\"workerPool\":\"wp-dungeon\",\"workerPod\":\"wp-dungeon-2\",\"nodeName\":\"node-b\",\"status\":{\"state\":\"WORKER_STATE_ACTIVE\",\"ips\":[\"10.120.2.22\"]}}\n" +
+		"]}\n" +
+		"EOF\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"actors\" ] && [ \"$5\" = \"-o\" ]; then\n" +
+		"  echo '{\"actors\":[]}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"actors\" ]; then\n" +
+		"  echo 'ATESPACE NAME TEMPLATE STATE WORKER_POD WORKER_IPS'\n" +
+		"  echo 'anything-but-agents slide-01 anything-but-agents/slides ACTOR_STATE_RUNNING anything-but-agents/wp-slides-1 10.120.0.10'\n" +
+		"  echo 'anything-but-agents coldstart-1 anything-but-agents/coldstart ACTOR_STATE_RUNNING anything-but-agents/wp-coldstart-1 10.120.0.30'\n" +
+		"  echo 'anything-but-agents d2d-other anything-but-agents/dungeon2d ACTOR_STATE_RUNNING anything-but-agents/wp-dungeon-1 10.120.1.21'\n" +
+		"  echo 'anything-but-agents d2d-keep anything-but-agents/dungeon2d ACTOR_STATE_RUNNING anything-but-agents/wp-dungeon-2 10.120.2.22'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"suspend\" ] && [ \"$2\" = \"actor\" ]; then\n" +
+		"  echo \"$3\" >> \"" + logPath + "\"\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeAtePath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake kubectl-ate: %v", err)
+	}
+
+	b := NewClusterAteBackend("anything-but-agents", "dungeon2d", "http://127.0.0.1:8000", "", fakeAtePath)
+	b.reclaimWorkerSlots(context.Background(), "d2d-keep")
+
+	rawLog, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read suspended log: %v", err)
+	}
+	suspended := strings.Fields(string(rawLog))
+	if !slices.Equal(suspended, []string{"d2d-other"}) {
+		t.Fatalf("expected only dungeon actor d2d-other to be suspended, got %v", suspended)
+	}
+
+	snap, err := b.DashboardState(context.Background())
+	if err != nil {
+		t.Fatalf("DashboardState: %v", err)
+	}
+	if len(snap.Workers) != 2 || snap.Workers[0].IP != "10.120.1.21" || snap.Workers[1].IP != "10.120.2.22" {
+		t.Fatalf("expected only wp-dungeon workers with status.ips hydrated, got %+v", snap.Workers)
+	}
+}
+
 
 
 

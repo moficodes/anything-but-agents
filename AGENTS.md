@@ -6,7 +6,7 @@ Guidance for AI coding agents working in `anything-but-agents`.
 
 This is the companion repository (Go demo services, Substrate manifests, live-stage runner, and talk outline) for the talk **"Running Anything *But* Agents on Agent Substrate"**.
 
-Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native, sub-second memory-checkpointing, wake-on-HTTP, gVisor-sandboxed actor runtime**. This project demonstrates its architectural primitives—and its failure modes—by multiplexing five non-agent workloads across a single 3-replica `WorkerPool`:
+Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native, sub-second memory-checkpointing, wake-on-HTTP, gVisor-sandboxed actor runtime**. This project demonstrates its architectural primitives—and its failure modes—across five non-agent workloads plus a slide deck, isolated onto dedicated per-workload `WorkerPool`s (`wp-slides`, `wp-dungeon`, `wp-coldstart`, `wp-tenantdb`, `wp-honeypot`, `wp-timewarp`) with multi-actor bin-packing per `ateworker-gvisor` pod:
 
 0. **`cmd/slides` ("Demo 0: Slides on Substrate")**: Presentation deck where 100% of individual slides (`slide-01` .. `slide-16`) are gVisor-sandboxed actors sleeping in GCS (`ActorTemplate/slides`), served over HTTPS at `abs.slides.${DEMO_DOMAIN}` (`SLIDES_DOMAIN`). Demonstrates per-slide in-memory state (`view_count`, `pod_ip_history`, and live presenter scratchpad RAM), `kubectl ate revert actor` memory rollback, asynchronous previous-slide suspension (`--mode=async`) leaving 0/3 worker slots held when idle, a clean `slide-01` welcome slide with the Yolo mascot followed by the Rebel cold open (`slide-02`), 5 rapid-fire demo setup/recap pairs (`slide-03` .. `slide-12`), an interactive 3-stage `3×3` interlocking jigsaw puzzle finale (`asd-puzzle`: `slide-13` Rebel Loot, `slide-14` Epiphany Flip, `slide-15` Complete 9-Piece Agent Board), cross-subdomain Google Sign-In SSO (`internal/presenterauth`), and a 1.5s offline cache fallback with top-right Moon/Sun Projector Light Mode toggle.
 1. **`cmd/dungeon` ("Look Ma, No Database")**: Zork-style RPG where 100% of state (`GameState`: HP, inventory, room items, monster HP, `pod_ip_history`) lives in Go heap RAM with zero database or disk I/O. Demonstrates `SNAPSHOT_FIDELITY_MEMORY` across pod migrations, save-scumming via `kubectl ate revert actor`, and timeline branching via `kubectl ate create tag` + `--tag`.
@@ -30,7 +30,7 @@ cmd/
 internal/
   presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
-  workerpool.yaml.tmpl          # K8s Namespace + 3-replica ate.dev/v1 WorkerPool
+  workerpool.yaml.tmpl          # K8s Namespace + 6 dedicated ate.dev/v1 WorkerPools (wp-slides..wp-timewarp)
   slides-template.yaml.tmpl     # ActorTemplate (Presentation deck slide actor, FULL pause, FULL commit)
   slides-gateway.yaml.tmpl      # K8s Secret, RBAC, Deployment & Service for slides-gateway
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)

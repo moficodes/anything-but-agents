@@ -900,6 +900,9 @@ func (b *ClusterAteBackend) ensureWorkerSlotForActor(ctx context.Context, target
 	targetOnWorker := false
 	var activeDBActors []clusterActorInfo
 	for _, a := range actors {
+		if !strings.HasPrefix(a.Name, "db-") {
+			continue
+		}
 		if a.WorkerIP != "" {
 			b.mu.Lock()
 			b.recordWorkerIPLocked(a.WorkerIP)
@@ -907,11 +910,6 @@ func (b *ClusterAteBackend) ensureWorkerSlotForActor(ctx context.Context, target
 		}
 		isActive := strings.Contains(a.State, "RUN") || strings.Contains(a.State, "PAUSE")
 		if !isActive {
-			continue
-		}
-		if !strings.HasPrefix(a.Name, "db-") {
-			// Suspend any active foreign demo actor so the shared 3-worker pool has capacity.
-			_, _ = b.runKubectlAte(ctx, "suspend", "actor", a.Name, "-a", b.atespace, "--mode=async")
 			continue
 		}
 		if a.Name == targetActor {
@@ -1253,6 +1251,9 @@ func (b *ClusterAteBackend) GetFleetState(ctx context.Context) (*FleetStateRespo
 
 	if err == nil && out != "" {
 		for _, a := range parseClusterActorsOutput(out) {
+			if !strings.HasPrefix(a.Name, "db-") {
+				continue
+			}
 			if a.WorkerIP != "" {
 				b.recordWorkerIPLocked(a.WorkerIP)
 			}

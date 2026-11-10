@@ -691,15 +691,47 @@ wait_for_template_golden_snapshot() {
   return 1
 }
 
-# Release all worker pods in the shared 3-replica WorkerPool by suspending any
-# RUNNING, RESUMING, or PAUSED actors in the atespace.
+WORKER_POOLS=(wp-slides wp-dungeon wp-coldstart wp-tenantdb wp-honeypot wp-timewarp)
+
+template_actor_pattern() {
+  case "${1:-}" in
+    slides)                   echo '^slide-' ;;
+    dungeon|dungeon2d)        echo '^(hero|d2d)-' ;;
+    coldstart)                echo '^(coldstart|clone)-' ;;
+    tenantdb|tenantdb-volumes) echo '^db-' ;;
+    honeypot)                 echo '^honeypot-' ;;
+    timewarp)                 echo '^raft-' ;;
+    *)                        echo '' ;;
+  esac
+}
+
+# Release worker slots by suspending any RUNNING, RESUMING, or PAUSED actors
+# in the atespace (optionally filtered by an awk actor-name regex in $1 so
+# per-demo operations do not disturb isolated sibling WorkerPools).
 free_workers() {
+  local name_regex="${1:-}"
   local active_actors
   active_actors="$(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null \
-    | awk '$4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_RESUMING" || $4 == "ACTOR_STATE_PAUSED" || ($1 != "ATESPACE" && $5 != "" && $5 != "<none>") {print $2}' || true)"
+    | awk -v pat="${name_regex}" '
+        ($4 == "ACTOR_STATE_RUNNING" || $4 == "ACTOR_STATE_RESUMING" || $4 == "ACTOR_STATE_PAUSED" || ($1 != "ATESPACE" && $5 != "" && $5 != "<none>")) &&
+        (pat == "" || $2 ~ pat) { print $2 }
+      ' || true)"
   for actor in ${active_actors}; do
     echo "Suspending active actor '${actor}' to free worker capacity..."
     kubectl ate suspend actor "${actor}" -a "${ATESPACE}" >/dev/null 2>&1 || true
+  done
+}
+
+ensure_workerpools_ready() {
+  if kubectl get workerpool anything-but-agents -n anything-but-agents >/dev/null 2>&1; then
+    echo "Migrating off legacy shared WorkerPool 'anything-but-agents'..."
+    free_workers
+    kubectl delete workerpool anything-but-agents -n anything-but-agents --ignore-not-found --wait=true
+  fi
+
+  envsubst < "${REPO_ROOT}/manifests/workerpool.yaml.tmpl" | kubectl apply -f -
+  for wp in "${WORKER_POOLS[@]}"; do
+    kubectl rollout status "deployment/${wp}" -n anything-but-agents --timeout=300s
   done
 }
 
@@ -711,7 +743,7 @@ ensure_template_ready() {
     echo "ActorTemplate '${tmpl}' Golden Snapshot is already READY."
     return 0
   fi
-  free_workers
+  free_workers "$(template_actor_pattern "${tmpl}")"
   kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   (
     cd "${REPO_ROOT}"
@@ -724,24 +756,14 @@ ensure_template_ready() {
 
 deploy_all() {
   detect_cluster_defaults
-  banner "Deploying 'Anything But Agents' WorkerPool & 6 ActorTemplates"
+  banner "Deploying 6 Isolated 'Anything But Agents' WorkerPools & 8 ActorTemplates"
 
   echo "Using BUCKET_NAME=${BUCKET_NAME}"
   echo "Using SUBSTRATE_VERSION=${SUBSTRATE_VERSION}"
   echo "Using ATEOM_GVISOR_IMAGE=${ATEOM_GVISOR_IMAGE}"
   echo "Using KO_DOCKER_REPO=${KO_DOCKER_REPO:-}"
 
-  if kubectl get workerpool anything-but-agents -n anything-but-agents >/dev/null 2>&1; then
-    local existing_sc
-    existing_sc="$(kubectl get workerpool anything-but-agents -n anything-but-agents -o jsonpath='{.spec.sandboxClasses[0].name}' 2>/dev/null || true)"
-    if [[ -z "${existing_sc}" ]]; then
-      echo "Replacing legacy pre-v0.5.0 WorkerPool anything-but-agents..."
-      kubectl delete workerpool anything-but-agents -n anything-but-agents --ignore-not-found
-    fi
-  fi
-
-  envsubst < "${REPO_ROOT}/manifests/workerpool.yaml.tmpl" | kubectl apply -f -
-  kubectl rollout status deployment/anything-but-agents -n anything-but-agents --timeout=300s
+  ensure_workerpools_ready
 
   ensure_presenter_auth
 
@@ -755,7 +777,7 @@ deploy_all() {
   for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
-    free_workers
+    free_workers "$(template_actor_pattern "${tmpl}")"
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
     (
       cd "${REPO_ROOT}"
@@ -766,6 +788,15 @@ deploy_all() {
     wait_for_template_golden_snapshot "${tmpl}"
   done
 
+  if kubectl get deployment coldstart-gateway -n anything-but-agents >/dev/null 2>&1; then
+    for i in 1 2 3; do
+      kubectl ate create actor "coldstart-${i}" -a "${ATESPACE}" --template coldstart 2>/dev/null || true
+      if [[ "${i}" -gt 1 ]]; then
+        kubectl ate suspend actor "coldstart-${i}" -a "${ATESPACE}" 2>/dev/null || true
+      fi
+    done
+  fi
+
   kubectl create secret generic payroll-vault-api \
     -n anything-but-agents \
     --from-literal=token="decoysupersecret-payroll-vault-2026" \
@@ -774,10 +805,14 @@ deploy_all() {
   resolve_kubectl_ate_image
   for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway; do
     if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
+      local gw_manifest="manifests/${gw}.yaml.tmpl"
+      if [[ "${gw}" == "coldstart-gateway" ]]; then
+        gw_manifest="manifests/coldstart-hpa.yaml.tmpl"
+      fi
       echo "Rebuilding & applying ${gw} deployment with ${SUBSTRATE_VERSION}..."
       (
         cd "${REPO_ROOT}"
-        envsubst < "manifests/${gw}.yaml.tmpl" \
+        envsubst < "${gw_manifest}" \
           | ko resolve --platform=linux/amd64 -f - \
           | kubectl apply -f - >/dev/null
       )
@@ -833,7 +868,6 @@ reset_act_resources() {
         ;;
     esac
   done
-  free_workers
 }
 
 act0_slides() {
@@ -892,7 +926,7 @@ act0_slides() {
   fi
 
   kill "${GATEWAY_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^slide-'
 }
 
 act1_dungeon() {
@@ -928,7 +962,7 @@ act1_dungeon() {
   run_cmd kubectl ate create actor hero-timeline-b -a "${ATESPACE}" --template dungeon --tag before-dragon
   run_cmd curl -fsS -H "ate-target-actor: ${ATESPACE}/hero-timeline-b" "${ROUTER_URL}/?cmd=move+armory"
 
-  free_workers
+  free_workers '^(hero|d2d)-'
 }
 
 act1b_dungeon2d() {
@@ -997,7 +1031,7 @@ act1b_dungeon2d() {
   fi
 
   kill "${GATEWAY_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^(hero|d2d)-'
 }
 
 deploy_slides_gateway() {
@@ -1063,7 +1097,7 @@ cleanup_slides_gateway() {
   kubectl delete deployment,service,secret,serviceaccount slides-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding slides-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding slides-gateway-ate-client --ignore-not-found
-  free_workers
+  free_workers '^slide-'
 }
 
 deploy_dungeon2d_gateway() {
@@ -1112,7 +1146,7 @@ cleanup_dungeon2d_gateway() {
   kubectl delete deployment,service,secret,serviceaccount dungeon2d-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding dungeon2d-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding dungeon2d-gateway-ate-client --ignore-not-found
-  free_workers
+  free_workers '^(hero|d2d)-'
 }
 
 deploy_coldstart_hpa() {
@@ -1120,7 +1154,7 @@ deploy_coldstart_hpa() {
   banner "Deploying Cold-Start HPA vs. Substrate Golden Snapshot HPA Comparison Stack"
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
-  free_workers
+  free_workers '^(coldstart|clone)-'
   ensure_presenter_auth
 
   # Ensure ActorTemplate coldstart is up to date
@@ -1175,7 +1209,7 @@ cleanup_coldstart_hpa() {
   kubectl delete role,rolebinding coldstart-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding coldstart-gateway-cluster coldstart-gateway-auth-delegator --ignore-not-found
   kubectl delete apiservice v1beta1.external.metrics.k8s.io --ignore-not-found
-  free_workers
+  free_workers '^(coldstart|clone)-'
 }
 
 act2_coldstart() {
@@ -1293,7 +1327,7 @@ act2_coldstart() {
   fi
 
   kill "${GATEWAY_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^(coldstart|clone)-'
 }
 
 act3_tenantdb() {
@@ -1378,7 +1412,7 @@ act3_tenantdb() {
   fi
 
   kill "${TENANTDB_GW_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^db-'
 }
 
 deploy_tenantdb_gateway() {
@@ -1387,7 +1421,7 @@ deploy_tenantdb_gateway() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   reset_act_resources db-acme db-globex db-initech db-umbrella
-  free_workers
+  free_workers '^db-'
   ensure_presenter_auth
 
   ensure_template_ready tenantdb
@@ -1425,7 +1459,7 @@ cleanup_tenantdb_gateway() {
   kubectl delete deployment,service,secret,serviceaccount tenantdb-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding tenantdb-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding tenantdb-gateway-ate-client --ignore-not-found
-  free_workers
+  free_workers '^db-'
 }
 
 act4_honeypot() {
@@ -1491,7 +1525,7 @@ act4_honeypot() {
   fi
 
   kill "${HONEYPOT_GW_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^honeypot-'
 }
 
 deploy_honeypot_gateway() {
@@ -1507,7 +1541,7 @@ deploy_honeypot_gateway() {
       kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
     done
   fi
-  free_workers
+  free_workers '^honeypot-'
   ensure_presenter_auth
 
   kubectl create secret generic payroll-vault-api \
@@ -1553,7 +1587,7 @@ cleanup_honeypot_gateway() {
   kubectl delete deployment,service,secret,serviceaccount honeypot-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding honeypot-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding honeypot-gateway-ate-client --ignore-not-found
-  free_workers
+  free_workers '^honeypot-'
 }
 
 act5_timewarp() {
@@ -1621,14 +1655,14 @@ act5_timewarp() {
   fi
 
   kill "${TIMEWARP_GW_PID:-}" 2>/dev/null || true
-  free_workers
+  free_workers '^raft-'
 }
 
 deploy_timewarp_gateway() {
   detect_cluster_defaults
   banner "Deploying In-Cluster Time-Warp Split-Brain & Dual-Clock Lab Gateway & LoadBalancer"
   reset_act_resources raft-leader-1 raft-node-1 raft-node-2 raft-node-3
-  free_workers
+  free_workers '^raft-'
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   ensure_presenter_auth
@@ -1733,7 +1767,7 @@ cleanup_timewarp_gateway() {
   kubectl delete deployment,service,secret,serviceaccount timewarp-gateway -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding timewarp-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding timewarp-gateway-ate-client --ignore-not-found
-  free_workers
+  free_workers '^raft-'
 }
 
 run_all_acts() {

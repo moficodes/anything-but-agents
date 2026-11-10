@@ -20,7 +20,7 @@ metadata:
   name: dungeon2d
 workerSelector:
   matchLabels:
-    workload: anything-but-agents
+    workload: dungeon
 containers:
 - name: dungeon2d
   image: ko://github.com/moficodes/anything-but-agents/cmd/dungeon2d
@@ -34,7 +34,7 @@ containers:
       port: 80
 resources:
   limits:
-    cpuMillicores: 1000
-    memoryBytes: 536870912 # 512Mi
+    cpuMillicores: 200
+    memoryBytes: 188743680 # 180Mi (fits 5 concurrent players per 1Gi wp-dungeon pod -> 15 slots)
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY

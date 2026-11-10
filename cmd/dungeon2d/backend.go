@@ -742,6 +742,8 @@ func (c *ClusterAteBackend) runAte(ctx context.Context, args ...string) ([]byte,
 	return stdout.Bytes(), nil
 }
 
+const deadActorAutoSuspendTTL = 60 * time.Second
+
 func (c *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor string) {
 	raw, err := c.runAte(ctx, "get", "actors", "-a", c.atespace)
 	if err != nil {
@@ -754,10 +756,33 @@ func (c *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor st
 		}
 		name := fields[1]
 		state := fields[3]
-		if name != keepActor && strings.Contains(state, "RUNNING") {
+		isDungeonActor := strings.HasPrefix(name, "d2d-") || strings.HasPrefix(name, "hero-")
+		if name != keepActor && isDungeonActor && strings.Contains(state, "RUNNING") {
 			_, _ = c.runAte(ctx, "suspend", "actor", name, "-a", c.atespace, "--mode=async")
 		}
 	}
+}
+
+func (c *ClusterAteBackend) scheduleDeadActorAutoSuspend(actorName string, deadStamp time.Time) {
+	time.AfterFunc(deadActorAutoSuspendTTL, func() {
+		c.mu.Lock()
+		rec := c.records[actorName]
+		stillIdleDead := rec != nil && rec.State == "ACTOR_STATE_RUNNING" && !rec.Session.Alive && rec.UpdatedAt.Equal(deadStamp)
+		c.mu.Unlock()
+		if !stillIdleDead {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if _, err := c.runAte(ctx, "suspend", "actor", actorName, "-a", c.atespace, "--mode=async"); err != nil {
+			return
+		}
+		c.mu.Lock()
+		if rec := c.records[actorName]; rec != nil && rec.UpdatedAt.Equal(deadStamp) {
+			rec.State = "ACTOR_STATE_SUSPENDED"
+		}
+		c.mu.Unlock()
+	})
 }
 
 func (c *ClusterAteBackend) callActorHTTP(ctx context.Context, actorName string, method, path string, payload any) (ActorResponse, int64, error) {
@@ -1062,10 +1087,15 @@ func (c *ClusterAteBackend) ExecuteMilestone(ctx context.Context, actorName stri
 	rec.AssignedWorkerPod = workerPod
 	rec.LastMessage = actorResp.Message
 	rec.LastEventType = actorResp.EventType
-	rec.UpdatedAt = time.Now().UTC()
+	updatedNow := time.Now().UTC()
+	rec.UpdatedAt = updatedNow
 	rec.Session = actorResp.Session
 	out := *rec
 	c.mu.Unlock()
+
+	if newState == "ACTOR_STATE_RUNNING" && !out.Session.Alive {
+		c.scheduleDeadActorAutoSuspend(actorName, updatedNow)
+	}
 
 	c.hub.publish(TelemetryEvent{
 		Type:        evType,
@@ -1298,25 +1328,40 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 	c.mu.Unlock()
 
 	if rawWorkers, err := c.runAte(ctx, "get", "workers", "-o", "json"); err == nil {
+		type workerItem struct {
+			IP         string            `json:"ip"`
+			IPs        []string          `json:"ips"`
+			Labels     map[string]string `json:"labels"`
+			NodeName   string            `json:"nodeName"`
+			WorkerPool string            `json:"workerPool"`
+			WorkerPod  string            `json:"workerPod"`
+			Status     struct {
+				State string   `json:"state"`
+				IPs   []string `json:"ips"`
+			} `json:"status"`
+		}
 		var parsed struct {
-			Workers []struct {
-				IP        string            `json:"ip"`
-				IPs       []string          `json:"ips"`
-				Labels    map[string]string `json:"labels"`
-				NodeName  string            `json:"nodeName"`
-				WorkerPod string            `json:"workerPod"`
-				Status    struct {
-					State string `json:"state"`
-				} `json:"status"`
-			} `json:"workers"`
+			Workers []workerItem `json:"workers"`
 		}
 		if json.Unmarshal(rawWorkers, &parsed) == nil && len(parsed.Workers) > 0 {
+			filtered := make([]workerItem, 0, len(parsed.Workers))
+			for _, w := range parsed.Workers {
+				if w.Labels["workload"] == "dungeon" || w.WorkerPool == "wp-dungeon" {
+					filtered = append(filtered, w)
+				}
+			}
+			if len(filtered) == 0 {
+				filtered = parsed.Workers
+			}
 			c.mu.Lock()
-			slots := make([]WorkerSlot, 0, len(parsed.Workers))
-			for idx, w := range parsed.Workers {
+			slots := make([]WorkerSlot, 0, len(filtered))
+			for idx, w := range filtered {
 				ip := w.IP
 				if ip == "" && len(w.IPs) > 0 {
 					ip = w.IPs[0]
+				}
+				if ip == "" && len(w.Status.IPs) > 0 {
+					ip = w.Status.IPs[0]
 				}
 				slot := WorkerSlot{
 					Index:     idx + 1,

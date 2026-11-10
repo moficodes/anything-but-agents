@@ -23,7 +23,7 @@ metadata:
   name: coldstart
 workerSelector:
   matchLabels:
-    workload: anything-but-agents
+    workload: coldstart
 containers:
 - name: coldstart
   image: ko://github.com/moficodes/anything-but-agents/cmd/coldstart

@@ -22,7 +22,7 @@ metadata:
   name: tenantdb-volumes
 workerSelector:
   matchLabels:
-    workload: anything-but-agents
+    workload: tenantdb
 containers:
 - name: tenantdb
   image: ko://github.com/moficodes/anything-but-agents/cmd/tenantdb
@@ -42,7 +42,7 @@ containers:
 resources:
   limits:
     cpuMillicores: 1000
-    memoryBytes: 536870912 # 512Mi
+    memoryBytes: 335544320 # 320Mi (1 dedicated slot per 512Mi wp-tenantdb pod)
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_VOLUMES
 volumes:

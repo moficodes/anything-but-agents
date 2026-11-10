@@ -20,7 +20,7 @@ metadata:
   name: slides
 workerSelector:
   matchLabels:
-    workload: anything-but-agents
+    workload: slides
 containers:
 - name: slides
   image: ko://github.com/moficodes/anything-but-agents/cmd/slides
@@ -34,7 +34,7 @@ containers:
       port: 80
 resources:
   limits:
-    cpuMillicores: 1000
-    memoryBytes: 536870912 # 512Mi
+    cpuMillicores: 250
+    memoryBytes: 134217728 # 128Mi (fits 3 concurrent slides per 512Mi wp-slides pod)
 snapshotConfig:
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY

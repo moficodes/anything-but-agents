@@ -702,7 +702,6 @@ func (b *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor st
 	if err != nil {
 		return
 	}
-	var foreignActors []string
 	var honeypotActors []string
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -711,22 +710,15 @@ func (b *ClusterAteBackend) reclaimWorkerSlots(ctx context.Context, keepActor st
 		}
 		name := fields[1]
 		state := fields[3]
-		if name == keepActor {
+		if name == keepActor || !strings.HasPrefix(name, "honeypot-") {
 			continue
 		}
 		if state != "ACTOR_STATE_RUNNING" && state != "ACTOR_STATE_PAUSED" {
 			continue
 		}
-		if strings.HasPrefix(name, "honeypot-") {
-			honeypotActors = append(honeypotActors, name)
-		} else {
-			foreignActors = append(foreignActors, name)
-		}
+		honeypotActors = append(honeypotActors, name)
 	}
-	for _, name := range foreignActors {
-		_, _ = b.runKubectlAte(ctx, "suspend", "actor", name, "-a", b.atespace, "--mode=async")
-	}
-	if len(foreignActors) == 0 && len(honeypotActors) > 0 {
+	if len(honeypotActors) > 0 {
 		victim := honeypotActors[0]
 		_, _ = b.runKubectlAte(ctx, "suspend", "actor", victim, "-a", b.atespace, "--mode=async")
 	}
