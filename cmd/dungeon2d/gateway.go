@@ -300,6 +300,23 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		writeJSON(w, http.StatusOK, rec)
 	}))
 
+	mux.HandleFunc("/api/dashboard/reset", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+			return
+		}
+		deleted, err := g.backend.ResetAllSessions(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"deleted":   deleted,
+			"remaining": 0,
+			"status":    "ok",
+		})
+	}))
+
 	mux.HandleFunc("/api/dashboard/state", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {
 		snap, err := g.backend.DashboardState(r.Context())
 		if err != nil {

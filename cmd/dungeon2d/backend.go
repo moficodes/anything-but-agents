@@ -111,6 +111,7 @@ type SubstrateBackend interface {
 	RevertSession(ctx context.Context, actorName string, targetVersion ...int) (SessionRecord, error)
 	ForkSession(ctx context.Context, sourceActor, newActor string) (SessionRecord, error)
 	DeleteSession(ctx context.Context, actorName string) error
+	ResetAllSessions(ctx context.Context) (int, error)
 	DashboardState(ctx context.Context) (DashboardSnapshot, error)
 	SubscribeEvents() (chan TelemetryEvent, func())
 }
@@ -200,6 +201,35 @@ func (h *eventHub) snapshot() ([]TelemetryEvent, int, int, int) {
 	out := make([]TelemetryEvent, len(h.events))
 	copy(out, h.events)
 	return out, h.totalSaves, h.totalRevert, h.totalForks
+}
+
+func (h *eventHub) reset(deletedCount int) {
+	ev := TelemetryEvent{
+		Timestamp: time.Now().UTC(),
+		Type:      "RESET",
+		ActorName: "all",
+		HeroName:  "stage",
+		Message:   fmt.Sprintf("Reset Dungeon2D stage to 0 actors (%d sessions and snapshots purged).", deletedCount),
+	}
+	h.mu.Lock()
+	h.nextID++
+	ev.ID = h.nextID
+	h.events = []TelemetryEvent{ev}
+	h.totalSaves = 0
+	h.totalRevert = 0
+	h.totalForks = 0
+	subs := make([]chan TelemetryEvent, 0, len(h.subscribers))
+	for ch := range h.subscribers {
+		subs = append(subs, ch)
+	}
+	h.mu.Unlock()
+
+	for _, ch := range subs {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
 }
 
 // LocalSimulatorBackend emulates the 3-replica Agent Substrate WorkerPool,
@@ -549,6 +579,25 @@ func (b *LocalSimulatorBackend) DeleteSession(_ context.Context, actorName strin
 	return nil
 }
 
+func (b *LocalSimulatorBackend) ResetAllSessions(_ context.Context) (int, error) {
+	b.mu.Lock()
+	deleted := len(b.records)
+	b.records = make(map[string]*SessionRecord)
+	b.liveActors = make(map[string]*ActorSession)
+	b.gcsSnapshots = make(map[string]*ActorSession)
+	b.tagSnapshots = make(map[string]*ActorSession)
+	for i := range b.workers {
+		b.workers[i].ActiveActor = ""
+		b.workers[i].ActiveHero = ""
+		b.workers[i].ActiveAction = ""
+		b.workers[i].BusyUntil = time.Time{}
+		b.workers[i].WakeCount = 0
+	}
+	b.mu.Unlock()
+	b.hub.reset(deleted)
+	return deleted, nil
+}
+
 func (b *LocalSimulatorBackend) DashboardState(_ context.Context) (DashboardSnapshot, error) {
 	b.mu.Lock()
 	now := time.Now().UTC()
@@ -621,6 +670,7 @@ type ClusterAteBackend struct {
 	records     map[string]*SessionRecord
 	workers     []WorkerSlot
 	lastSync    time.Time
+	resetting   bool
 	hub         *eventHub
 }
 
@@ -1318,9 +1368,109 @@ func (c *ClusterAteBackend) DeleteSession(ctx context.Context, actorName string)
 	return nil
 }
 
+func (c *ClusterAteBackend) ResetAllSessions(ctx context.Context) (int, error) {
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
+	defer cancel()
+
+	actorSet := make(map[string]struct{})
+	c.mu.Lock()
+	c.resetting = true
+	for name := range c.records {
+		if strings.HasPrefix(name, "d2d-") {
+			actorSet[name] = struct{}{}
+		}
+	}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.resetting = false
+		c.mu.Unlock()
+	}()
+
+	if rawActors, err := c.runAte(bgCtx, "get", "actors", "-a", c.atespace, "-o", "json"); err == nil {
+		var parsed struct {
+			Actors []struct {
+				ActorTemplate struct {
+					Name string `json:"name"`
+				} `json:"actorTemplate"`
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+			} `json:"actors"`
+		}
+		if json.Unmarshal(rawActors, &parsed) == nil {
+			for _, a := range parsed.Actors {
+				name := a.Metadata.Name
+				if strings.HasPrefix(name, "d2d-") || a.ActorTemplate.Name == c.template {
+					actorSet[name] = struct{}{}
+				}
+			}
+		}
+	} else if rawLines, lineErr := c.runAte(bgCtx, "get", "actors", "-a", c.atespace); lineErr == nil {
+		for _, line := range strings.Split(string(rawLines), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && strings.HasPrefix(fields[1], "d2d-") {
+				actorSet[fields[1]] = struct{}{}
+			}
+		}
+	}
+
+	var tagNames []string
+	if rawTags, err := c.runAte(bgCtx, "get", "tags", "-a", c.atespace); err == nil {
+		for _, line := range strings.Split(string(rawTags), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && strings.HasPrefix(fields[1], "tag-d2d-") {
+				tagNames = append(tagNames, fields[1])
+			}
+		}
+	}
+
+	actorsToDelete := make([]string, 0, len(actorSet))
+	for name := range actorSet {
+		actorsToDelete = append(actorsToDelete, name)
+	}
+
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for _, actorName := range actorsToDelete {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			_, _ = c.runAte(bgCtx, "delete", "actor", name, "-a", c.atespace)
+		}(actorName)
+	}
+	for _, tagName := range tagNames {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			_, _ = c.runAte(bgCtx, "delete", "tag", tag, "-a", c.atespace)
+		}(tagName)
+	}
+	wg.Wait()
+
+	c.mu.Lock()
+	c.records = make(map[string]*SessionRecord)
+	for i := range c.workers {
+		c.workers[i].ActiveActor = ""
+		c.workers[i].ActiveHero = ""
+		c.workers[i].ActiveAction = ""
+		c.workers[i].BusyUntil = time.Time{}
+		c.workers[i].WakeCount = 0
+	}
+	c.lastSync = time.Now()
+	c.mu.Unlock()
+
+	c.hub.reset(len(actorsToDelete))
+	return len(actorsToDelete), nil
+}
+
 func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 	c.mu.Lock()
-	if time.Since(c.lastSync) < 3*time.Second {
+	if c.resetting || time.Since(c.lastSync) < 3*time.Second {
 		c.mu.Unlock()
 		return
 	}
@@ -1415,6 +1565,10 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 		}
 		if json.Unmarshal(rawActors, &parsed) == nil {
 			c.mu.Lock()
+			if c.resetting {
+				c.mu.Unlock()
+				return
+			}
 			for _, a := range parsed.Actors {
 				if a.ActorTemplate.Name != c.template && !strings.HasPrefix(a.Metadata.Name, "d2d-") {
 					continue

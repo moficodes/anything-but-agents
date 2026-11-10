@@ -1135,6 +1135,32 @@ deploy_dungeon2d_gateway() {
   echo ""
 }
 
+reset_dungeon2d_actors() {
+  detect_cluster_defaults
+  banner "Resetting Dungeon 2D Actors & Snapshots Back to 0"
+
+  local presenter_token=""
+  presenter_token="$(kubectl get secret dungeon2d-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  if [[ -z "${presenter_token}" ]]; then
+    presenter_token="$(kubectl get secret presenter-auth -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  fi
+
+  local lb_ip=""
+  lb_ip="$(kubectl get svc dungeon2d-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+  if [[ -n "${presenter_token}" && -n "${lb_ip}" ]] && curl -fsS -X POST -H "X-Presenter-Key: ${presenter_token}" "http://${lb_ip}/api/dashboard/reset" 2>/dev/null; then
+    echo ""
+    return 0
+  fi
+
+  for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^d2d-/ {print $2}' || true); do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  for tag in $(kubectl ate get tags -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^tag-d2d-/ {print $2}' || true); do
+    kubectl ate delete tag "${tag}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  echo "Purged all d2d-* actors and tag-d2d-* tags."
+}
+
 cleanup_dungeon2d_gateway() {
   banner "Cleaning up Dungeon 2D Gateway Deployment & Actors"
   for act in $(kubectl ate get actors -a "${ATESPACE}" 2>/dev/null | awk '$2 ~ /^d2d-/ {print $2}' || true); do
@@ -1814,6 +1840,7 @@ case "${1:-}" in
   deploy-slides)         deploy_slides_gateway ;;
   cleanup-slides)        cleanup_slides_gateway ;;
   deploy-dungeon2d)      deploy_dungeon2d_gateway ;;
+  reset-dungeon2d)       reset_dungeon2d_actors ;;
   cleanup-dungeon2d)     cleanup_dungeon2d_gateway ;;
   deploy-coldstart-hpa)  deploy_coldstart_hpa ;;
   cleanup-coldstart-hpa) cleanup_coldstart_hpa ;;
@@ -1835,7 +1862,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

@@ -439,6 +439,52 @@ func TestGatewayAndDashboardIntegration(t *testing.T) {
 	if dash.Stats.TotalSessions < 2 || dash.Stats.Victories < 1 || dash.Stats.TotalReverts < 1 {
 		t.Fatalf("expected bot-knight victory & revert in dashboard stats, got %+v", dash.Stats)
 	}
+
+	// 7. Verify /api/dashboard/reset requires presenter auth + POST, and resets actors & stats back to 0
+	unauthReset := postJSON("/api/dashboard/reset", map[string]any{}, false)
+	unauthReset.Body.Close()
+	if unauthReset.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from unauthenticated POST /api/dashboard/reset, got %d", unauthReset.StatusCode)
+	}
+
+	getResetReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/reset", nil)
+	getResetReq.Header.Set(PresenterHeaderName, gw.PresenterKey())
+	getResetResp, err := http.DefaultClient.Do(getResetReq)
+	if err != nil {
+		t.Fatalf("GET /api/dashboard/reset failed: %v", err)
+	}
+	getResetResp.Body.Close()
+	if getResetResp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 from GET /api/dashboard/reset, got %d", getResetResp.StatusCode)
+	}
+
+	okReset := postJSON("/api/dashboard/reset", map[string]any{}, true)
+	var resetRes struct {
+		Deleted   int `json:"deleted"`
+		Remaining int `json:"remaining"`
+	}
+	if err := json.NewDecoder(okReset.Body).Decode(&resetRes); err != nil {
+		t.Fatalf("decode reset response: %v", err)
+	}
+	okReset.Body.Close()
+	if okReset.StatusCode != http.StatusOK || resetRes.Deleted < 2 || resetRes.Remaining != 0 {
+		t.Fatalf("expected >=2 deleted and 0 remaining on reset, got status=%d res=%+v", okReset.StatusCode, resetRes)
+	}
+
+	afterReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/state", nil)
+	afterReq.Header.Set(PresenterHeaderName, gw.PresenterKey())
+	afterResp, err := http.DefaultClient.Do(afterReq)
+	if err != nil {
+		t.Fatalf("GET /api/dashboard/state after reset failed: %v", err)
+	}
+	var afterDash DashboardSnapshot
+	if err := json.NewDecoder(afterResp.Body).Decode(&afterDash); err != nil {
+		t.Fatalf("decode dashboard state after reset: %v", err)
+	}
+	afterResp.Body.Close()
+	if afterDash.Stats.TotalSessions != 0 || afterDash.Stats.TotalSaves != 0 || afterDash.Stats.TotalReverts != 0 || afterDash.Stats.Victories != 0 {
+		t.Fatalf("expected all session & event counters reset to 0, got %+v", afterDash.Stats)
+	}
 }
 
 func TestWorldStateSaveRevertForkAndAsymmetricClasses(t *testing.T) {
@@ -992,6 +1038,60 @@ func TestClusterAteBackendWorkerPoolIsolation(t *testing.T) {
 	}
 	if len(snap.Workers) != 2 || snap.Workers[0].IP != "10.120.1.21" || snap.Workers[1].IP != "10.120.2.22" {
 		t.Fatalf("expected only wp-dungeon workers with status.ips hydrated, got %+v", snap.Workers)
+	}
+}
+
+func TestClusterAteBackendResetAllSessionsOnlyDeletesDungeon2D(t *testing.T) {
+	tmpDir := t.TempDir()
+	delLogPath := filepath.Join(tmpDir, "deleted.log")
+	fakeAtePath := filepath.Join(tmpDir, "fake-kubectl-ate.sh")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"actors\" ] && [ \"$5\" = \"-o\" ]; then\n" +
+		"  cat <<'EOF'\n" +
+		"{\"actors\":[\n" +
+		"  {\"actorTemplate\":{\"name\":\"slides\"},\"metadata\":{\"name\":\"slide-01\"}},\n" +
+		"  {\"actorTemplate\":{\"name\":\"coldstart\"},\"metadata\":{\"name\":\"coldstart-1\"}},\n" +
+		"  {\"actorTemplate\":{\"name\":\"dungeon2d\"},\"metadata\":{\"name\":\"d2d-alpha\"}},\n" +
+		"  {\"actorTemplate\":{\"name\":\"dungeon2d\"},\"metadata\":{\"name\":\"d2d-bravo\"}}\n" +
+		"]}\n" +
+		"EOF\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"get\" ] && [ \"$2\" = \"tags\" ]; then\n" +
+		"  echo 'ATESPACE NAME AGE'\n" +
+		"  echo 'anything-but-agents tag-d2d-alpha-f4-1234 5m'\n" +
+		"  echo 'anything-but-agents tag-honeypot-forensic 5m'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$1\" = \"delete\" ]; then\n" +
+		"  echo \"$2:$3\" >> \"" + delLogPath + "\"\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeAtePath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake kubectl-ate: %v", err)
+	}
+
+	b := NewClusterAteBackend("anything-but-agents", "dungeon2d", "http://127.0.0.1:8000", "", fakeAtePath)
+	b.records["d2d-charlie"] = &SessionRecord{ActorName: "d2d-charlie"}
+
+	deleted, err := b.ResetAllSessions(context.Background())
+	if err != nil {
+		t.Fatalf("ResetAllSessions: %v", err)
+	}
+	if deleted != 3 {
+		t.Fatalf("expected 3 d2d-* actors deleted, got %d", deleted)
+	}
+
+	raw, err := os.ReadFile(delLogPath)
+	if err != nil {
+		t.Fatalf("read deleted log: %v", err)
+	}
+	items := strings.Fields(string(raw))
+	slices.Sort(items)
+	want := []string{"actor:d2d-alpha", "actor:d2d-bravo", "actor:d2d-charlie", "tag:tag-d2d-alpha-f4-1234"}
+	if !slices.Equal(items, want) {
+		t.Fatalf("expected exact deletion set %v, got %v", want, items)
 	}
 }
 

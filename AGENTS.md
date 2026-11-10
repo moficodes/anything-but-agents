@@ -80,6 +80,7 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh deploy-slides         # Deploy interactive Presentation Deck Gateway (prints presenter auth URL)
    ./hack/stage-demo.sh cleanup-slides        # Clean up Slides Gateway deployment/secret/actors
    ./hack/stage-demo.sh deploy-dungeon2d      # Deploy interactive 2D Dungeon Gateway (prints presenter auth URL)
+   ./hack/stage-demo.sh reset-dungeon2d       # Purge all d2d-* actors & tags back to 0 via Dungeon 2D Gateway
    ./hack/stage-demo.sh cleanup-dungeon2d     # Clean up 2D Dungeon Gateway deployment/secret/actors/tags
    ./hack/stage-demo.sh deploy-coldstart-hpa  # Deploy K8s vs Substrate HPA QPS comparison stack & gateway
    ./hack/stage-demo.sh cleanup-coldstart-hpa # Clean up Cold-Start HPA comparison stack & actors

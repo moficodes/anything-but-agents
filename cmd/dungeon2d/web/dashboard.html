@@ -77,6 +77,19 @@
       background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
       color: #fffbeb;
     }
+    body.light-mode .btn-danger {
+      color: #9f1239;
+    }
+    .btn-danger.armed,
+    body.light-mode .btn-danger.armed {
+      background: linear-gradient(180deg, #9f1239 0%, #6b0923 100%);
+      border-top-color: #fb7185;
+      border-left-color: #fb7185;
+      border-right-color: #3a0412;
+      border-bottom-color: #3a0412;
+      color: #fff1f2;
+      text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+    }
     .theme-seg {
       display: inline-flex;
       align-items: center;
@@ -684,6 +697,7 @@
     .feed-item.ev-REVERT { border-left-color: #b45309; background: rgba(245, 158, 11, 0.18); }
     .feed-item.ev-FORK { border-left-color: #6b21a8; }
     .feed-item.ev-VICTORY { border-left-color: #065f46; }
+    .feed-item.ev-RESET { border-left-color: #be123c; background: rgba(190, 18, 60, 0.14); }
     .feed-meta {
       display: flex;
       justify-content: space-between;
@@ -733,6 +747,10 @@
       <button class="btn btn-primary" onclick="spawnDemoBot('full-demo')">
         <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Spawn Demo Bot
+      </button>
+      <button id="btnResetAll" type="button" class="btn btn-danger" onclick="handleResetAllClick()" title="Purge all Dungeon2D actors and reset back to 0">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        <span id="btnResetAllLabel">Reset Actors</span>
       </button>
       <a class="btn" href="/play" target="_blank">
         <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
@@ -943,7 +961,10 @@
     }
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeQrModal();
+      if (e.key === "Escape") {
+        closeQrModal();
+        disarmResetButton();
+      }
     });
 
     const SVG_ICONS = {
@@ -959,8 +980,70 @@
     };
 
     const selectedVersionByActor = {};
+    let currentSessionCount = 0;
+    let resetArmed = false;
+    let resetBusy = false;
+    let resetArmTimer = null;
+
+    function disarmResetButton() {
+      if (resetArmTimer) {
+        clearTimeout(resetArmTimer);
+        resetArmTimer = null;
+      }
+      resetArmed = false;
+      const btn = document.getElementById("btnResetAll");
+      const lbl = document.getElementById("btnResetAllLabel");
+      if (btn) btn.classList.remove("armed");
+      if (lbl && !resetBusy) lbl.textContent = "Reset Actors";
+    }
+
+    async function handleResetAllClick() {
+      if (resetBusy) return;
+      const btn = document.getElementById("btnResetAll");
+      const lbl = document.getElementById("btnResetAllLabel");
+      if (currentSessionCount > 0 && !resetArmed) {
+        resetArmed = true;
+        if (btn) btn.classList.add("armed");
+        if (lbl) lbl.textContent = `Confirm Reset (${currentSessionCount})?`;
+        if (resetArmTimer) clearTimeout(resetArmTimer);
+        resetArmTimer = setTimeout(disarmResetButton, 4000);
+        return;
+      }
+
+      if (resetArmTimer) {
+        clearTimeout(resetArmTimer);
+        resetArmTimer = null;
+      }
+      resetArmed = false;
+      resetBusy = true;
+      if (btn) {
+        btn.classList.remove("armed");
+        btn.disabled = true;
+      }
+      if (lbl) lbl.textContent = currentSessionCount > 0 ? `Purging ${currentSessionCount}...` : "Resetting...";
+
+      try {
+        await fetch("/api/dashboard/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        for (const k of Object.keys(selectedVersionByActor)) {
+          delete selectedVersionByActor[k];
+        }
+        await refreshState();
+      } finally {
+        resetBusy = false;
+        if (btn) btn.disabled = false;
+        if (lbl) lbl.textContent = "Reset Actors";
+      }
+    }
 
     function renderDashboard(snap) {
+      currentSessionCount = (snap.stats && snap.stats.total_sessions) || 0;
+      if (resetArmed && !resetBusy) {
+        const lbl = document.getElementById("btnResetAllLabel");
+        if (lbl) lbl.textContent = `Confirm Reset (${currentSessionCount})?`;
+      }
       document.getElementById("modeBadge").textContent = (snap.mode || "cluster-ate").toUpperCase();
       document.getElementById("kpiTotal").textContent = snap.stats.total_sessions;
       document.getElementById("kpiSuspended").textContent = snap.stats.suspended_actors;
