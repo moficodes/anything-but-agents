@@ -1,0 +1,35 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Demo 7: Deny-by-default EgressPolicy + MITM Egress Credential Injection (ate-secret://) + Actor JWT.
+# In gVisor actor sandboxes (nameserver 169.254.17.1), outbound URLs must use full .svc.cluster.local FQDNs.
+# Outbound traffic to the Payment Vault replaces Authorization header with real K8s Secret token
+# and injects a cryptographic Actor JWT (actorJwt effect).
+metadata:
+  atespace: anything-but-agents
+  name: default
+rules:
+- http:
+    hostnames:
+    - billing-gateway.anything-but-agents.svc.cluster.local
+    effects:
+      replaceHeaders:
+      - header: Authorization
+        prefix: "Bearer "
+        credentialUri: ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token
+      - header: X-Actor-Identity-JWT
+        actorJwt:
+          audiences:
+          - "https://billing-gateway.anything-but-agents.svc.cluster.local"
+          expirationSeconds: 900

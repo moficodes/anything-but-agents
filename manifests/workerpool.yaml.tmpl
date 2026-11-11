@@ -176,3 +176,28 @@ spec:
       requests:
         cpu: 100m
         memory: 512Mi
+
+---
+# Demo 7: 30-Day Sleeping Billing & Escrow Engine (2 pods x 2 concurrent actors/pod = 4 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-billing
+  namespace: anything-but-agents
+  labels:
+    workload: billing
+spec:
+  replicas: 2
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: billing
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi

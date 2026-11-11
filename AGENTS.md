@@ -15,6 +15,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Multi-mode binary (`--mode=actor|gateway|local`) combining a single-tenant embedded database (`DurableDir` `/data/wal.jsonl` + lazy `16.0 MB` Hot RAM Buffer Pool & Materialized View) with a **Storage & Memory Tiering X-Ray Console** (`:8086` / `/dashboard`). Demonstrates memory vs. volume snapshot fidelity (`SNAPSHOT_FIDELITY_MEMORY` keeping the `16.0 MB` RAM Buffer Pool hot on `suspend --mode=async` vs. `SNAPSHOT_FIDELITY_VOLUMES` / pre-commit RAM discard committing only `/data/wal.jsonl` to GCS on `suspend --mode=sync` for `99.997%` bandwidth savings + `<1ms` WAL replay on wakeup), 4 customer databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) multiplexing across the 3-replica `WorkerPool` with zero `WHERE tenant_id` queries, and 1-command GDPR Article 17 deletion (`kubectl ate delete actor ...`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`sandboxClass: gvisor`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
+7. **`cmd/billing` ("Demo 7: The 30-Day Sleeping Billing & Escrow Engine")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **`ate-secret://` Egress Credential Injection**, **`actorJwt` identity minting**, and **zero-downtime secret rotation across frozen GCS memory snapshots** (`SNAPSHOT_FIDELITY_MEMORY`) for enterprise recurring subscriptions (`sub-acme`, `sub-globex`, `sub-initech`) sleeping in GCS between 30-day turns with zero database or disk I/O, paired with the **Payment Vault & Egress Credential X-Ray Console** (`:8088` / `/dashboard`, with icon-only Moon/Sun Projector Light Mode toggle).
 
 ## Repository Structure
 
@@ -27,6 +28,7 @@ cmd/
   tenantdb/                     # Demo 3: Per-tenant embedded DB (DurableDir + 16MB Buffer Pool + Storage X-Ray Gateway)
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
   timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
+  billing/                      # Demo 7: 30-Day Sleeping Billing & Escrow Engine (actor, gateway, local)
 internal/
   presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
@@ -44,6 +46,9 @@ manifests/
   honeypot-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for honeypot-gateway
   timewarp-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, heartbeat/lease anti-pattern)
   timewarp-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for timewarp-gateway
+  billing-template.yaml.tmpl    # ActorTemplate (FULL pause/commit, ate-secret:// egress injection)
+  billing-egress-policy.yaml.tmpl # EgressPolicy (replaceHeaders Authorization + actorJwt)
+  billing-gateway.yaml.tmpl     # K8s RBAC, Deployment & LoadBalancer Service for billing-gateway
   gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
