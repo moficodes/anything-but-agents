@@ -176,3 +176,28 @@ spec:
       requests:
         cpu: 100m
         memory: 512Mi
+
+---
+# Demo 8: Canvas Collaborative Document Rooms (3 pods x 3 rooms/pod = 9 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-canvas
+  namespace: anything-but-agents
+  labels:
+    workload: canvas
+spec:
+  replicas: 3
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: canvas
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi

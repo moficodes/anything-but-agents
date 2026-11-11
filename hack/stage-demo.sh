@@ -691,7 +691,7 @@ wait_for_template_golden_snapshot() {
   return 1
 }
 
-WORKER_POOLS=(wp-slides wp-dungeon wp-coldstart wp-tenantdb wp-honeypot wp-timewarp)
+WORKER_POOLS=(wp-slides wp-dungeon wp-coldstart wp-tenantdb wp-honeypot wp-timewarp wp-canvas)
 
 template_actor_pattern() {
   case "${1:-}" in
@@ -701,6 +701,7 @@ template_actor_pattern() {
     tenantdb|tenantdb-volumes) echo '^db-' ;;
     honeypot)                 echo '^honeypot-' ;;
     timewarp)                 echo '^raft-' ;;
+    canvas)                   echo '^doc-' ;;
     *)                        echo '' ;;
   esac
 }
@@ -769,12 +770,12 @@ deploy_all() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
 
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp canvas; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
     free_workers "$(template_actor_pattern "${tmpl}")"
@@ -1807,6 +1808,52 @@ run_all_acts() {
   act5_timewarp
 }
 
+deploy_canvas_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Canvas Collaborative Document Rooms Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  reset_act_resources doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem
+  free_workers '^doc-'
+  ensure_presenter_auth
+
+  ensure_template_ready canvas
+  resolve_kubectl_ate_image
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/canvas-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/canvas-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc canvas-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Canvas Document Rooms (HTTPS) : https://canvas.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret canvas-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Canvas Document Rooms (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret canvas-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+}
+
+cleanup_canvas_gateway() {
+  banner "Cleaning up Canvas Gateway Deployment & Actors"
+  for act in doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount canvas-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding canvas-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding canvas-gateway-ate-client --ignore-not-found
+  free_workers '^doc-'
+}
+
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_slides_gateway
@@ -1815,9 +1862,10 @@ cleanup_all() {
   cleanup_tenantdb_gateway
   cleanup_honeypot_gateway
   cleanup_timewarp_gateway
+  cleanup_canvas_gateway
   cleanup_gateway_tls
   kubectl delete configmap,secret presenter-auth -n anything-but-agents --ignore-not-found
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16; do
@@ -1826,7 +1874,7 @@ cleanup_all() {
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
   kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
   kubectl delete secret payroll-vault-api -n anything-but-agents --ignore-not-found
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp canvas; do
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete atespace "${ATESPACE}" 2>/dev/null || true
@@ -1850,6 +1898,8 @@ case "${1:-}" in
   cleanup-honeypot)      cleanup_honeypot_gateway ;;
   deploy-timewarp)       deploy_timewarp_gateway ;;
   cleanup-timewarp)      cleanup_timewarp_gateway ;;
+  deploy-canvas)         deploy_canvas_gateway ;;
+  cleanup-canvas)        cleanup_canvas_gateway ;;
   deploy-gateway-tls)    deploy_gateway_tls ;;
   cleanup-gateway-tls)   cleanup_gateway_tls ;;
   run-all)               run_all_acts ;;
@@ -1862,7 +1912,7 @@ case "${1:-}" in
   act5-timewarp)         act5_timewarp ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-canvas|cleanup-canvas|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|cleanup}" >&2
     exit 1
     ;;
 esac

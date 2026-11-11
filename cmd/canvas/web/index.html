@@ -1,0 +1,2070 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo 8: Canvas Collaborative Document Rooms — OpenFGA AccessPolicy</title>
+  <style>
+    :root {
+      --bg-base: #07090d;
+      --bg-surface: #0d121a;
+      --bg-surface-elevated: #141b26;
+      --bg-slot: #1c2636;
+      --border-subtle: #243247;
+      --border-strong: #3b4f6e;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --accent-green: #56fd5a;
+      --accent-green-bg: rgba(86, 253, 90, 0.12);
+      --accent-green-border: rgba(86, 253, 90, 0.45);
+
+      --accent-blue: #38bdf8;
+      --accent-blue-bg: rgba(56, 189, 248, 0.12);
+      --accent-blue-border: rgba(56, 189, 248, 0.45);
+
+      --accent-purple: #a855f7;
+      --accent-purple-bg: rgba(168, 85, 247, 0.12);
+      --accent-purple-border: rgba(168, 85, 247, 0.45);
+
+      --accent-amber: #f59e0b;
+      --accent-amber-bg: rgba(245, 158, 11, 0.12);
+      --accent-amber-border: rgba(245, 158, 11, 0.45);
+
+      --accent-crimson: #ef4444;
+      --accent-crimson-bg: rgba(239, 68, 68, 0.15);
+      --accent-crimson-border: rgba(239, 68, 68, 0.55);
+
+      --canvas-bg: #090e15;
+      --canvas-grid: #131b26;
+
+      --shadow-panel: 0 8px 24px -6px rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f1f5f9;
+      --bg-surface: #ffffff;
+      --bg-surface-elevated: #f8fafc;
+      --bg-slot: #e2e8f0;
+      --border-subtle: #cbd5e1;
+      --border-strong: #94a3b8;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+
+      --accent-green: #15803d;
+      --accent-green-bg: rgba(21, 128, 61, 0.12);
+      --accent-green-border: rgba(21, 128, 61, 0.45);
+
+      --accent-blue: #0284c7;
+      --accent-blue-bg: rgba(2, 132, 199, 0.12);
+      --accent-blue-border: rgba(2, 132, 199, 0.45);
+
+      --accent-purple: #7e22ce;
+      --accent-purple-bg: rgba(126, 34, 206, 0.12);
+      --accent-purple-border: rgba(126, 34, 206, 0.45);
+
+      --accent-amber: #b45309;
+      --accent-amber-bg: rgba(180, 83, 9, 0.12);
+      --accent-amber-border: rgba(180, 83, 9, 0.45);
+
+      --accent-crimson: #b91c1c;
+      --accent-crimson-bg: rgba(185, 28, 28, 0.12);
+      --accent-crimson-border: rgba(185, 28, 28, 0.45);
+
+      --canvas-bg: #f8fafc;
+      --canvas-grid: #e2e8f0;
+
+      --shadow-panel: 0 6px 18px -4px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Navigation Bar */
+    header.top-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: var(--accent-purple-bg);
+      border: 1px solid var(--accent-purple-border);
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* High-Contrast Projector Light Mode Icon-Only Toggle */
+    .theme-toggle {
+      display: inline-flex;
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .theme-btn.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .theme-btn svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .btn-auth {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-auth:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    /* Sub-Header: Principal Switcher & Document Selector */
+    .controls-strip {
+      background: var(--bg-surface-elevated);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.65rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .switcher-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .group-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-right: 0.25rem;
+    }
+
+    .seg-group {
+      display: flex;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .seg-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .seg-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-slot);
+    }
+
+    .seg-btn.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    }
+
+    .seg-btn .role-chip {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .seg-btn.active .role-chip.owner {
+      background: var(--accent-purple-bg);
+      color: var(--accent-purple);
+      border: 1px solid var(--accent-purple-border);
+    }
+    .seg-btn.active .role-chip.staff {
+      background: var(--accent-blue-bg);
+      color: var(--accent-blue);
+      border: 1px solid var(--accent-blue-border);
+    }
+    .seg-btn.active .role-chip.contractor {
+      background: var(--accent-amber-bg);
+      color: var(--accent-amber);
+      border: 1px solid var(--accent-amber-border);
+    }
+
+    .doc-pill {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .doc-pill:hover {
+      background: var(--bg-slot);
+      color: var(--text-primary);
+    }
+    .doc-pill.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+
+    .doc-state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .doc-state-badge.running {
+      background: var(--accent-green-bg);
+      border: 1px solid var(--accent-green-border);
+      color: var(--accent-green);
+    }
+    .doc-state-badge.suspended {
+      background: var(--accent-amber-bg);
+      border: 1px solid var(--accent-amber-border);
+      color: var(--accent-amber);
+    }
+    .dot-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .dot-pulse.anim {
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .room-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-action {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-action:hover {
+      background: var(--bg-slot);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+    .btn-action.btn-suspend {
+      border-color: var(--accent-amber-border);
+      color: var(--accent-amber);
+    }
+    .btn-action.btn-suspend:hover {
+      background: var(--accent-amber-bg);
+    }
+    .btn-action.btn-wake {
+      border-color: var(--accent-green-border);
+      color: var(--accent-green);
+    }
+    .btn-action.btn-wake:hover {
+      background: var(--accent-green-bg);
+    }
+
+    /* Main Workspace Layout */
+    main.workspace-grid {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      flex: 1;
+      height: calc(100vh - 120px);
+      overflow: hidden;
+    }
+
+    @media (max-width: 1100px) {
+      main.workspace-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+    }
+
+    /* Left Pane: Interactive SVG Canvas */
+    .canvas-pane {
+      display: flex;
+      flex-direction: column;
+      background: var(--canvas-bg);
+      position: relative;
+      overflow: hidden;
+      border-right: 1px solid var(--border-subtle);
+    }
+
+    .canvas-toolbar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.5rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      z-index: 10;
+    }
+
+    .toolbar-tools {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tool-btn {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .tool-btn:hover:not(:disabled) {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+    }
+    .tool-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .telemetry-strip {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .telemetry-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .telemetry-val {
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    /* Denied Before Wakeup High-Visibility Banner */
+    .denial-banner {
+      background: var(--accent-crimson-bg);
+      border: 1px solid var(--accent-crimson-border);
+      border-radius: 8px;
+      margin: 1rem;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
+      animation: fadeIn 0.2s ease;
+      z-index: 20;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .denial-icon {
+      color: var(--accent-crimson);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .denial-body {
+      flex: 1;
+    }
+
+    .denial-heading {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent-crimson);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 0.35rem;
+    }
+
+    .denial-msg {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      line-height: 1.45;
+      margin-bottom: 0.5rem;
+    }
+
+    .denial-proof {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.25);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .denial-proof span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .denial-proof strong {
+      color: var(--accent-green);
+    }
+
+    /* SVG Canvas Area */
+    .canvas-viewport {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+
+    svg#canvasSVG {
+      width: 100%;
+      height: 100%;
+      user-select: none;
+      background-image: radial-gradient(var(--canvas-grid) 1px, transparent 1px);
+      background-size: 24px 24px;
+      cursor: grab;
+    }
+
+    svg#canvasSVG:active {
+      cursor: grabbing;
+    }
+
+    .canvas-node {
+      cursor: move;
+      transition: filter 0.15s ease;
+    }
+    .canvas-node:hover {
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+    }
+    .canvas-node rect.node-card {
+      rx: 10;
+      ry: 10;
+      stroke-width: 1.5;
+    }
+
+    .canvas-note {
+      cursor: move;
+      filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.25));
+    }
+
+    /* Right Pane: OpenFGA & Perimeter Telemetry */
+    .telemetry-pane {
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .section-box {
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 1.15rem;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Perimeter Defense KPI Strip */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.65rem;
+    }
+
+    .kpi-card {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem;
+    }
+
+    .kpi-label {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .kpi-value {
+      font-size: 1.35rem;
+      font-weight: 800;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--text-primary);
+    }
+    .kpi-value.green {
+      color: var(--accent-green);
+    }
+    .kpi-value.crimson {
+      color: var(--accent-crimson);
+    }
+    .kpi-value.blue {
+      color: var(--accent-blue);
+    }
+
+    /* OpenFGA Tuples List */
+    .tuple-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .tuple-item {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .tuple-user-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tuple-username {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .tuple-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .tuple-role-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .tuple-role-tag.owner {
+      background: var(--accent-purple-bg);
+      color: var(--accent-purple);
+      border: 1px solid var(--accent-purple-border);
+    }
+    .tuple-role-tag.editor {
+      background: var(--accent-blue-bg);
+      color: var(--accent-blue);
+      border: 1px solid var(--accent-blue-border);
+    }
+    .tuple-role-tag.viewer {
+      background: var(--accent-amber-bg);
+      color: var(--accent-amber);
+      border: 1px solid var(--accent-amber-border);
+    }
+    .tuple-role-tag.none {
+      background: rgba(100, 116, 139, 0.15);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .tuple-btn {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+    }
+    .tuple-btn:hover {
+      background: var(--bg-base);
+      border-color: var(--border-strong);
+    }
+    .tuple-btn.btn-grant {
+      color: var(--accent-green);
+      border-color: var(--accent-green-border);
+    }
+    .tuple-btn.btn-grant:hover {
+      background: var(--accent-green-bg);
+    }
+    .tuple-btn.btn-revoke {
+      color: var(--accent-crimson);
+      border-color: var(--accent-crimson-border);
+    }
+    .tuple-btn.btn-revoke:hover {
+      background: var(--accent-crimson-bg);
+    }
+
+    /* AccessPolicy YAML Box */
+    .yaml-box {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: var(--accent-green);
+      max-height: 140px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Decision Log */
+    .log-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      background: var(--bg-slot);
+      border-left: 3px solid var(--border-subtle);
+      border-radius: 0 6px 6px 0;
+      padding: 0.5rem 0.65rem;
+      font-size: 0.72rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .log-entry.allowed {
+      border-left-color: var(--accent-green);
+    }
+    .log-entry.denied {
+      border-left-color: var(--accent-crimson);
+      background: var(--accent-crimson-bg);
+    }
+    .log-entry.policy {
+      border-left-color: var(--accent-purple);
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .log-badge {
+      font-weight: 800;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .log-badge.allowed { color: var(--accent-green); }
+    .log-badge.denied { color: var(--accent-crimson); }
+    .log-badge.policy { color: var(--accent-purple); }
+
+    .log-time {
+      color: var(--text-muted);
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+    }
+
+    .log-reason {
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    /* Rebel -> Agent Flip Card */
+    .flip-card {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .flip-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .flip-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .flip-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .flip-text {
+      font-size: 0.75rem;
+      color: var(--text-primary);
+      line-height: 1.35;
+    }
+
+    /* Modal for Add Node / Add Note */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      width: 90%;
+      max-width: 440px;
+      padding: 1.25rem;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .form-group input, .form-group select, .form-group textarea {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent-purple);
+    }
+
+    .modal-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="top-header">
+    <div class="brand-wrap">
+      <div class="brand-icon">
+        <!-- Lucide Layout Grid SVG -->
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect width="7" height="7" x="3" y="3" rx="1"/>
+          <rect width="7" height="7" x="14" y="3" rx="1"/>
+          <rect width="7" height="7" x="14" y="14" rx="1"/>
+          <rect width="7" height="7" x="3" y="14" rx="1"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">Demo 8: Canvas Collaborative Document Rooms</div>
+        <div class="brand-subtitle">Per-Actor OpenFGA AccessPolicy Relationship Authorization Enforced Before Wakeup</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <!-- Presenter Sign Out -->
+      <button type="button" id="btnLogout" class="btn-auth" style="display:none;" title="Sign out of presenter session">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+        <span>Sign out</span>
+      </button>
+
+      <!-- Segmented Icon-Only Moon/Sun Projector Light Mode Toggle -->
+      <div class="theme-toggle" role="group" aria-label="Theme Toggle">
+        <button type="button" id="theme-toggle-dark" class="theme-btn active" title="Dark Mode" aria-label="Dark Mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button type="button" id="theme-toggle-light" class="theme-btn" title="Projector Light Mode" aria-label="Projector Light Mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Controls Strip: Principal Switcher & Document Selector -->
+  <section class="controls-strip">
+    <!-- Principal Switcher -->
+    <div class="switcher-group">
+      <span class="group-label">Principal:</span>
+      <div class="seg-group">
+        <button type="button" class="seg-btn active" id="btnUserAlice" onclick="switchPrincipal('user:alice')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span>Alice Chen</span>
+          <span class="role-chip owner">Owner</span>
+        </button>
+
+        <button type="button" class="seg-btn" id="btnUserBob" onclick="switchPrincipal('user:bob')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span>Bob Martinez</span>
+          <span class="role-chip staff">Staff Arch</span>
+        </button>
+
+        <button type="button" class="seg-btn" id="btnUserCharlie" onclick="switchPrincipal('user:charlie')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <span>Charlie Vance</span>
+          <span class="role-chip contractor">Contractor</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Document Selector -->
+    <div class="switcher-group">
+      <span class="group-label">Document:</span>
+      <div class="seg-group">
+        <button type="button" class="doc-pill active" id="btnDocMNA" onclick="switchDocument('doc-merger-acquisition')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span>M&amp;A Topology (Restricted)</span>
+        </button>
+
+        <button type="button" class="doc-pill" id="btnDocRoadmap" onclick="switchDocument('doc-q4-roadmap')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+            <line x1="9" x2="9" y1="3" y2="18"/>
+            <line x1="15" x2="15" y1="6" y2="21"/>
+          </svg>
+          <span>Q4 Mesh Roadmap</span>
+        </button>
+
+        <button type="button" class="doc-pill" id="btnDocIncident" onclick="switchDocument('doc-incident-postmortem')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" x2="12" y1="8" y2="12"/>
+            <line x1="12" x2="12.01" y1="16" y2="16"/>
+          </svg>
+          <span>Sev-1 RCA</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- State & Quick Actions -->
+    <div class="room-actions">
+      <span id="actorStateBadge" class="doc-state-badge suspended">
+        <span class="dot-pulse anim"></span>
+        <span id="actorStateText">SUSPENDED</span>
+      </span>
+
+      <button type="button" class="btn-action btn-suspend" id="btnSuspend" onclick="suspendDocument()" title="Suspend actor to GCS (saves worker slots)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+        <span>Suspend</span>
+      </button>
+
+      <button type="button" class="btn-action btn-wake" id="btnWake" onclick="wakeDocument()" title="Wake actor from GCS">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span>Wake</span>
+      </button>
+
+      <button type="button" class="btn-action" onclick="resetDemo()" title="Reset demo catalog and OpenFGA policies">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        <span>Reset</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Main Grid: Interactive Canvas + Telemetry & Policy Rack -->
+  <main class="workspace-grid">
+
+    <!-- Left Pane: SVG Collaborative Canvas -->
+    <section class="canvas-pane">
+
+      <!-- Canvas Toolbar -->
+      <div class="canvas-toolbar">
+        <div class="toolbar-tools">
+          <button type="button" class="tool-btn" id="btnAddNode" onclick="openNodeModal()" title="Add an Architecture Node">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add Node</span>
+          </button>
+
+          <button type="button" class="tool-btn" id="btnAddNote" onclick="openNoteModal()" title="Add a Sticky Note">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="18" x2="12" y2="12"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+            <span>Sticky Note</span>
+          </button>
+
+          <button type="button" class="tool-btn" id="btnConnectEdge" onclick="openEdgeModal()" title="Connect Two Nodes">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="10.49"></line>
+            </svg>
+            <span>Connect</span>
+          </button>
+
+          <span id="readOnlyBadge" style="display:none; font-size:0.75rem; font-weight:700; color:var(--accent-amber); padding:4px 8px; border-radius:4px; background:var(--accent-amber-bg); border:1px solid var(--accent-amber-border);">
+            READ-ONLY (VIEWER)
+          </span>
+        </div>
+
+        <div class="telemetry-strip">
+          <div class="telemetry-item">
+            <span>Rev:</span>
+            <span id="telRev" class="telemetry-val">#1</span>
+          </div>
+          <div class="telemetry-item">
+            <span>Objects:</span>
+            <span id="telObjects" class="telemetry-val">0</span>
+          </div>
+          <div class="telemetry-item">
+            <span>RAM:</span>
+            <span id="telRAM" class="telemetry-val">16 KB</span>
+          </div>
+          <div class="telemetry-item">
+            <span>Pod IP:</span>
+            <span id="telPodIP" class="telemetry-val">10.120.1.14</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Denied Before Wakeup High-Visibility Alert Banner -->
+      <div id="denialBanner" class="denial-banner" style="display:none;">
+        <div class="denial-icon">
+          <!-- Shield Alert SVG -->
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="denial-body">
+          <div class="denial-heading">
+            <span>403 PERMISSION DENIED AT SUBSTRATE PERIMETER</span>
+          </div>
+          <div id="denialMsg" class="denial-msg">
+            OpenFGA AccessPolicy Check: principal 'user:bob' lacks 'can_get' on 'actor:anything-but-agents/doc-merger-acquisition'.
+          </div>
+          <div class="denial-proof">
+            <span>ACTOR STATE: <strong id="proofActorState">SUSPENDED (IN GCS)</strong></span>
+            <span>COMPUTE WASTED: <strong>0 ms</strong></span>
+            <span>WORKER POD CPU: <strong>0 %</strong></span>
+            <span>WAKE COUNTER: <strong>UNTOUCHED</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas SVG Viewport -->
+      <div class="canvas-viewport" id="canvasViewport">
+        <svg id="canvasSVG">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--border-strong)" />
+            </marker>
+          </defs>
+          <g id="edgesLayer"></g>
+          <g id="nodesLayer"></g>
+          <g id="notesLayer"></g>
+        </svg>
+      </div>
+
+    </section>
+
+    <!-- Right Pane: OpenFGA AccessPolicy & Perimeter Defense Rack -->
+    <aside class="telemetry-pane">
+
+      <!-- Perimeter Defense KPIs -->
+      <div class="section-box">
+        <div class="section-title">
+          <span>Perimeter Defense Metrics</span>
+          <!-- Shield Check SVG -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">BLOCKED WHILE ASLEEP</div>
+            <div id="kpiBlockedSleep" class="kpi-value crimson">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">TOTAL PERIMETER BLOCKS</div>
+            <div id="kpiTotalBlocked" class="kpi-value crimson">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">AUTHORIZED WAKEUPS</div>
+            <div id="kpiWakeups" class="kpi-value green">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">CPU TIME SAVED</div>
+            <div id="kpiCPUSaved" class="kpi-value blue">0.0s</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OpenFGA Active Relationship Tuples -->
+      <div class="section-box">
+        <div class="section-title">
+          <span>OpenFGA Relationship Tuples</span>
+          <!-- Key / Users SVG -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+
+        <div id="tupleList" class="tuple-list">
+          <!-- Populated dynamically via renderTuples() -->
+        </div>
+      </div>
+
+      <!-- Live AccessPolicy YAML Box -->
+      <div class="section-box">
+        <div class="section-title">
+          <span>Substrate AccessPolicy (Live YAML)</span>
+          <!-- Code SVG -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+        </div>
+        <div id="policyYAMLBox" class="yaml-box"># Loading AccessPolicy...</div>
+      </div>
+
+      <!-- Perimeter Real-Time Decision Feed -->
+      <div class="section-box">
+        <div class="section-title">
+          <span>Perimeter Decision Log</span>
+          <!-- Activity / Pulse SVG -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div id="logFeed" class="log-feed">
+          <!-- Populated dynamically via renderLog() -->
+        </div>
+      </div>
+
+      <!-- Rebel -> Agent Flip Summary -->
+      <div class="section-box">
+        <div class="flip-card">
+          <div class="flip-grid">
+            <div class="flip-col">
+              <div class="flip-title">Rebel Workload</div>
+              <div class="flip-text">
+                Figma multiplayer architecture: 100% Go heap canvas, zero database, zero in-app auth code.
+              </div>
+            </div>
+            <div class="flip-col">
+              <div class="flip-title">Substrate Agent Flip</div>
+              <div class="flip-text">
+                OpenFGA relationship perimeter: Sleeping agent sessions stay in GCS. 0ms CPU wasted on unauthorized calls.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- Add Node Modal -->
+  <div id="modalNode" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">
+        <span>Add Architecture Node</span>
+        <button type="button" class="btn-auth" onclick="closeModal('modalNode')">✕</button>
+      </div>
+      <div class="form-group">
+        <label for="nodeLabel">Node Label</label>
+        <input type="text" id="nodeLabel" placeholder="e.g. Real-Time Ingest Service">
+      </div>
+      <div class="form-group">
+        <label for="nodeSubLabel">Sub-Label / Details</label>
+        <input type="text" id="nodeSubLabel" placeholder="e.g. 50k QPS Kafka Connector">
+      </div>
+      <div class="form-group">
+        <label for="nodeType">Component Type</label>
+        <select id="nodeType">
+          <option value="service">Service (Go Microservice)</option>
+          <option value="database">Database (Spanner / KV)</option>
+          <option value="gateway">Gateway (Envoy / L7)</option>
+          <option value="queue">Queue (Kafka / PubSub)</option>
+          <option value="client">Client (Edge / Mobile)</option>
+          <option value="milestone">Milestone (Stage Event)</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-action" onclick="closeModal('modalNode')">Cancel</button>
+        <button type="button" class="btn-action btn-wake" onclick="submitAddNode()">Add to Canvas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Sticky Note Modal -->
+  <div id="modalNote" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">
+        <span>Add Sticky Note</span>
+        <button type="button" class="btn-auth" onclick="closeModal('modalNote')">✕</button>
+      </div>
+      <div class="form-group">
+        <label for="noteText">Note Content</label>
+        <textarea id="noteText" rows="3" placeholder="e.g. Architecture decision approved by M&A committee..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-action" onclick="closeModal('modalNote')">Cancel</button>
+        <button type="button" class="btn-action btn-wake" onclick="submitAddNote()">Pin Note</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connect Edge Modal -->
+  <div id="modalEdge" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">
+        <span>Connect Architecture Nodes</span>
+        <button type="button" class="btn-auth" onclick="closeModal('modalEdge')">✕</button>
+      </div>
+      <div class="form-group">
+        <label for="edgeFrom">Source Node (From)</label>
+        <select id="edgeFrom"></select>
+      </div>
+      <div class="form-group">
+        <label for="edgeTo">Target Node (To)</label>
+        <select id="edgeTo"></select>
+      </div>
+      <div class="form-group">
+        <label for="edgeLabel">Connection Label</label>
+        <input type="text" id="edgeLabel" placeholder="e.g. mTLS gRPC / 10 Gbps">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-action" onclick="closeModal('modalEdge')">Cancel</button>
+        <button type="button" class="btn-action btn-wake" onclick="submitAddEdge()">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State Variables
+    let currentPrincipal = 'user:alice';
+    let currentDoc = 'doc-merger-acquisition';
+    let currentScene = null;
+    let currentResponse = null;
+    let draggedNode = null;
+    let dragOffset = { x: 0, y: 0 };
+
+    // Initialize Theme
+    (function initTheme() {
+      const saved = localStorage.getItem('canvas_theme') || 'dark';
+      applyTheme(saved);
+      document.getElementById('theme-toggle-dark').addEventListener('click', () => applyTheme('dark'));
+      document.getElementById('theme-toggle-light').addEventListener('click', () => applyTheme('light'));
+    })();
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('canvas_theme', theme);
+      document.getElementById('theme-toggle-dark').classList.toggle('active', theme === 'dark');
+      document.getElementById('theme-toggle-light').classList.toggle('active', theme === 'light');
+    }
+
+    // Principal Switching
+    function switchPrincipal(p) {
+      currentPrincipal = p;
+      document.getElementById('btnUserAlice').classList.toggle('active', p === 'user:alice');
+      document.getElementById('btnUserBob').classList.toggle('active', p === 'user:bob');
+      document.getElementById('btnUserCharlie').classList.toggle('active', p === 'user:charlie');
+      fetchState();
+    }
+
+    // Document Switching
+    function switchDocument(d) {
+      currentDoc = d;
+      document.getElementById('btnDocMNA').classList.toggle('active', d === 'doc-merger-acquisition');
+      document.getElementById('btnDocRoadmap').classList.toggle('active', d === 'doc-q4-roadmap');
+      document.getElementById('btnDocIncident').classList.toggle('active', d === 'doc-incident-postmortem');
+      fetchState();
+    }
+
+    // Fetch Full Canvas State
+    async function fetchState() {
+      try {
+        const res = await fetch(`/api/state?principal=${encodeURIComponent(currentPrincipal)}&doc=${encodeURIComponent(currentDoc)}`);
+        const data = await res.json();
+        currentResponse = data;
+
+        if (res.status === 403 || data.is_denied_before_wakeup) {
+          handleDenial(data);
+        } else {
+          handleAllowed(data);
+        }
+
+        renderMetrics(data.metrics);
+        renderTuples(data.tuples);
+        renderLog(data.decision_log);
+        renderPolicyYAML(data.policy_yaml);
+      } catch (err) {
+        console.error("fetchState error:", err);
+      }
+    }
+
+    function handleDenial(data) {
+      // Show Denial Banner with Proof
+      const banner = document.getElementById('denialBanner');
+      banner.style.display = 'flex';
+      document.getElementById('denialMsg').textContent = data.denial_reason || 'Access denied by OpenFGA AccessPolicy at Substrate perimeter.';
+      document.getElementById('proofActorState').textContent = data.actor_state === 'SUSPENDED' ? 'SUSPENDED (SLEEPING IN GCS)' : data.actor_state;
+
+      // Update Header State Badge
+      updateStateBadge(data.actor_state || 'SUSPENDED');
+
+      // Clear Canvas Rendering or show lock screen
+      renderDeniedCanvas(data);
+
+      // Disable toolbar buttons
+      toggleToolbar(false);
+    }
+
+    function handleAllowed(data) {
+      document.getElementById('denialBanner').style.display = 'none';
+      currentScene = data.scene;
+
+      updateStateBadge(data.actor_state || 'RUNNING');
+      renderCanvas(data.scene);
+
+      // Update Toolbar state based on CanEdit
+      toggleToolbar(data.can_edit, data.principal_role === 'viewer');
+
+      // Telemetry
+      document.getElementById('telRev').textContent = `#${data.scene.revision}`;
+      document.getElementById('telObjects').textContent = data.scene.ram_object_count;
+      document.getElementById('telRAM').textContent = `${(data.scene.ram_bytes_estimate / 1024).toFixed(1)} KB`;
+      document.getElementById('telPodIP').textContent = data.scene.current_pod_ip || '10.120.1.14';
+    }
+
+    function updateStateBadge(state) {
+      const badge = document.getElementById('actorStateBadge');
+      const text = document.getElementById('actorStateText');
+      text.textContent = state;
+      if (state === 'RUNNING') {
+        badge.className = 'doc-state-badge running';
+      } else {
+        badge.className = 'doc-state-badge suspended';
+      }
+    }
+
+    function toggleToolbar(canEdit, isViewer) {
+      document.getElementById('btnAddNode').disabled = !canEdit;
+      document.getElementById('btnAddNote').disabled = !canEdit;
+      document.getElementById('btnConnectEdge').disabled = !canEdit;
+      document.getElementById('readOnlyBadge').style.display = isViewer ? 'inline-block' : 'none';
+    }
+
+    function renderDeniedCanvas(data) {
+      const svg = document.getElementById('canvasSVG');
+      document.getElementById('edgesLayer').innerHTML = '';
+      document.getElementById('nodesLayer').innerHTML = '';
+      document.getElementById('notesLayer').innerHTML = '';
+
+      // Centered lock watermark
+      const width = svg.clientWidth || 800;
+      const height = svg.clientHeight || 500;
+      const cx = width / 2;
+      const cy = height / 2;
+
+      document.getElementById('nodesLayer').innerHTML = `
+        <g transform="translate(${cx - 150}, ${cy - 80})">
+          <rect width="300" height="160" rx="12" fill="var(--bg-surface)" stroke="var(--accent-crimson-border)" stroke-width="1.5"/>
+          <circle cx="150" cy="45" r="24" fill="var(--accent-crimson-bg)" stroke="var(--accent-crimson)" stroke-width="1.5"/>
+          <path d="M 143 45 L 143 38 C 143 34 146 31 150 31 C 154 31 157 34 157 38 L 157 45 Z" fill="none" stroke="var(--accent-crimson)" stroke-width="2"/>
+          <rect x="140" y="45" width="20" height="14" rx="2" fill="var(--accent-crimson)"/>
+          <text x="150" y="95" text-anchor="middle" fill="var(--text-primary)" font-size="14" font-weight="700">DOCUMENT ROOM LOCKED</text>
+          <text x="150" y="118" text-anchor="middle" fill="var(--text-muted)" font-size="11">OpenFGA check rejected at perimeter.</text>
+          <text x="150" y="136" text-anchor="middle" fill="var(--accent-green)" font-size="11" font-weight="600">0ms compute spent • Actor asleep in GCS</text>
+        </g>
+      `;
+    }
+
+    // Render Interactive Canvas SVG
+    function renderCanvas(scene) {
+      if (!scene) return;
+
+      const edgesLayer = document.getElementById('edgesLayer');
+      const nodesLayer = document.getElementById('nodesLayer');
+      const notesLayer = document.getElementById('notesLayer');
+
+      edgesLayer.innerHTML = '';
+      nodesLayer.innerHTML = '';
+      notesLayer.innerHTML = '';
+
+      const nodeMap = {};
+      (scene.nodes || []).forEach(n => { nodeMap[n.id] = n; });
+
+      // 1. Render Edges
+      (scene.edges || []).forEach(edge => {
+        const from = nodeMap[edge.from];
+        const to = nodeMap[edge.to];
+        if (!from || !to) return;
+
+        const x1 = from.x + (from.width || 210) / 2;
+        const y1 = from.y + (from.height || 80) / 2;
+        const x2 = to.x + (to.width || 210) / 2;
+        const y2 = to.y + (to.height || 80) / 2;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', 'var(--border-strong)');
+        line.setAttribute('stroke-width', '2');
+        if (edge.style === 'dashed') {
+          line.setAttribute('stroke-dasharray', '5,5');
+        }
+        line.setAttribute('marker-end', 'url(#arrow)');
+        g.appendChild(line);
+
+        if (edge.label) {
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2 - 8;
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('fill', 'var(--text-secondary)');
+          text.setAttribute('font-size', '10');
+          text.setAttribute('font-weight', '600');
+          text.textContent = edge.label;
+          g.appendChild(text);
+        }
+        edgesLayer.appendChild(g);
+      });
+
+      // 2. Render Nodes (Draggable)
+      (scene.nodes || []).forEach(node => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'canvas-node');
+        g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        g.setAttribute('data-id', node.id);
+
+        const w = node.width || 210;
+        const h = node.height || 80;
+
+        // Card background
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('class', 'node-card');
+        rect.setAttribute('width', w);
+        rect.setAttribute('height', h);
+        rect.setAttribute('fill', 'var(--bg-surface)');
+        rect.setAttribute('stroke', node.color || 'var(--border-subtle)');
+
+        // Type color pill
+        const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        pill.setAttribute('x', 12);
+        pill.setAttribute('y', 10);
+        pill.setAttribute('width', 54);
+        pill.setAttribute('height', 16);
+        pill.setAttribute('rx', 4);
+        pill.setAttribute('fill', node.color || 'var(--accent-purple)');
+        pill.setAttribute('opacity', '0.2');
+
+        const pillText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        pillText.setAttribute('x', 39);
+        pillText.setAttribute('y', 22);
+        pillText.setAttribute('text-anchor', 'middle');
+        pillText.setAttribute('fill', node.color || 'var(--accent-purple)');
+        pillText.setAttribute('font-size', '8.5');
+        pillText.setAttribute('font-weight', '800');
+        pillText.textContent = (node.type || 'NODE').toUpperCase();
+
+        // Label
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', 14);
+        label.setAttribute('y', 44);
+        label.setAttribute('fill', 'var(--text-primary)');
+        label.setAttribute('font-size', '12');
+        label.setAttribute('font-weight', '700');
+        label.textContent = node.label;
+
+        // Sublabel
+        const sub = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        sub.setAttribute('x', 14);
+        sub.setAttribute('y', 60);
+        sub.setAttribute('fill', 'var(--text-muted)');
+        sub.setAttribute('font-size', '10');
+        sub.textContent = node.sub_label || `by ${node.author}`;
+
+        g.appendChild(rect);
+        g.appendChild(pill);
+        g.appendChild(pillText);
+        g.appendChild(label);
+        g.appendChild(sub);
+
+        // Attach Drag Listeners
+        attachDragEvents(g, node);
+        nodesLayer.appendChild(g);
+      });
+
+      // 3. Render Sticky Notes
+      (scene.notes || []).forEach(note => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'canvas-note');
+        g.setAttribute('transform', `translate(${note.x}, ${note.y})`);
+
+        const w = note.width || 210;
+        const h = note.height || 100;
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('width', w);
+        rect.setAttribute('height', h);
+        rect.setAttribute('rx', 6);
+        rect.setAttribute('fill', note.color || '#fef08a');
+        rect.setAttribute('stroke', '#eab308');
+        rect.setAttribute('stroke-width', '1');
+
+        const foreign = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+        foreign.setAttribute('x', 10);
+        foreign.setAttribute('y', 10);
+        foreign.setAttribute('width', w - 20);
+        foreign.setAttribute('height', h - 20);
+
+        const div = document.createElement('div');
+        div.style.color = '#713f12';
+        div.style.fontSize = '11px';
+        div.style.fontWeight = '500';
+        div.style.lineHeight = '1.4';
+        div.style.wordBreak = 'break-word';
+        div.innerHTML = `<strong>📌 Note:</strong><br>${escapeHTML(note.text)}`;
+        foreign.appendChild(div);
+
+        g.appendChild(rect);
+        g.appendChild(foreign);
+        notesLayer.appendChild(g);
+      });
+    }
+
+    // Node Drag-and-Drop Implementation
+    function attachDragEvents(element, node) {
+      element.addEventListener('mousedown', (e) => {
+        if (!currentResponse || !currentResponse.can_edit) return;
+        e.preventDefault();
+        e.stopPropagation();
+        draggedNode = node;
+        const svg = document.getElementById('canvasSVG');
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+        dragOffset.x = svgPt.x - node.x;
+        dragOffset.y = svgPt.y - node.y;
+      });
+    }
+
+    window.addEventListener('mousemove', (e) => {
+      if (!draggedNode) return;
+      const svg = document.getElementById('canvasSVG');
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      draggedNode.x = Math.max(10, Math.round(svgPt.x - dragOffset.x));
+      draggedNode.y = Math.max(10, Math.round(svgPt.y - dragOffset.y));
+
+      const el = document.querySelector(`.canvas-node[data-id="${draggedNode.id}"]`);
+      if (el) {
+        el.setAttribute('transform', `translate(${draggedNode.x}, ${draggedNode.y})`);
+      }
+    });
+
+    window.addEventListener('mouseup', async () => {
+      if (!draggedNode) return;
+      const nodeToSave = draggedNode;
+      draggedNode = null;
+
+      try {
+        await fetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            op: 'move_node',
+            move: {
+              id: nodeToSave.id,
+              x: nodeToSave.x,
+              y: nodeToSave.y
+            }
+          })
+        });
+        fetchState();
+      } catch (err) {
+        console.error('Failed to move node:', err);
+      }
+    });
+
+    // Render Metrics
+    function renderMetrics(m) {
+      if (!m) return;
+      document.getElementById('kpiBlockedSleep').textContent = m.blocked_while_asleep || 0;
+      document.getElementById('kpiTotalBlocked').textContent = m.total_blocked_unauthorized || 0;
+      document.getElementById('kpiWakeups').textContent = m.wakeups_on_valid_traffic || 0;
+      document.getElementById('kpiCPUSaved').textContent = `${(m.compute_saved_seconds || 0).toFixed(1)}s`;
+    }
+
+    // Render OpenFGA Tuples List
+    function renderTuples(tuples) {
+      const container = document.getElementById('tupleList');
+      container.innerHTML = '';
+
+      const users = [
+        { id: 'user:alice', name: 'Alice Chen', desc: 'VP Strategy (Owner)' },
+        { id: 'user:bob', name: 'Bob Martinez', desc: 'Staff Architect' },
+        { id: 'user:charlie', name: 'Charlie Vance', desc: 'Security Contractor' }
+      ];
+
+      const tupleMap = {};
+      (tuples || []).forEach(t => {
+        tupleMap[t.user] = t.relation;
+      });
+
+      const isCallerOwner = (currentResponse && currentResponse.principal_role === 'owner');
+
+      users.forEach(u => {
+        const role = tupleMap[u.id] || 'none';
+        const item = document.createElement('div');
+        item.className = 'tuple-item';
+
+        let btnHTML = '';
+        if (isCallerOwner && u.id !== 'user:alice') {
+          if (role === 'none') {
+            btnHTML = `
+              <button class="tuple-btn btn-grant" onclick="grantRole('${u.id}', '${u.id === 'user:bob' ? 'editor' : 'viewer'}')">
+                + Grant ${u.id === 'user:bob' ? 'Editor' : 'Viewer'}
+              </button>
+            `;
+          } else {
+            btnHTML = `
+              <button class="tuple-btn btn-revoke" onclick="revokeRole('${u.id}')">
+                ✕ Revoke
+              </button>
+            `;
+          }
+        }
+
+        item.innerHTML = `
+          <div class="tuple-user-col">
+            <div class="tuple-username">${escapeHTML(u.name)}</div>
+            <div class="tuple-meta">${escapeHTML(u.desc)}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="tuple-role-tag ${role}">${role.toUpperCase()}</span>
+            ${btnHTML}
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // Render Policy YAML
+    function renderPolicyYAML(yamlStr) {
+      const el = document.getElementById('policyYAMLBox');
+      el.textContent = yamlStr || '# No policy active';
+    }
+
+    // Render Decision Log Feed
+    function renderLog(log) {
+      const container = document.getElementById('logFeed');
+      container.innerHTML = '';
+
+      const items = (log || []).slice().reverse();
+      items.forEach(entry => {
+        const el = document.createElement('div');
+        const dec = (entry.decision || '').toLowerCase();
+        let decClass = 'allowed';
+        if (dec.includes('denied')) decClass = 'denied';
+        if (dec.includes('policy')) decClass = 'policy';
+
+        el.className = `log-entry ${decClass}`;
+
+        const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+        el.innerHTML = `
+          <div class="log-header">
+            <span class="log-badge ${decClass}">${escapeHTML(entry.decision)}</span>
+            <span class="log-time">${timeStr}</span>
+          </div>
+          <div style="font-weight:700; color:var(--text-primary); font-size:0.75rem;">
+            ${escapeHTML(entry.principal)} → ${escapeHTML(entry.action)}
+          </div>
+          <div class="log-reason">${escapeHTML(entry.reason)}</div>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    // API Calls
+    async function grantRole(targetUser, role) {
+      try {
+        const res = await fetch('/api/policy/grant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            target_user: targetUser,
+            role: role
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(`Grant failed: ${err.reason || err.error}`);
+        }
+        fetchState();
+      } catch (e) {
+        console.error('grantRole error:', e);
+      }
+    }
+
+    async function revokeRole(targetUser) {
+      try {
+        const res = await fetch('/api/policy/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            target_user: targetUser
+          })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(`Revoke failed: ${err.reason || err.error}`);
+        }
+        fetchState();
+      } catch (e) {
+        console.error('revokeRole error:', e);
+      }
+    }
+
+    async function suspendDocument() {
+      try {
+        await fetch('/api/actor/suspend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal
+          })
+        });
+        fetchState();
+      } catch (e) {
+        console.error('suspendDocument error:', e);
+      }
+    }
+
+    async function wakeDocument() {
+      try {
+        await fetch('/api/actor/wake', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal
+          })
+        });
+        fetchState();
+      } catch (e) {
+        console.error('wakeDocument error:', e);
+      }
+    }
+
+    async function resetDemo() {
+      if (!confirm('Reset all canvas documents and OpenFGA relationships to initial demo state?')) return;
+      try {
+        await fetch('/api/reset', { method: 'POST' });
+        fetchState();
+      } catch (e) {
+        console.error('resetDemo error:', e);
+      }
+    }
+
+    // Modal Helpers
+    function openNodeModal() {
+      document.getElementById('nodeLabel').value = '';
+      document.getElementById('nodeSubLabel').value = '';
+      document.getElementById('modalNode').classList.add('open');
+    }
+
+    function openNoteModal() {
+      document.getElementById('noteText').value = '';
+      document.getElementById('modalNote').classList.add('open');
+    }
+
+    function openEdgeModal() {
+      const fromSel = document.getElementById('edgeFrom');
+      const toSel = document.getElementById('edgeTo');
+      fromSel.innerHTML = '';
+      toSel.innerHTML = '';
+      if (currentScene && currentScene.nodes) {
+        currentScene.nodes.forEach(n => {
+          fromSel.innerHTML += `<option value="${n.id}">${escapeHTML(n.label)}</option>`;
+          toSel.innerHTML += `<option value="${n.id}">${escapeHTML(n.label)}</option>`;
+        });
+      }
+      document.getElementById('edgeLabel').value = '';
+      document.getElementById('modalEdge').classList.add('open');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    async function submitAddNode() {
+      const label = document.getElementById('nodeLabel').value.trim();
+      const sub = document.getElementById('nodeSubLabel').value.trim();
+      const type = document.getElementById('nodeType').value;
+      if (!label) return alert('Node label required');
+
+      closeModal('modalNode');
+      const id = `node-${Date.now().toString().slice(-4)}`;
+      const colorMap = {
+        service: '#10b981',
+        database: '#f59e0b',
+        gateway: '#8b5cf6',
+        queue: '#38bdf8',
+        client: '#06b6d4',
+        milestone: '#ef4444'
+      };
+
+      try {
+        await fetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            op: 'add_node',
+            node: {
+              id: id,
+              type: type,
+              label: label,
+              sub_label: sub,
+              x: 180 + Math.floor(Math.random() * 150),
+              y: 200 + Math.floor(Math.random() * 100),
+              width: 210,
+              height: 80,
+              color: colorMap[type] || '#10b981',
+              author: currentPrincipal
+            }
+          })
+        });
+        fetchState();
+      } catch (e) {
+        console.error('addNode error:', e);
+      }
+    }
+
+    async function submitAddNote() {
+      const text = document.getElementById('noteText').value.trim();
+      if (!text) return alert('Note content required');
+      closeModal('modalNote');
+      const id = `note-${Date.now().toString().slice(-4)}`;
+
+      try {
+        await fetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            op: 'add_note',
+            note: {
+              id: id,
+              text: text,
+              x: 100 + Math.floor(Math.random() * 120),
+              y: 260 + Math.floor(Math.random() * 80),
+              width: 210,
+              height: 100,
+              color: '#bbf7d0',
+              author: currentPrincipal
+            }
+          })
+        });
+        fetchState();
+      } catch (e) {
+        console.error('addNote error:', e);
+      }
+    }
+
+    async function submitAddEdge() {
+      const from = document.getElementById('edgeFrom').value;
+      const to = document.getElementById('edgeTo').value;
+      const label = document.getElementById('edgeLabel').value.trim();
+      if (!from || !to) return alert('From and To nodes required');
+      if (from === to) return alert('Cannot connect node to itself');
+      closeModal('modalEdge');
+      const id = `edge-${Date.now().toString().slice(-4)}`;
+
+      try {
+        await fetch('/api/mutate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc_id: currentDoc,
+            principal: currentPrincipal,
+            op: 'add_edge',
+            edge: {
+              id: id,
+              from: from,
+              to: to,
+              label: label,
+              style: 'solid',
+              author: currentPrincipal
+            }
+          })
+        });
+        fetchState();
+      } catch (e) {
+        console.error('addEdge error:', e);
+      }
+    }
+
+    function escapeHTML(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Initial Load
+    fetchState();
+  </script>
+</body>
+</html>

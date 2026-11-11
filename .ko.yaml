@@ -23,6 +23,7 @@ baseImageOverrides:
   github.com/moficodes/anything-but-agents/cmd/honeypot: debian:13-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
   github.com/moficodes/anything-but-agents/cmd/timewarp: gcr.io/distroless/base-debian13:latest
   github.com/moficodes/anything-but-agents/cmd/slides: gcr.io/distroless/base-debian13:latest
+  github.com/moficodes/anything-but-agents/cmd/canvas: gcr.io/distroless/base-debian13:latest
 
 defaultPlatforms:
   - linux/amd64

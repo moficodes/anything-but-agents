@@ -1,0 +1,43 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Demo 8: "Figma-Style Multiplayer Collaborative Canvas & Document Rooms"
+# Each document room is an isolated in-memory actor (doc-merger-acquisition,
+# doc-q4-roadmap, doc-incident-postmortem) maintaining its entire scene graph
+# in Go heap RAM (SNAPSHOT_FIDELITY_MEMORY). The container contains ZERO auth code;
+# OpenFGA AccessPolicy relationship authorization is enforced at the perimeter
+# before the actor is woken from GCS.
+metadata:
+  atespace: anything-but-agents
+  name: canvas
+workerSelector:
+  matchLabels:
+    workload: canvas
+containers:
+- name: canvas
+  image: ko://github.com/moficodes/anything-but-agents/cmd/canvas
+  command:
+  - /ko-app/canvas
+  - --mode=actor
+  - --addr=:80
+  wakeupProbe:
+    httpGet:
+      path: /readyz
+      port: 80
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512Mi (wp-canvas multi-actor bin-packing)
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
