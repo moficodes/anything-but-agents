@@ -1095,6 +1095,155 @@ func TestClusterAteBackendResetAllSessionsOnlyDeletesDungeon2D(t *testing.T) {
 	}
 }
 
+func TestDashboardHighActorCountNoFlickerAndCompactPayload(t *testing.T) {
+	b := NewLocalSimulatorBackend("anything-but-agents", "dungeon2d")
+	gw := NewGatewayServer(b, "http://127.0.0.1:8090", "test-presenter-secret")
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	sampleWorld := &WorldState{
+		Floor:     4,
+		MaxFloors: 8,
+		Hero: HeroWorldState{
+			X:              8.5,
+			Y:              6.5,
+			HP:             120,
+			MaxHP:          140,
+			Armor:          25,
+			CharacterClass: "paladin",
+			Potions:        2,
+			Gold:           200,
+			Score:          640,
+			Inventory:      []string{"crypt-key", "sunblade-greatsword", "healing-potion"},
+		},
+		Floors: map[string]FloorWorldState{},
+	}
+	for f := 1; f <= 8; f++ {
+		fKey := string(rune('0' + f))
+		sampleWorld.Floors[fKey] = FloorWorldState{
+			Enemies: []EnemyState{
+				{ID: fKey + ":e1", Archetype: "skeleton", Name: "Skeleton", X: 4, Y: 4, HP: 30, MaxHP: 30, Alive: true},
+				{ID: fKey + ":e2", Archetype: "bone_archer", Name: "Archer", X: 9, Y: 5, HP: 28, MaxHP: 28, Alive: true},
+				{ID: fKey + ":e3", Archetype: "shadow_knight", Name: "Knight", X: 14, Y: 7, HP: 60, MaxHP: 60, Alive: true},
+			},
+			Items: []ItemState{
+				{ID: fKey + ":i1", Kind: "healing-potion", X: 5, Y: 6},
+			},
+			Interactables: []InteractableState{
+				{ID: fKey + ":g1", Kind: "gate", X: 10, Y: 8, State: "closed"},
+			},
+		}
+	}
+
+	ctx := context.Background()
+	for i := 0; i < 50; i++ {
+		hero := "crowd-" + string(rune('a'+(i/26))) + string(rune('a'+(i%26)))
+		if _, err := b.StartSession(ctx, hero, "paladin"); err != nil {
+			t.Fatalf("StartSession %s: %v", hero, err)
+		}
+		for cp := 0; cp < 2; cp++ {
+			if _, err := b.ExecuteMilestone(ctx, "d2d-"+hero, MutateRequest{
+				Action: "save_world",
+				Label:  "Floor 4 Checkpoint",
+				World:  sampleWorld,
+			}); err != nil {
+				t.Fatalf("ExecuteMilestone %s: %v", hero, err)
+			}
+		}
+	}
+
+	// Force identical UpdatedAt across 20 actors to exercise tie-breaking over Go map iteration
+	b.mu.Lock()
+	tiedTime := b.records["d2d-crowd-aa"].UpdatedAt
+	for name, rec := range b.records {
+		if strings.HasPrefix(name, "d2d-crowd-a") {
+			rec.UpdatedAt = tiedTime
+		}
+	}
+	b.mu.Unlock()
+
+	fetchDashboardRaw := func() ([]byte, DashboardSnapshot) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/dashboard/state", nil)
+		req.Header.Set(PresenterHeaderName, gw.PresenterKey())
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET /api/dashboard/state: %v", err)
+		}
+		defer resp.Body.Close()
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		var snap DashboardSnapshot
+		if err := json.Unmarshal(buf.Bytes(), &snap); err != nil {
+			t.Fatalf("decode DashboardSnapshot: %v", err)
+		}
+		return buf.Bytes(), snap
+	}
+
+	raw, firstSnap := fetchDashboardRaw()
+	if len(firstSnap.Sessions) != 50 {
+		t.Fatalf("expected 50 sessions, got %d", len(firstSnap.Sessions))
+	}
+	// 1. Dashboard payload must omit bulky 8-floor World trees while preserving checkpoint metadata
+	if len(raw) > 150_000 {
+		t.Fatalf("dashboard state payload too bloated for 50 sessions: got %d bytes (want <= 150000)", len(raw))
+	}
+	for _, s := range firstSnap.Sessions {
+		if s.Session.World != nil {
+			t.Fatalf("expected DashboardState session %s to strip Session.World", s.ActorName)
+		}
+		if len(s.Session.Checkpoints) < 3 {
+			t.Fatalf("expected checkpoint metadata preserved on %s, got %d", s.ActorName, len(s.Session.Checkpoints))
+		}
+		for _, cp := range s.Session.Checkpoints {
+			if cp.World != nil {
+				t.Fatalf("expected DashboardState checkpoint v%d on %s to strip cp.World", cp.Version, s.ActorName)
+			}
+		}
+	}
+
+	// 2. Player endpoint (/api/session/state) must STILL return the full 8-floor WorldState untouched!
+	sessResp, err := http.Get(srv.URL + "/api/session/state?actor=d2d-crowd-aa")
+	if err != nil {
+		t.Fatalf("GET /api/session/state: %v", err)
+	}
+	defer sessResp.Body.Close()
+	var fullRec SessionRecord
+	if err := json.NewDecoder(sessResp.Body).Decode(&fullRec); err != nil {
+		t.Fatalf("decode full SessionRecord: %v", err)
+	}
+	if fullRec.Session.World == nil || len(fullRec.Session.World.Floors) != 8 {
+		t.Fatalf("expected /api/session/state to retain full 8-floor WorldState, got %+v", fullRec.Session.World)
+	}
+
+	// 3. Session ordering must be 100% deterministic across repeated polls even with tied UpdatedAt
+	extractOrder := func(snap DashboardSnapshot) []string {
+		out := make([]string, len(snap.Sessions))
+		for i, s := range snap.Sessions {
+			out[i] = s.ActorName
+		}
+		return out
+	}
+	wantOrder := extractOrder(firstSnap)
+	for poll := 0; poll < 10; poll++ {
+		_, nextSnap := fetchDashboardRaw()
+		gotOrder := extractOrder(nextSnap)
+		if !slices.Equal(gotOrder, wantOrder) {
+			t.Fatalf("session card order flickered on poll %d:\n got: %v\nwant: %v", poll, gotOrder[:10], wantOrder[:10])
+		}
+	}
+
+	// 4. Verify dashboard.html uses keyed in-place DOM reconciliation rather than innerHTML grid blowaway
+	dashHTML, err := webFS.ReadFile("web/dashboard.html")
+	if err != nil {
+		t.Fatalf("read web/dashboard.html: %v", err)
+	}
+	if bytes.Contains(dashHTML, []byte("gridEl.innerHTML")) || bytes.Contains(dashHTML, []byte("workersEl.innerHTML")) || bytes.Contains(dashHTML, []byte("feedEl.innerHTML")) {
+		t.Fatalf("expected web/dashboard.html to reconcile DOM in place instead of overwriting innerHTML on every poll")
+	}
+}
+
+
 
 
 

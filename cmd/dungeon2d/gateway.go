@@ -137,7 +137,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 		svg := RenderQRSVG(targetURL)
 		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Cache-Control", "private, max-age=300")
 		_, _ = w.Write([]byte(svg))
 	})
 
@@ -326,7 +326,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		if g.publicURL != "" {
 			snap.PublicURL = g.publicURL
 		}
-		writeJSON(w, http.StatusOK, snap)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(snap)
 	}))
 
 	mux.HandleFunc("/api/dashboard/events", g.requirePresenter(func(w http.ResponseWriter, r *http.Request) {

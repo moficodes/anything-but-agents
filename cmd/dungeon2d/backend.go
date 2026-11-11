@@ -598,6 +598,39 @@ func (b *LocalSimulatorBackend) ResetAllSessions(_ context.Context) (int, error)
 	return deleted, nil
 }
 
+func summarizeSessionForDashboard(rec SessionRecord) SessionRecord {
+	out := rec
+	out.Session.World = nil
+	out.Session.Checkpoint = nil
+	out.Session.Cleared = nil
+	out.Session.MonsterHP = nil
+	if len(rec.Session.Checkpoints) > 0 {
+		cps := make([]ActorCheckpoint, len(rec.Session.Checkpoints))
+		for i, cp := range rec.Session.Checkpoints {
+			cps[i] = ActorCheckpoint{
+				Version: cp.Version,
+				Label:   cp.Label,
+				Floor:   cp.Floor,
+				X:       cp.X,
+				Y:       cp.Y,
+				HP:      cp.HP,
+				MaxHP:   cp.MaxHP,
+				Gold:    cp.Gold,
+				Score:   cp.Score,
+			}
+		}
+		out.Session.Checkpoints = cps
+	}
+	return out
+}
+
+func compareDashboardSessions(a, b SessionRecord) int {
+	if cmp := b.UpdatedAt.Compare(a.UpdatedAt); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(a.ActorName, b.ActorName)
+}
+
 func (b *LocalSimulatorBackend) DashboardState(_ context.Context) (DashboardSnapshot, error) {
 	b.mu.Lock()
 	now := time.Now().UTC()
@@ -616,7 +649,7 @@ func (b *LocalSimulatorBackend) DashboardState(_ context.Context) (DashboardSnap
 	var stats DashboardStats
 	stats.WorkerCapacity = len(workers)
 	for _, rec := range b.records {
-		sessions = append(sessions, *rec)
+		sessions = append(sessions, summarizeSessionForDashboard(*rec))
 		stats.TotalSessions++
 		if rec.State == "ACTOR_STATE_RUNNING" {
 			stats.RunningActors++
@@ -632,9 +665,7 @@ func (b *LocalSimulatorBackend) DashboardState(_ context.Context) (DashboardSnap
 	}
 	b.mu.Unlock()
 
-	slices.SortFunc(sessions, func(a, b SessionRecord) int {
-		return b.UpdatedAt.Compare(a.UpdatedAt)
-	})
+	slices.SortFunc(sessions, compareDashboardSessions)
 
 	events, saves, reverts, forks := b.hub.snapshot()
 	stats.TotalSaves = saves
@@ -670,6 +701,7 @@ type ClusterAteBackend struct {
 	records     map[string]*SessionRecord
 	workers     []WorkerSlot
 	lastSync    time.Time
+	syncing     bool
 	resetting   bool
 	hub         *eventHub
 }
@@ -1468,9 +1500,45 @@ func (c *ClusterAteBackend) ResetAllSessions(ctx context.Context) (int, error) {
 	return len(actorsToDelete), nil
 }
 
+func (c *ClusterAteBackend) ensureClusterMetadata(ctx context.Context) {
+	c.mu.Lock()
+	if c.resetting {
+		c.mu.Unlock()
+		return
+	}
+	if c.lastSync.IsZero() {
+		c.syncing = true
+		c.mu.Unlock()
+		defer func() {
+			c.mu.Lock()
+			c.syncing = false
+			c.mu.Unlock()
+		}()
+		c.syncClusterMetadata(ctx)
+		return
+	}
+	if c.syncing || time.Since(c.lastSync) < 3*time.Second {
+		c.mu.Unlock()
+		return
+	}
+	c.syncing = true
+	c.mu.Unlock()
+
+	go func() {
+		defer func() {
+			c.mu.Lock()
+			c.syncing = false
+			c.mu.Unlock()
+		}()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		c.syncClusterMetadata(bgCtx)
+	}()
+}
+
 func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 	c.mu.Lock()
-	if c.resetting || time.Since(c.lastSync) < 3*time.Second {
+	if c.resetting {
 		c.mu.Unlock()
 		return
 	}
@@ -1581,7 +1649,7 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 						ActorName: a.Metadata.Name,
 						Atespace:  c.atespace,
 						Template:  a.ActorTemplate.Name,
-						UpdatedAt: time.Now().UTC(),
+						UpdatedAt: time.Unix(0, 0).UTC(),
 						Session:   *sess,
 					}
 					c.records[a.Metadata.Name] = rec
@@ -1603,7 +1671,7 @@ func (c *ClusterAteBackend) syncClusterMetadata(ctx context.Context) {
 }
 
 func (c *ClusterAteBackend) DashboardState(ctx context.Context) (DashboardSnapshot, error) {
-	c.syncClusterMetadata(ctx)
+	c.ensureClusterMetadata(ctx)
 
 	c.mu.Lock()
 	now := time.Now().UTC()
@@ -1622,7 +1690,7 @@ func (c *ClusterAteBackend) DashboardState(ctx context.Context) (DashboardSnapsh
 	var stats DashboardStats
 	stats.WorkerCapacity = len(workers)
 	for _, rec := range c.records {
-		sessions = append(sessions, *rec)
+		sessions = append(sessions, summarizeSessionForDashboard(*rec))
 		stats.TotalSessions++
 		if rec.State == "ACTOR_STATE_RUNNING" {
 			stats.RunningActors++
@@ -1638,9 +1706,7 @@ func (c *ClusterAteBackend) DashboardState(ctx context.Context) (DashboardSnapsh
 	}
 	c.mu.Unlock()
 
-	slices.SortFunc(sessions, func(a, b SessionRecord) int {
-		return b.UpdatedAt.Compare(a.UpdatedAt)
-	})
+	slices.SortFunc(sessions, compareDashboardSessions)
 
 	events, saves, reverts, forks := c.hub.snapshot()
 	stats.TotalSaves = saves

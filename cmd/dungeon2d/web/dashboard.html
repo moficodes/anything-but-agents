@@ -979,11 +979,47 @@
       trash: `<svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`
     };
 
+    const svgParser = new DOMParser();
+    const svgTemplateCache = {};
+
+    function createSvgIcon(name) {
+      if (!svgTemplateCache[name]) {
+        const raw = (SVG_ICONS[name] || SVG_ICONS.sword).replace(
+          "<svg ",
+          '<svg xmlns="http://www.w3.org/2000/svg" '
+        );
+        const doc = svgParser.parseFromString(raw, "image/svg+xml");
+        svgTemplateCache[name] = doc.documentElement;
+      }
+      return svgTemplateCache[name].cloneNode(true);
+    }
+
+    function setTextIfChanged(el, nextText) {
+      const str = String(nextText);
+      if (el && el.textContent !== str) {
+        el.textContent = str;
+      }
+    }
+
+    function setQrImageSrc(imgEl, qrSrc) {
+      if (!imgEl) return;
+      if (imgEl.getAttribute("data-qr-src") !== qrSrc) {
+        imgEl.setAttribute("data-qr-src", qrSrc);
+        imgEl.src = qrSrc;
+      }
+    }
+
     const selectedVersionByActor = {};
+    const workerCardMap = new Map();
+    const actorCardMap = new Map();
+    const feedItemMap = new Map();
+    let emptyActorsPlaceholder = null;
     let currentSessionCount = 0;
     let resetArmed = false;
     let resetBusy = false;
     let resetArmTimer = null;
+    let refreshInFlight = false;
+    let refreshQueued = false;
 
     function disarmResetButton() {
       if (resetArmTimer) {
@@ -1038,171 +1074,490 @@
       }
     }
 
+    function createWorkerCard() {
+      const card = document.createElement("div");
+      card.className = "worker-card stone-slab";
+
+      const top = document.createElement("div");
+      top.className = "worker-top";
+      const podLabel = document.createElement("span");
+      const ipLabel = document.createElement("span");
+      ipLabel.className = "worker-ip";
+      top.append(podLabel, ipLabel);
+
+      const pill = document.createElement("div");
+      pill.className = "worker-slot-pill stone-socket";
+      const statusLabel = document.createElement("span");
+      const wakesLabel = document.createElement("span");
+      pill.append(statusLabel, wakesLabel);
+
+      card.append(top, pill);
+      return { el: card, podLabel, ipLabel, statusLabel, wakesLabel };
+    }
+
+    function reconcileWorkers(workersEl, workers) {
+      const seenKeys = new Set();
+      for (let i = 0; i < workers.length; i++) {
+        const w = workers[i];
+        const key = String(w.index || i + 1);
+        seenKeys.add(key);
+
+        let entry = workerCardMap.get(key);
+        if (!entry) {
+          entry = createWorkerCard();
+          workerCardMap.set(key, entry);
+        }
+
+        const busy = !!w.active_actor;
+        if (entry.el.classList.contains("busy") !== busy) {
+          entry.el.classList.toggle("busy", busy);
+        }
+        const suffix = (w.worker_pod || "").slice(-5);
+        setTextIfChanged(entry.podLabel, `WORKER POD #${w.index} (${suffix})`);
+        setTextIfChanged(entry.ipLabel, w.ip || "");
+        setTextIfChanged(
+          entry.statusLabel,
+          busy ? `WAKING: ${w.active_actor} (${w.active_action})` : "IDLE \u2014 0 ACTORS PINNED"
+        );
+        setTextIfChanged(entry.wakesLabel, `Wakes: ${w.wake_count || 0}`);
+
+        const curAtPos = workersEl.children[i] || null;
+        if (curAtPos !== entry.el) {
+          workersEl.insertBefore(entry.el, curAtPos);
+        }
+      }
+
+      for (const [key, entry] of workerCardMap.entries()) {
+        if (!seenKeys.has(key)) {
+          entry.el.remove();
+          workerCardMap.delete(key);
+        }
+      }
+    }
+
+    function getEmptyActorsPlaceholder() {
+      if (!emptyActorsPlaceholder) {
+        const box = document.createElement("div");
+        box.className = "stone-slab";
+        box.style.color = "var(--muted)";
+        box.style.fontSize = "12px";
+        box.style.padding = "18px";
+        box.style.borderRadius = "6px";
+        box.append("No player actors yet. Scan the QR code, open ");
+        const codeEl = document.createElement("code");
+        codeEl.textContent = "/play";
+        box.append(codeEl, ", or click ");
+        const strongEl = document.createElement("strong");
+        strongEl.textContent = "Spawn Demo Bot";
+        box.append(strongEl, " above!");
+        emptyActorsPlaceholder = box;
+      }
+      return emptyActorsPlaceholder;
+    }
+
+    function createInvChip(iconName, labelText, relicAttr) {
+      const chip = document.createElement("span");
+      chip.className = "inv-chip stone-socket";
+      if (relicAttr) {
+        chip.setAttribute("data-relic", relicAttr);
+      }
+      chip.appendChild(createSvgIcon(iconName));
+      const txt = document.createTextNode(" " + labelText);
+      chip.appendChild(txt);
+      return { chip, txt };
+    }
+
+    function createActorCard(actorName) {
+      const card = document.createElement("div");
+      card.className = "actor-card stone-slab";
+      card.setAttribute("data-actor", actorName);
+
+      const hdr = document.createElement("div");
+      hdr.className = "actor-hdr";
+
+      const ident = document.createElement("div");
+      ident.className = "hero-ident";
+
+      const avatarBox = document.createElement("div");
+      avatarBox.className = "avatar-box stone-socket";
+      const avatarCanvas = document.createElement("canvas");
+      avatarCanvas.id = "av-" + actorName;
+      avatarCanvas.width = 16;
+      avatarCanvas.height = 16;
+      avatarBox.appendChild(avatarCanvas);
+
+      const nameWrap = document.createElement("div");
+      nameWrap.style.minWidth = "0";
+      const nameEl = document.createElement("div");
+      nameEl.className = "actor-name";
+      const subEl = document.createElement("div");
+      subEl.className = "actor-sub";
+      nameWrap.append(nameEl, subEl);
+
+      ident.append(avatarBox, nameWrap);
+
+      const badgeEl = document.createElement("span");
+      badgeEl.className = "badge badge-suspended";
+      hdr.append(ident, badgeEl);
+
+      const hpOuter = document.createElement("div");
+      hpOuter.className = "hp-bar-outer";
+      const hpInner = document.createElement("div");
+      hpInner.className = "hp-bar-inner";
+      const hpSegs = document.createElement("div");
+      hpSegs.className = "hp-bar-segments";
+      const hpLabel = document.createElement("div");
+      hpLabel.className = "hp-bar-label";
+      const hpSpan = document.createElement("span");
+      const flScoreSpan = document.createElement("span");
+      hpLabel.append(hpSpan, flScoreSpan);
+      hpOuter.append(hpInner, hpSegs, hpLabel);
+
+      const invRow = document.createElement("div");
+      invRow.className = "inv-row";
+      const keyChip = createInvChip("key", "Key", "");
+      const swordChip = createInvChip("sword", "Weapon", "");
+      const shieldChip = createInvChip("shield", "Shield/Aegis", "sunforged-aegis");
+      const relicChip = createInvChip("fork", "Relic", "voidbane-relic");
+      const chaliceChip = createInvChip("chalice", "Chalice", "");
+      const potionChip = createInvChip("potion", "x0", "");
+      invRow.append(
+        keyChip.chip,
+        swordChip.chip,
+        shieldChip.chip,
+        relicChip.chip,
+        chaliceChip.chip,
+        potionChip.chip
+      );
+
+      const podTrailEl = document.createElement("div");
+      podTrailEl.className = "pod-trail stone-socket";
+      podTrailEl.title = "Worker Pod IP Hop Trail";
+
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+
+      const verSelect = document.createElement("select");
+      verSelect.className = "ver-select stone-socket";
+      verSelect.title = "Select Snapshot Version to Revert To";
+      verSelect.addEventListener("change", () => {
+        selectedVersionByActor[actorName] = parseInt(verSelect.value, 10);
+      });
+
+      const revertBtn = document.createElement("button");
+      revertBtn.type = "button";
+      revertBtn.className = "btn btn-warn icon-sq-btn";
+      revertBtn.title = "Revert Actor to Selected Snapshot Version";
+      revertBtn.appendChild(createSvgIcon("revert"));
+      revertBtn.addEventListener("click", () => revertActor(actorName));
+
+      const forkBtn = document.createElement("button");
+      forkBtn.type = "button";
+      forkBtn.className = "btn btn-fork icon-sq-btn";
+      forkBtn.title = "Fork Parallel Timeline (--tag)";
+      forkBtn.appendChild(createSvgIcon("fork"));
+      forkBtn.addEventListener("click", () => forkActor(actorName));
+
+      const playLink = document.createElement("a");
+      playLink.className = "btn icon-sq-btn";
+      playLink.href = "/play?actor=" + encodeURIComponent(actorName);
+      playLink.target = "_blank";
+      playLink.title = "Open in Player View";
+      playLink.appendChild(createSvgIcon("play"));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn btn-danger icon-sq-btn";
+      deleteBtn.title = "Delete Actor & Snapshots";
+      deleteBtn.appendChild(createSvgIcon("trash"));
+      deleteBtn.addEventListener("click", () => deleteActor(actorName));
+
+      actions.append(verSelect, revertBtn, forkBtn, playLink, deleteBtn);
+      card.append(hdr, hpOuter, invRow, podTrailEl, actions);
+
+      return {
+        el: card,
+        avatarCanvas,
+        drawnClass: "",
+        cardClass: card.className,
+        badgeClass: badgeEl.className,
+        hpWidth: "",
+        optionsSig: "",
+        nameEl,
+        subEl,
+        badgeEl,
+        hpInner,
+        hpSpan,
+        flScoreSpan,
+        keyChip,
+        swordChip,
+        shieldChip,
+        relicChip,
+        chaliceChip,
+        potionChip,
+        podTrailEl,
+        verSelect
+      };
+    }
+
+    function setChipActive(chipObj, active) {
+      if (chipObj.chip.classList.contains("active") !== active) {
+        chipObj.chip.classList.toggle("active", active);
+      }
+    }
+
+    function reconcileSessions(gridEl, sessions) {
+      if (sessions.length === 0) {
+        for (const entry of actorCardMap.values()) {
+          entry.el.remove();
+        }
+        actorCardMap.clear();
+        const emptyEl = getEmptyActorsPlaceholder();
+        if (gridEl.firstElementChild !== emptyEl || gridEl.children.length !== 1) {
+          gridEl.replaceChildren(emptyEl);
+        }
+        return;
+      }
+
+      if (emptyActorsPlaceholder && emptyActorsPlaceholder.parentNode === gridEl) {
+        emptyActorsPlaceholder.remove();
+      }
+
+      const activeNames = new Set();
+      for (let i = 0; i < sessions.length; i++) {
+        const rec = sessions[i];
+        const actorName = rec.actor_name;
+        activeNames.add(actorName);
+
+        let entry = actorCardMap.get(actorName);
+        if (!entry) {
+          entry = createActorCard(actorName);
+          actorCardMap.set(actorName, entry);
+        }
+
+        const s = rec.session || {};
+        const inv = s.inventory || [];
+        const cps = (s.checkpoints && s.checkpoints.length > 0)
+          ? [...s.checkpoints].reverse()
+          : [{ version: rec.save_count || 1, floor: s.floor || 1, label: "Latest Snapshot" }];
+        const latestVer = cps[0].version || rec.save_count || 1;
+
+        let badgeClass = "badge badge-suspended";
+        let badgeText = `SNAPSHOT v${latestVer} \u2022 GCS`;
+        let cardClass = "actor-card stone-slab";
+        if (s.alive === false) {
+          badgeClass = "badge badge-dead";
+          badgeText = "DEAD IN RAM";
+          cardClass += " state-dead";
+        } else if (s.victory) {
+          badgeClass = "badge badge-victory";
+          badgeText = `VICTORY v${latestVer}`;
+          cardClass += " state-victory";
+        } else if (rec.state === "ACTOR_STATE_RUNNING") {
+          badgeClass = "badge badge-running";
+          badgeText = "ACTIVE ON POD";
+        }
+
+        if (entry.cardClass !== cardClass) {
+          entry.el.className = cardClass;
+          entry.cardClass = cardClass;
+        }
+        if (entry.badgeClass !== badgeClass) {
+          entry.badgeEl.className = badgeClass;
+          entry.badgeClass = badgeClass;
+        }
+        setTextIfChanged(entry.badgeEl, badgeText);
+
+        const cls = s.character_class || "paladin";
+        if (entry.drawnClass !== cls) {
+          entry.avatarCanvas.dataset.class = cls;
+          drawAvatar(entry.avatarCanvas, cls);
+          entry.drawnClass = cls;
+        }
+
+        setTextIfChanged(entry.nameEl, s.hero_name || actorName);
+        setTextIfChanged(entry.subEl, `${actorName} \u2022 Reverts: ${rec.revert_count || 0}`);
+
+        const maxHp = s.max_hp || 100;
+        const hpVal = s.hp !== undefined ? s.hp : maxHp;
+        const hpPct = `${Math.max(0, Math.min(100, Math.round((hpVal / maxHp) * 100)))}%`;
+        if (entry.hpWidth !== hpPct) {
+          entry.hpInner.style.width = hpPct;
+          entry.hpWidth = hpPct;
+        }
+        setTextIfChanged(entry.hpSpan, `HP ${hpVal}/${maxHp}`);
+        setTextIfChanged(entry.flScoreSpan, `FL ${s.floor || 1}/8 \u2022 ${s.score || 0} PTS`);
+
+        setChipActive(entry.keyChip, inv.includes("crypt-key"));
+        setChipActive(
+          entry.swordChip,
+          inv.includes("dragon-slayer-sword") ||
+            inv.includes("sunblade-greatsword") ||
+            inv.includes("windforce-bow") ||
+            inv.includes("runic-firestaff")
+        );
+        setChipActive(entry.shieldChip, inv.includes("fire-shield") || inv.includes("sunforged-aegis"));
+        setChipActive(entry.relicChip, inv.includes("voidbane-relic") || inv.includes("chrono-sigil"));
+        setChipActive(entry.chaliceChip, inv.includes("golden-chalice"));
+        const potions = inv.filter(it => it === "healing-potion").length;
+        setChipActive(entry.potionChip, potions > 0);
+        const potionTxt = ` x${potions}`;
+        if (entry.potionChip.txt.nodeValue !== potionTxt) {
+          entry.potionChip.txt.nodeValue = potionTxt;
+        }
+
+        const podTrail = (s.pod_ip_history && s.pod_ip_history.length > 0)
+          ? s.pod_ip_history.join(" -> ")
+          : (rec.assigned_worker_ip || "gs://snapshot");
+        setTextIfChanged(entry.podTrailEl, `POD HOPS: ${podTrail}`);
+
+        const optionsSig = cps
+          .map((cp, idx) => `${cp.version || (cps.length - idx)}:${cp.floor || 1}:${cp.label || "Snapshot"}`)
+          .join("|");
+        const isFocused = document.activeElement === entry.verSelect;
+        if (entry.optionsSig !== optionsSig && !isFocused) {
+          const chosenVer = selectedVersionByActor[actorName] || 0;
+          const opts = cps.map((cp, idx) => {
+            const v = cp.version || (cps.length - idx);
+            const opt = document.createElement("option");
+            opt.value = String(v);
+            opt.textContent = `[v${v}] FL${cp.floor || 1} \u2022 ${cp.label || "Snapshot"}`;
+            if (chosenVer === v || (chosenVer === 0 && idx === 0)) {
+              opt.selected = true;
+            }
+            return opt;
+          });
+          entry.verSelect.replaceChildren(...opts);
+          entry.optionsSig = optionsSig;
+        } else if (!isFocused && !selectedVersionByActor[actorName] && entry.verSelect.options.length > 0) {
+          if (entry.verSelect.selectedIndex !== 0) {
+            entry.verSelect.selectedIndex = 0;
+          }
+        }
+
+        const curAtPos = gridEl.children[i] || null;
+        if (curAtPos !== entry.el) {
+          gridEl.insertBefore(entry.el, curAtPos);
+        }
+      }
+
+      for (const [actorName, entry] of actorCardMap.entries()) {
+        if (!activeNames.has(actorName)) {
+          entry.el.remove();
+          actorCardMap.delete(actorName);
+          delete selectedVersionByActor[actorName];
+        }
+      }
+    }
+
+    function createFeedItem(ev) {
+      const item = document.createElement("div");
+      item.className = `feed-item ev-${ev.type || "INFO"}`;
+
+      const meta = document.createElement("div");
+      meta.className = "feed-meta";
+      const leftSpan = document.createElement("span");
+      const strongEl = document.createElement("strong");
+      strongEl.textContent = ev.type || "INFO";
+      leftSpan.append(strongEl, ` \u2022 ${ev.actor_name || ""}`);
+
+      const rightSpan = document.createElement("span");
+      rightSpan.textContent = ev.worker_ip ? `${ev.worker_ip} (${ev.latency_ms || 0}ms)` : "";
+      meta.append(leftSpan, rightSpan);
+
+      const msg = document.createElement("div");
+      msg.style.color = "#231709";
+      msg.style.lineHeight = "1.35";
+      msg.textContent = ev.message || "";
+
+      item.append(meta, msg);
+      return item;
+    }
+
+    function reconcileFeed(feedEl, events) {
+      const slice = events.slice(0, 30);
+      const activeKeys = new Set();
+
+      for (let i = 0; i < slice.length; i++) {
+        const ev = slice[i];
+        const key = ev.id ? String(ev.id) : `${ev.timestamp || ""}:${ev.type}:${ev.actor_name}:${i}`;
+        activeKeys.add(key);
+
+        let itemEl = feedItemMap.get(key);
+        if (!itemEl) {
+          itemEl = createFeedItem(ev);
+          feedItemMap.set(key, itemEl);
+        }
+        const curAtPos = feedEl.children[i] || null;
+        if (curAtPos !== itemEl) {
+          feedEl.insertBefore(itemEl, curAtPos);
+        }
+      }
+
+      for (const [key, itemEl] of feedItemMap.entries()) {
+        if (!activeKeys.has(key)) {
+          itemEl.remove();
+          feedItemMap.delete(key);
+        }
+      }
+    }
+
     function renderDashboard(snap) {
       currentSessionCount = (snap.stats && snap.stats.total_sessions) || 0;
       if (resetArmed && !resetBusy) {
         const lbl = document.getElementById("btnResetAllLabel");
-        if (lbl) lbl.textContent = `Confirm Reset (${currentSessionCount})?`;
+        setTextIfChanged(lbl, `Confirm Reset (${currentSessionCount})?`);
       }
-      document.getElementById("modeBadge").textContent = (snap.mode || "cluster-ate").toUpperCase();
-      document.getElementById("kpiTotal").textContent = snap.stats.total_sessions;
-      document.getElementById("kpiSuspended").textContent = snap.stats.suspended_actors;
-      document.getElementById("kpiSaves").textContent = snap.stats.total_saves;
-      document.getElementById("kpiReverts").textContent = snap.stats.total_reverts;
-      document.getElementById("kpiVictories").textContent = snap.stats.victories;
+      setTextIfChanged(document.getElementById("modeBadge"), (snap.mode || "cluster-ate").toUpperCase());
+      setTextIfChanged(document.getElementById("kpiTotal"), snap.stats.total_sessions);
+      setTextIfChanged(document.getElementById("kpiSuspended"), snap.stats.suspended_actors);
+      setTextIfChanged(document.getElementById("kpiSaves"), snap.stats.total_saves);
+      setTextIfChanged(document.getElementById("kpiReverts"), snap.stats.total_reverts);
+      setTextIfChanged(document.getElementById("kpiVictories"), snap.stats.victories);
 
       const playURL = (snap.public_url || window.location.origin) + "/play";
       const qrSrc = "/api/qr.svg?url=" + encodeURIComponent(playURL);
-      document.getElementById("joinLinkText").textContent = playURL;
-      document.getElementById("joinLinkText").href = playURL;
-      document.getElementById("qrImage").src = qrSrc;
-      const modalImg = document.getElementById("qrModalImage");
-      if (modalImg) modalImg.src = qrSrc;
+      const joinLinkEl = document.getElementById("joinLinkText");
+      if (joinLinkEl) {
+        setTextIfChanged(joinLinkEl, playURL);
+        if (joinLinkEl.getAttribute("href") !== playURL) {
+          joinLinkEl.setAttribute("href", playURL);
+        }
+      }
+      setQrImageSrc(document.getElementById("qrImage"), qrSrc);
+      setQrImageSrc(document.getElementById("qrModalImage"), qrSrc);
       const modalLink = document.getElementById("qrModalLink");
       if (modalLink) {
-        modalLink.textContent = playURL;
-        modalLink.href = playURL;
+        setTextIfChanged(modalLink, playURL);
+        if (modalLink.getAttribute("href") !== playURL) {
+          modalLink.setAttribute("href", playURL);
+        }
       }
 
-      const workersEl = document.getElementById("workersRow");
-      workersEl.innerHTML = (snap.workers || []).map(w => {
-        const busy = !!w.active_actor;
-        return `
-          <div class="worker-card stone-slab ${busy ? 'busy' : ''}">
-            <div class="worker-top">
-              <span>WORKER POD #${w.index} (${w.worker_pod.slice(-5)})</span>
-              <span class="worker-ip">${w.ip}</span>
-            </div>
-            <div class="worker-slot-pill stone-socket">
-              <span>${busy ? `WAKING: ${w.active_actor} (${w.active_action})` : 'IDLE — 0 ACTORS PINNED'}</span>
-              <span>Wakes: ${w.wake_count || 0}</span>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      const gridEl = document.getElementById("actorsGrid");
-      const sessions = snap.sessions || [];
-      if (sessions.length === 0) {
-        gridEl.innerHTML = `<div class="stone-slab" style="color:var(--muted);font-size:12px;padding:18px;border-radius:6px;">
-          No player actors yet. Scan the QR code, open <code>/play</code>, or click <strong>Spawn Demo Bot</strong> above!
-        </div>`;
-      } else {
-        gridEl.innerHTML = sessions.map(rec => {
-          const s = rec.session;
-          const inv = s.inventory || [];
-          const cps = (s.checkpoints && s.checkpoints.length > 0)
-            ? [...s.checkpoints].reverse()
-            : [{ version: rec.save_count || 1, floor: s.floor || 1, label: "Latest Snapshot" }];
-          const latestVer = cps[0].version || rec.save_count || 1;
-
-          let statusBadge = `<span class="badge badge-suspended">SNAPSHOT v${latestVer} &bull; GCS</span>`;
-          let cardClass = "actor-card stone-slab";
-          if (!s.alive) {
-            statusBadge = `<span class="badge badge-dead">DEAD IN RAM</span>`;
-            cardClass += " state-dead";
-          } else if (s.victory) {
-            statusBadge = `<span class="badge badge-victory">VICTORY v${latestVer}</span>`;
-            cardClass += " state-victory";
-          } else if (rec.state === "ACTOR_STATE_RUNNING") {
-            statusBadge = `<span class="badge badge-running">ACTIVE ON POD</span>`;
-          }
-
-          const hpPct = Math.max(0, Math.min(100, Math.round((s.hp / (s.max_hp || 100)) * 100)));
-          const podTrail = (s.pod_ip_history && s.pod_ip_history.length > 0)
-            ? s.pod_ip_history.join(" -> ")
-            : (rec.assigned_worker_ip || "gs://snapshot");
-          const potions = inv.filter(i => i === "healing-potion").length;
-          const chosenVer = selectedVersionByActor[rec.actor_name] || 0;
-
-          const optionsHTML = cps.map((cp, idx) => {
-            const v = cp.version || (cps.length - idx);
-            const sel = (chosenVer === v || (chosenVer === 0 && idx === 0)) ? "selected" : "";
-            return `<option value="${v}" ${sel}>[v${v}] FL${cp.floor || 1} • ${cp.label || 'Snapshot'}</option>`;
-          }).join("");
-
-          return `
-            <div class="${cardClass}">
-              <div class="actor-hdr">
-                <div class="hero-ident">
-                  <div class="avatar-box stone-socket">
-                    <canvas id="av-${rec.actor_name}" data-class="${s.character_class || 'paladin'}" width="16" height="16"></canvas>
-                  </div>
-                  <div style="min-width:0;">
-                    <div class="actor-name">${s.hero_name || rec.actor_name}</div>
-                    <div class="actor-sub">${rec.actor_name} &bull; Reverts: ${rec.revert_count}</div>
-                  </div>
-                </div>
-                ${statusBadge}
-              </div>
-
-              <div class="hp-bar-outer">
-                <div class="hp-bar-inner" style="width:${hpPct}%"></div>
-                <div class="hp-bar-segments"></div>
-                <div class="hp-bar-label">
-                  <span>HP ${s.hp}/${s.max_hp || 100}</span>
-                  <span>FL ${s.floor}/8 &bull; ${s.score} PTS</span>
-                </div>
-              </div>
-
-              <div class="inv-row">
-                <span class="inv-chip stone-socket ${inv.includes('crypt-key') ? 'active' : ''}">${SVG_ICONS.key} Key</span>
-                <span class="inv-chip stone-socket ${(inv.includes('dragon-slayer-sword') || inv.includes('sunblade-greatsword') || inv.includes('windforce-bow') || inv.includes('runic-firestaff')) ? 'active' : ''}">${SVG_ICONS.sword} Weapon</span>
-                <span class="inv-chip stone-socket ${(inv.includes('fire-shield') || inv.includes('sunforged-aegis')) ? 'active' : ''}" data-relic="sunforged-aegis">${SVG_ICONS.shield} Shield/Aegis</span>
-                <span class="inv-chip stone-socket ${(inv.includes('voidbane-relic') || inv.includes('chrono-sigil')) ? 'active' : ''}" data-relic="voidbane-relic">${SVG_ICONS.fork} Relic</span>
-                <span class="inv-chip stone-socket ${inv.includes('golden-chalice') ? 'active' : ''}">${SVG_ICONS.chalice} Chalice</span>
-                <span class="inv-chip stone-socket ${potions > 0 ? 'active' : ''}">${SVG_ICONS.potion} x${potions}</span>
-              </div>
-
-              <div class="pod-trail stone-socket" title="Worker Pod IP Hop Trail">POD HOPS: ${podTrail}</div>
-
-              <div class="card-actions">
-                <select class="ver-select stone-socket" onchange="selectedVersionByActor['${rec.actor_name}'] = parseInt(this.value, 10)" title="Select Snapshot Version to Revert To">
-                  ${optionsHTML}
-                </select>
-                <button class="btn btn-warn icon-sq-btn" onclick="revertActor('${rec.actor_name}')" title="Revert Actor to Selected Snapshot Version">
-                  ${SVG_ICONS.revert}
-                </button>
-                <button class="btn btn-fork icon-sq-btn" onclick="forkActor('${rec.actor_name}')" title="Fork Parallel Timeline (--tag)">
-                  ${SVG_ICONS.fork}
-                </button>
-                <a class="btn icon-sq-btn" href="/play?actor=${encodeURIComponent(rec.actor_name)}" target="_blank" title="Open in Player View">
-                  ${SVG_ICONS.play}
-                </a>
-                <button class="btn btn-danger icon-sq-btn" onclick="deleteActor('${rec.actor_name}')" title="Delete Actor & Snapshots">
-                  ${SVG_ICONS.trash}
-                </button>
-              </div>
-            </div>
-          `;
-        }).join("");
-
-        sessions.forEach(rec => {
-          const c = document.getElementById("av-" + rec.actor_name);
-          if (c) drawAvatar(c, c.dataset.class);
-        });
-      }
-
-      const feedEl = document.getElementById("feedList");
-      feedEl.innerHTML = (snap.events || []).slice(0, 30).map(ev => `
-        <div class="feed-item ev-${ev.type}">
-          <div class="feed-meta">
-            <span><strong>${ev.type}</strong> &bull; ${ev.actor_name}</span>
-            <span>${ev.worker_ip ? ev.worker_ip + ' (' + (ev.latency_ms || 0) + 'ms)' : ''}</span>
-          </div>
-          <div style="color:#231709;line-height:1.35;">${ev.message}</div>
-        </div>
-      `).join("");
+      reconcileWorkers(document.getElementById("workersRow"), snap.workers || []);
+      reconcileSessions(document.getElementById("actorsGrid"), snap.sessions || []);
+      reconcileFeed(document.getElementById("feedList"), snap.events || []);
     }
 
     async function refreshState() {
+      if (refreshInFlight) {
+        refreshQueued = true;
+        return;
+      }
+      refreshInFlight = true;
       try {
-        const res = await fetch("/api/dashboard/state");
-        if (res.ok) {
-          const snap = await res.json();
-          renderDashboard(snap);
-        }
-      } catch (_) {}
+        do {
+          refreshQueued = false;
+          const res = await fetch("/api/dashboard/state");
+          if (res.ok) {
+            const snap = await res.json();
+            renderDashboard(snap);
+          }
+        } while (refreshQueued);
+      } catch (_) {
+      } finally {
+        refreshInFlight = false;
+      }
     }
 
     async function revertActor(actorName) {
