@@ -782,6 +782,7 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 			Ledger:          make([]Invoice, 0),
 		}
 	}
+	b.updateInClusterK8sSecret(context.Background(), store.CurrentToken())
 	return b
 }
 
@@ -832,7 +833,10 @@ rules:
           audiences:
           - "https://billing-gateway.%s.svc.cluster.local"
           expirationSeconds: 900
-`, b.atespace, b.atespace, DefaultVaultSecretURI, b.atespace)
+- http:
+    hostnames:
+    - untrusted-echo.%s.svc.cluster.local
+`, b.atespace, b.atespace, DefaultVaultSecretURI, b.atespace, b.atespace)
 	tmp, err := os.CreateTemp("", "billing-egress-*.yaml")
 	if err != nil {
 		return
@@ -974,6 +978,7 @@ func (b *ClusterAteBackend) SettleActor(ctx context.Context, actorName string) (
 }
 
 func (b *ClusterAteBackend) InspectActorMemory(ctx context.Context, actorName string) (*MemoryInspectionResult, error) {
+	_ = b.EnsureActor(ctx, actorName)
 	reqURL := fmt.Sprintf("%s/inspect-memory", b.routerURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -995,6 +1000,10 @@ func (b *ClusterAteBackend) InspectActorMemory(ctx context.Context, actorName st
 }
 
 func (b *ClusterAteBackend) TestExfiltration(ctx context.Context, actorName, targetURL string) (*ExfiltrationTestResult, error) {
+	_ = b.EnsureActor(ctx, actorName)
+	if strings.HasPrefix(targetURL, "/") {
+		targetURL = ""
+	}
 	reqURL := fmt.Sprintf("%s/test-exfiltrate", b.routerURL)
 	body, _ := json.Marshal(map[string]string{"target_url": targetURL})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))

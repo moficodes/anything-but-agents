@@ -38,7 +38,7 @@ containers:
   - name: PAYMENT_VAULT_URL
     value: http://billing-gateway.anything-but-agents.svc.cluster.local/api/vault/charge
   - name: ECHO_SERVICE_URL
-    value: http://billing-gateway.anything-but-agents.svc.cluster.local/api/echo
+    value: http://untrusted-echo.anything-but-agents.svc.cluster.local/api/echo
   volumeMounts:
   - name: system-info
     mountPath: /run/ate

