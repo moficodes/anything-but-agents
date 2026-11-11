@@ -173,6 +173,7 @@ allowed_ingress_spiffe_ids() {
 }
 
 ensure_router_ingress_spiffe_ids() {
+  ensure_credential_provider_namespace_policy
   if ! kubectl get deployment atenet-router -n ate-system >/dev/null 2>&1; then
     return 0
   fi
@@ -206,6 +207,33 @@ PY
 )"
   kubectl patch deployment atenet-router -n ate-system --type=json -p="${patch_json}" >/dev/null
   kubectl rollout status deployment/atenet-router -n ate-system --timeout=120s
+}
+
+ensure_credential_provider_namespace_policy() {
+  if ! kubectl get deployment k8s-credential-provider -n ate-system >/dev/null 2>&1; then
+    return 0
+  fi
+  local current_policy
+  current_policy="$(kubectl get configmap k8s-credential-provider-namespace-policy -n ate-system -o jsonpath='{.data.namespace-policy\.yaml}' 2>/dev/null || true)"
+  if [[ "${current_policy}" == *"anything-but-agents"* ]]; then
+    return 0
+  fi
+  echo "Authorizing atespace 'anything-but-agents' in k8s-credential-provider-namespace-policy..."
+  kubectl apply -f - >/dev/null <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-credential-provider-namespace-policy
+  namespace: ate-system
+data:
+  namespace-policy.yaml: |
+    policies:
+    - atespace: anything-but-agents
+      allowedNamespaces:
+      - anything-but-agents
+EOF
+  kubectl rollout restart deployment/k8s-credential-provider -n ate-system >/dev/null
+  kubectl rollout status deployment/k8s-credential-provider -n ate-system --timeout=120s
 }
 
 sync_substrate_root_version() {
@@ -1887,16 +1915,16 @@ act6_buildbox() {
 
   step "1. Create stateful build runner actor 'build-pr-104' and attach Phase 1 EgressPolicy (allowing package mirror only)"
   run_cmd kubectl ate create actor build-pr-104 -a "${ATESPACE}" --template buildbox
-  run_cmd curl -fsS -X POST "${bb_url}/api/build/fetch-deps" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
+  run_cmd curl -fsS -X POST "${bb_url}/api/build/fetch-deps" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
 
   step "2. Lock ActorEgressPolicy to Total Airgap (0 allowed rules) & compile hermetically from in-memory Go heap RAM"
-  run_cmd curl -fsS -X POST "${bb_url}/api/build/compile-test" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
+  run_cmd curl -fsS -X POST "${bb_url}/api/build/compile-test" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
 
   step "3. Trigger 3 rogue egress probes (external telemetry, compile-time mirror fetch, link-local metadata) -> 100% BLOCKED"
-  run_cmd curl -fsS -X POST "${bb_url}/api/build/test-rogue" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
+  run_cmd curl -fsS -X POST "${bb_url}/api/build/test-rogue" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
 
   step "4. Update EgressPolicy to allow registry upload only, publish signed release & SBOM, then cleanly suspend to GCS"
-  run_cmd curl -fsS -X POST "${bb_url}/api/build/publish" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
+  run_cmd curl -fsS -X POST "${bb_url}/api/build/publish" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"job_name":"build-pr-104"}'
   run_cmd kubectl ate suspend actor build-pr-104 -a "${ATESPACE}" --mode=sync
 
   if [[ "${PAUSE_BETWEEN_STEPS}" == "1" ]]; then
@@ -2016,6 +2044,7 @@ cleanup_billing_gateway() {
     kubectl ate delete egress-policy "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl delete deployment,service,secret,serviceaccount billing-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding billing-gateway-secret-rotator -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding billing-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding billing-gateway-ate-client --ignore-not-found
   free_workers '^sub-'

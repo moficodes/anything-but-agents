@@ -36,9 +36,9 @@ containers:
   - name: PAYMENT_VAULT_TOKEN
     value: ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token
   - name: PAYMENT_VAULT_URL
-    value: http://billing-gateway.anything-but-agents.svc.cluster.local:8088/api/vault/charge
+    value: http://billing-gateway.anything-but-agents.svc.cluster.local/api/vault/charge
   - name: ECHO_SERVICE_URL
-    value: http://billing-gateway.anything-but-agents.svc.cluster.local:8088/api/echo
+    value: http://billing-gateway.anything-but-agents.svc.cluster.local/api/echo
   volumeMounts:
   - name: system-info
     mountPath: /run/ate

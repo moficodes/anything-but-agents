@@ -39,11 +39,11 @@ const (
 	PhaseArtifactPublish      = "ARTIFACT_PUBLISH"
 	PhaseCompleted            = "COMPLETED"
 
-	DefaultMirrorURL   = "http://buildbox-gateway.anything-but-agents.svc.cluster.local:8087"
-	DefaultRegistryURL = "http://buildbox-gateway.anything-but-agents.svc.cluster.local:8087"
+	DefaultMirrorURL   = "http://buildbox-gateway.anything-but-agents.svc.cluster.local"
+	DefaultRegistryURL = "http://buildbox-gateway.anything-but-agents.svc.cluster.local"
 
 	RogueExternalHost = "http://telemetry.sketchy-ci.example/beacon?token=stolen-auth-token-exfil"
-	RogueMirrorProbe  = "http://buildbox-gateway.anything-but-agents.svc.cluster.local:8087/api/mirror/pkgs/backdoor-payload"
+	RogueMirrorProbe  = "http://buildbox-gateway.anything-but-agents.svc.cluster.local/api/mirror/pkgs/backdoor-payload"
 	RogueMetadataHost = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 )
 
@@ -324,12 +324,23 @@ func (b *Buildbox) FetchDependencies(ctx context.Context, mirrorOverride string)
 	for _, p := range standardPkgs {
 		start := time.Now()
 		reqURL := fmt.Sprintf("%s/api/mirror/pkgs/%s", strings.TrimRight(mirror, "/"), strings.TrimPrefix(p.name, "pkg/"))
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		if err != nil {
-			return err
+		var resp *http.Response
+		var err error
+		for attempt := 0; attempt < 6; attempt++ {
+			var req *http.Request
+			req, err = http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			if err != nil {
+				return err
+			}
+			resp, err = b.httpClient.Do(req)
+			if err == nil {
+				break
+			}
+			if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "NXDOMAIN") {
+				break
+			}
+			time.Sleep(250 * time.Millisecond)
 		}
-
-		resp, err := b.httpClient.Do(req)
 		latency := time.Since(start).Milliseconds()
 		if err != nil {
 			errStr := err.Error()
@@ -598,13 +609,23 @@ func (b *Buildbox) PublishArtifact(ctx context.Context, registryOverride string)
 	}
 
 	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
+	var resp *http.Response
+	for attempt := 0; attempt < 6; attempt++ {
+		var req *http.Request
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err = b.httpClient.Do(req)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "NXDOMAIN") {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := b.httpClient.Do(req)
 	latency := time.Since(start).Milliseconds()
 	if err != nil {
 		b.recordAuditLocked(PhaseArtifactPublish, target, "POST", "HTTP", "DENIED", 0, latency,

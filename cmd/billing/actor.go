@@ -34,8 +34,8 @@ import (
 const (
 	DefaultVaultSecretURI  = "ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token"
 	DefaultTrustBundlePath = "/run/ate/trust-bundle.pem"
-	DefaultVaultURL        = "http://billing-gateway.anything-but-agents.svc.cluster.local:8088/api/vault/charge"
-	DefaultEchoURL         = "http://billing-gateway.anything-but-agents.svc.cluster.local:8088/api/echo"
+	DefaultVaultURL        = "http://billing-gateway.anything-but-agents.svc.cluster.local/api/vault/charge"
+	DefaultEchoURL         = "http://billing-gateway.anything-but-agents.svc.cluster.local/api/echo"
 )
 
 // Invoice represents one settled 30-day billing cycle preserved in Go heap RAM.
@@ -349,18 +349,28 @@ func (a *SubscriptionActor) SettleCycle(ctx context.Context, cycleOverride int) 
 		return nil, nil, fmt.Errorf("marshal charge request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.VaultURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, nil, fmt.Errorf("create charge http request: %w", err)
+	var resp *http.Response
+	for attempt := 0; attempt < 6; attempt++ {
+		httpReq, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, a.VaultURL, bytes.NewReader(reqBody))
+		if reqErr != nil {
+			return nil, nil, fmt.Errorf("create charge http request: %w", reqErr)
+		}
+
+		// Set the ate-secret:// placeholder URI. Substrate's egress proxy (atenet-egress)
+		// will intercept this header and replace it with the real rotated K8s Secret token on the wire!
+		httpReq.Header.Set("Authorization", "Bearer "+a.VaultTokenPlaceholder)
+		httpReq.Header.Set("X-Actor-Identity-JWT", "ate-actor-jwt://self")
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		resp, err = a.HTTPClient.Do(httpReq)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), "no such host") && !strings.Contains(err.Error(), "NXDOMAIN") {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
-
-	// Set the ate-secret:// placeholder URI. Substrate's egress proxy (atenet-egress)
-	// will intercept this header and replace it with the real rotated K8s Secret token on the wire!
-	httpReq.Header.Set("Authorization", "Bearer "+a.VaultTokenPlaceholder)
-	httpReq.Header.Set("X-Actor-Identity-JWT", "ate-actor-jwt://self")
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := a.HTTPClient.Do(httpReq)
 	if err != nil {
 		a.DunningRetries++
 		a.Status = "DUNNING"

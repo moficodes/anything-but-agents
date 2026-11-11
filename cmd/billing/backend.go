@@ -814,6 +814,78 @@ func (b *ClusterAteBackend) runKubectlAte(ctx context.Context, args ...string) (
 	return stdout.String(), nil
 }
 
+func (b *ClusterAteBackend) applyEgressPolicy(ctx context.Context, actorName string) {
+	policyYAML := fmt.Sprintf(`metadata:
+  atespace: %s
+  name: default
+rules:
+- http:
+    hostnames:
+    - billing-gateway.%s.svc.cluster.local
+    effects:
+      replaceHeaders:
+      - header: Authorization
+        prefix: "Bearer "
+        credentialUri: %s
+      - header: X-Actor-Identity-JWT
+        actorJwt:
+          audiences:
+          - "https://billing-gateway.%s.svc.cluster.local"
+          expirationSeconds: 900
+`, b.atespace, b.atespace, DefaultVaultSecretURI, b.atespace)
+	tmp, err := os.CreateTemp("", "billing-egress-*.yaml")
+	if err != nil {
+		return
+	}
+	defer os.Remove(tmp.Name())
+	_, _ = tmp.WriteString(policyYAML)
+	_ = tmp.Close()
+	_, _ = b.runKubectlAte(ctx, "create", "egress-policy", actorName, "-a", b.atespace, "-f", tmp.Name())
+}
+
+func (b *ClusterAteBackend) updateInClusterK8sSecret(ctx context.Context, tokenVal string) {
+	saTokenBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err != nil {
+		return
+	}
+	caBytes, _ := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	pool := x509.NewCertPool()
+	if len(caBytes) > 0 {
+		pool.AppendCertsFromPEM(caBytes)
+	}
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      "billing-vault-api",
+			"namespace": b.atespace,
+		},
+		"type": "Opaque",
+		"stringData": map[string]string{
+			"token": tokenVal,
+		},
+	})
+	url := fmt.Sprintf("https://kubernetes.default.svc/api/v1/namespaces/%s/secrets/billing-vault-api", b.atespace)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(saTokenBytes)))
+	req.Header.Set("Content-Type", "application/json")
+	if resp, err := client.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+}
+
 func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -847,6 +919,7 @@ func (b *ClusterAteBackend) EnsureActor(ctx context.Context, actorName string) e
 
 	// In cluster mode, create actor using template if it doesn't already exist
 	_, _ = b.runKubectlAte(ctx, "create", "actor", actorName, "-a", b.atespace, "--template", b.template)
+	b.applyEgressPolicy(ctx, actorName)
 	return nil
 }
 
@@ -949,6 +1022,7 @@ func (b *ClusterAteBackend) RotateSecret(ctx context.Context) (string, string, e
 
 	// Update the live Kubernetes Secret in the anything-but-agents namespace
 	// so the k8s-credential-provider fetches the fresh key on next outbound call!
+	b.updateInClusterK8sSecret(ctx, newKey)
 	secretCmd := exec.CommandContext(ctx, "kubectl", "create", "secret", "generic", "billing-vault-api",
 		"-n", b.atespace,
 		fmt.Sprintf("--from-literal=token=%s", newKey),
@@ -1019,8 +1093,7 @@ func (b *ClusterAteBackend) ResetStage(ctx context.Context) error {
 	b.vault.Reset()
 
 	// Revert Secret in Kubernetes
-	_, activeKey := b.secretStore.ValidateKey(b.secretStore.CurrentToken())
-	_ = activeKey
+	b.updateInClusterK8sSecret(ctx, b.secretStore.CurrentToken())
 
 	for _, name := range defaultSubscriptionActors {
 		_, _ = b.runKubectlAte(ctx, "delete", "actor", name, "-a", b.atespace)

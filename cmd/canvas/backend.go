@@ -535,29 +535,31 @@ func (b *LocalSimulatorBackend) ResetDemo(_ context.Context) error {
 // atenet-router for wake-on-HTTP dispatching and kubectl-ate for actor lifecycle.
 // It also enforces the OpenFGA perimeter check before dispatching to the cluster router.
 type ClusterAteBackend struct {
-	mu           sync.Mutex
-	atespace     string
-	template     string
-	routerURL    string
-	ateEndpoint  string
-	kubectlAte   string
-	fga          *OpenFGAEngine
-	metrics      PerimeterMetrics
-	decisionLog  []PerimeterLogEntry
-	httpClient   *http.Client
-	actorStates  map[string]string // Tracks local known actor state (RUNNING | SUSPENDED)
+	mu            sync.Mutex
+	atespace      string
+	template      string
+	routerURL     string
+	ateEndpoint   string
+	kubectlAte    string
+	fga           *OpenFGAEngine
+	metrics       PerimeterMetrics
+	decisionLog   []PerimeterLogEntry
+	httpClient    *http.Client
+	actorStates   map[string]string // Tracks local known actor state (RUNNING | SUSPENDED)
+	createdActors map[string]bool   // Tracks whether actor has been created via kubectl-ate
 }
 
 // NewClusterAteBackend creates a cluster backend.
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte string) *ClusterAteBackend {
 	b := &ClusterAteBackend{
-		atespace:    atespace,
-		template:    template,
-		routerURL:   routerURL,
-		ateEndpoint: ateEndpoint,
-		kubectlAte:  kubectlAte,
-		fga:         NewOpenFGAEngine(atespace),
-		actorStates: make(map[string]string),
+		atespace:      atespace,
+		template:      template,
+		routerURL:     routerURL,
+		ateEndpoint:   ateEndpoint,
+		kubectlAte:    kubectlAte,
+		fga:           NewOpenFGAEngine(atespace),
+		actorStates:   make(map[string]string),
+		createdActors: make(map[string]bool),
 	}
 	b.httpClient = b.buildHTTPClient()
 	b.initClusterState()
@@ -569,6 +571,7 @@ func (b *ClusterAteBackend) initClusterState() {
 	b.metrics = PerimeterMetrics{
 		ActiveTuplesCount: len(b.fga.AllTuples()),
 	}
+	b.createdActors = make(map[string]bool)
 	for _, entry := range DefaultDocumentCatalog {
 		b.actorStates[entry.DocID] = ActorStateRunning
 	}
@@ -587,6 +590,33 @@ func (b *ClusterAteBackend) initClusterState() {
 			ActorState: "INITIALIZED",
 		},
 	}
+}
+
+func (b *ClusterAteBackend) ensureActor(ctx context.Context, docID string) error {
+	b.mu.Lock()
+	if b.createdActors[docID] {
+		b.mu.Unlock()
+		return nil
+	}
+	b.mu.Unlock()
+
+	args := []string{}
+	if b.ateEndpoint != "" {
+		args = append(args, "--endpoint", b.ateEndpoint)
+	}
+	args = append(args, "create", "actor", docID, "-a", b.atespace, "--template", b.template)
+
+	cmd := exec.CommandContext(ctx, b.kubectlAte, args...)
+	out, err := cmd.CombinedOutput()
+	outStr := strings.ToLower(string(out))
+	if err != nil && !strings.Contains(outStr, "already exists") && !strings.Contains(outStr, "alreadyexists") {
+		return fmt.Errorf("kubectl-ate create actor %s failed: %v (%s)", docID, err, strings.TrimSpace(string(out)))
+	}
+
+	b.mu.Lock()
+	b.createdActors[docID] = true
+	b.mu.Unlock()
+	return nil
 }
 
 func (b *ClusterAteBackend) buildHTTPClient() *http.Client {
@@ -708,7 +738,11 @@ func (b *ClusterAteBackend) GetCanvasState(ctx context.Context, principal, docID
 
 	b.mu.Unlock()
 
-	// 2. ALLOWED: Dispatch to cluster actor through atenet-router
+	// 2. ALLOWED: Ensure actor exists and dispatch through atenet-router
+	if err := b.ensureActor(ctx, docID); err != nil {
+		return nil, err
+	}
+
 	reqURL := fmt.Sprintf("%s/canvas", strings.TrimRight(b.routerURL, "/"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -821,6 +855,10 @@ func (b *ClusterAteBackend) MutateCanvas(ctx context.Context, principal, docID s
 	}
 
 	b.mu.Unlock()
+
+	if err := b.ensureActor(ctx, docID); err != nil {
+		return nil, err
+	}
 
 	// Dispatch mutation to router
 	var path string
@@ -1012,10 +1050,12 @@ func (b *ClusterAteBackend) SuspendDocument(ctx context.Context, principal, docI
 	}
 
 	// Run kubectl-ate suspend actor --mode=async
-	cmd := exec.CommandContext(ctx, b.kubectlAte, "suspend", "actor", docID, "-a", b.atespace, "--mode=async")
+	args := []string{}
 	if b.ateEndpoint != "" {
-		cmd.Args = append(cmd.Args, "--endpoint", b.ateEndpoint)
+		args = append(args, "--endpoint", b.ateEndpoint)
 	}
+	args = append(args, "suspend", "actor", docID, "-a", b.atespace, "--mode=async")
+	cmd := exec.CommandContext(ctx, b.kubectlAte, args...)
 	_ = cmd.Run()
 
 	b.actorStates[docID] = ActorStateSuspended
@@ -1039,7 +1079,17 @@ func (b *ClusterAteBackend) WakeDocument(ctx context.Context, principal, docID s
 	return b.GetCanvasState(ctx, principal, docID)
 }
 
-func (b *ClusterAteBackend) ResetDemo(_ context.Context) error {
+func (b *ClusterAteBackend) ResetDemo(ctx context.Context) error {
+	for _, entry := range DefaultDocumentCatalog {
+		args := []string{}
+		if b.ateEndpoint != "" {
+			args = append(args, "--endpoint", b.ateEndpoint)
+		}
+		args = append(args, "delete", "actor", entry.DocID, "-a", b.atespace)
+		cmd := exec.CommandContext(ctx, b.kubectlAte, args...)
+		_ = cmd.Run()
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.initClusterState()

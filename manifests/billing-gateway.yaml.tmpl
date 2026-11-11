@@ -70,6 +70,31 @@ subjects:
   name: billing-gateway
   namespace: anything-but-agents
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: billing-gateway-secret-rotator
+  namespace: anything-but-agents
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["billing-vault-api"]
+  verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: billing-gateway-secret-rotator
+  namespace: anything-but-agents
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: billing-gateway-secret-rotator
+subjects:
+- kind: ServiceAccount
+  name: billing-gateway
+  namespace: anything-but-agents
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

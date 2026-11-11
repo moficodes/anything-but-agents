@@ -71,45 +71,40 @@ func generateEgressPolicyYAML(atespace, actorName, phase string) string {
 	case PhaseHermeticCompile:
 		return fmt.Sprintf(`# Copyright 2026 Google LLC
 # SLSA L3 Hermetic Build: Total Airgap (0 allowed rules)
+# Actor: %s/%s
 # Outbound DNS queries return NXDOMAIN and all TCP egress is refused.
 metadata:
   atespace: %s
-  name: %s
+  name: default
 rules: []
-`, atespace, actorName)
+`, atespace, actorName, atespace)
 	case PhaseArtifactPublish:
 		return fmt.Sprintf(`# Copyright 2026 Google LLC
 # Phase 3: Artifact Registry Release EgressPolicy
+# Actor: %s/%s
 # Allows release upload to internal registry while package mirror remains blocked.
 metadata:
   atespace: %s
-  name: %s
+  name: default
 rules:
 - http:
     hostnames:
     - buildbox-gateway.anything-but-agents.svc.cluster.local
-    ports:
-      numbers:
-      - 80
-      - 8087
-`, atespace, actorName)
+`, atespace, actorName, atespace)
 	default:
 		// Phase 1 (DEPENDENCY_FETCH) or IDLE
 		return fmt.Sprintf(`# Copyright 2026 Google LLC
 # Phase 1: Package Mirror EgressPolicy
+# Actor: %s/%s
 # Allows fetching dependencies from internal mirror only; external hosts denied.
 metadata:
   atespace: %s
-  name: %s
+  name: default
 rules:
 - http:
     hostnames:
     - buildbox-gateway.anything-but-agents.svc.cluster.local
-    ports:
-      numbers:
-      - 80
-      - 8087
-`, atespace, actorName)
+`, atespace, actorName, atespace)
 	}
 }
 
@@ -506,6 +501,7 @@ func (b *ClusterAteBackend) applyEgressPolicy(ctx context.Context, actorName, ph
 	// In Phase 2 (Hermetic Airgap), we delete the egress policy so DNS returns NXDOMAIN and all TCP is refused!
 	if phase == PhaseHermeticCompile {
 		_, _ = b.runKubectlAte(ctx, "delete", "egress-policy", actorName, "-a", b.atespace)
+		time.Sleep(450 * time.Millisecond)
 		return nil
 	}
 
@@ -646,6 +642,9 @@ func (b *ClusterAteBackend) GetJobState(ctx context.Context, jobName string, wak
 }
 
 func (b *ClusterAteBackend) FetchDeps(ctx context.Context, jobName string) (*BuildJobTracker, error) {
+	if err := b.EnsureActor(ctx, jobName); err != nil {
+		return nil, err
+	}
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseDependencyFetch); err != nil {
 		slog.Warn("Failed to apply Phase 1 EgressPolicy", slog.Any("err", err))
 	}
@@ -657,6 +656,9 @@ func (b *ClusterAteBackend) FetchDeps(ctx context.Context, jobName string) (*Bui
 }
 
 func (b *ClusterAteBackend) CompileAndTest(ctx context.Context, jobName string) (*BuildJobTracker, error) {
+	if err := b.EnsureActor(ctx, jobName); err != nil {
+		return nil, err
+	}
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseHermeticCompile); err != nil {
 		slog.Warn("Failed to lock airgap in Phase 2", slog.Any("err", err))
 	}
@@ -668,6 +670,9 @@ func (b *ClusterAteBackend) CompileAndTest(ctx context.Context, jobName string) 
 }
 
 func (b *ClusterAteBackend) TestRogueEgress(ctx context.Context, jobName string) (*BuildJobTracker, error) {
+	if err := b.EnsureActor(ctx, jobName); err != nil {
+		return nil, err
+	}
 	// Ensure airgap is locked
 	_ = b.applyEgressPolicy(ctx, jobName, PhaseHermeticCompile)
 	_, err := b.callActor(ctx, jobName, http.MethodPost, "/action/test-rogue-egress", []byte("{}"))
@@ -678,6 +683,9 @@ func (b *ClusterAteBackend) TestRogueEgress(ctx context.Context, jobName string)
 }
 
 func (b *ClusterAteBackend) PublishArtifact(ctx context.Context, jobName string) (*BuildJobTracker, error) {
+	if err := b.EnsureActor(ctx, jobName); err != nil {
+		return nil, err
+	}
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseArtifactPublish); err != nil {
 		slog.Warn("Failed to apply Phase 3 EgressPolicy", slog.Any("err", err))
 	}
