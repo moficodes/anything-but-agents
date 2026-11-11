@@ -19,6 +19,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Demo 8: Canvas Collaborative Document Rooms — OpenFGA AccessPolicy</title>
+
+  <!-- ReactFlow Official Stylesheet -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow@11.11.4/dist/style.css" />
+
   <style>
     :root {
       --bg-base: #07090d;
@@ -52,7 +56,7 @@
       --accent-crimson-border: rgba(239, 68, 68, 0.55);
 
       --canvas-bg: #090e15;
-      --canvas-grid: #131b26;
+      --canvas-dots: #1e293b;
 
       --shadow-panel: 0 8px 24px -6px rgba(0, 0, 0, 0.5);
     }
@@ -89,7 +93,7 @@
       --accent-crimson-border: rgba(185, 28, 28, 0.45);
 
       --canvas-bg: #f8fafc;
-      --canvas-grid: #e2e8f0;
+      --canvas-dots: #cbd5e1;
 
       --shadow-panel: 0 6px 18px -4px rgba(15, 23, 42, 0.08);
     }
@@ -120,6 +124,7 @@
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
+      z-index: 30;
     }
 
     .brand-wrap {
@@ -220,6 +225,7 @@
       justify-content: space-between;
       gap: 1.25rem;
       flex-wrap: wrap;
+      z-index: 25;
     }
 
     .switcher-group {
@@ -406,6 +412,7 @@
       flex: 1;
       height: calc(100vh - 120px);
       overflow: hidden;
+      position: relative;
     }
 
     @media (max-width: 1100px) {
@@ -416,7 +423,7 @@
       }
     }
 
-    /* Left Pane: Interactive SVG Canvas */
+    /* Left Pane: Figma / FigJam ReactFlow Canvas */
     .canvas-pane {
       display: flex;
       flex-direction: column;
@@ -424,9 +431,10 @@
       position: relative;
       overflow: hidden;
       border-right: 1px solid var(--border-subtle);
+      height: 100%;
     }
 
-    .canvas-toolbar {
+    .canvas-toolbar-strip {
       background: var(--bg-surface);
       border-bottom: 1px solid var(--border-subtle);
       padding: 0.5rem 1rem;
@@ -434,7 +442,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.75rem;
-      z-index: 10;
+      z-index: 15;
     }
 
     .toolbar-tools {
@@ -485,110 +493,539 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
-    /* Denied Before Wakeup High-Visibility Banner */
-    .denial-banner {
-      background: var(--accent-crimson-bg);
-      border: 1px solid var(--accent-crimson-border);
-      border-radius: 8px;
-      margin: 1rem;
-      padding: 1.25rem 1.5rem;
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-      box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
-      animation: fadeIn 0.2s ease;
-      z-index: 20;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .denial-icon {
-      color: var(--accent-crimson);
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .denial-body {
-      flex: 1;
-    }
-
-    .denial-heading {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--accent-crimson);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 0.35rem;
-    }
-
-    .denial-msg {
-      font-size: 0.85rem;
-      color: var(--text-primary);
-      line-height: 1.45;
-      margin-bottom: 0.5rem;
-    }
-
-    .denial-proof {
-      display: flex;
-      gap: 1.5rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      background: rgba(0, 0, 0, 0.25);
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-    .denial-proof span {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .denial-proof strong {
-      color: var(--accent-green);
-    }
-
-    /* SVG Canvas Area */
-    .canvas-viewport {
+    /* ReactFlow Host Viewport */
+    .reactflow-viewport {
       flex: 1;
       width: 100%;
       height: 100%;
-      overflow: hidden;
       position: relative;
+      background: var(--canvas-bg);
     }
 
-    svg#canvasSVG {
+    #reactflow-root {
       width: 100%;
       height: 100%;
-      user-select: none;
-      background-image: radial-gradient(var(--canvas-grid) 1px, transparent 1px);
-      background-size: 24px 24px;
+    }
+
+    /* ReactFlow Component Custom Styling */
+    .react-flow {
+      background: var(--canvas-bg) !important;
+    }
+    .react-flow__pane {
       cursor: grab;
     }
-
-    svg#canvasSVG:active {
+    .react-flow__pane:active {
       cursor: grabbing;
     }
 
-    .canvas-node {
-      cursor: move;
-      transition: filter 0.15s ease;
+    /* ReactFlow Controls & MiniMap Styling */
+    .react-flow__controls {
+      background: var(--bg-surface) !important;
+      border: 1px solid var(--border-subtle) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+      overflow: hidden;
+      margin-left: 1rem;
+      margin-bottom: 1rem;
     }
-    .canvas-node:hover {
-      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+    .react-flow__controls-button {
+      background: var(--bg-surface) !important;
+      border-bottom: 1px solid var(--border-subtle) !important;
+      fill: var(--text-primary) !important;
+      color: var(--text-primary) !important;
+      width: 28px !important;
+      height: 28px !important;
     }
-    .canvas-node rect.node-card {
-      rx: 10;
-      ry: 10;
-      stroke-width: 1.5;
+    .react-flow__controls-button:hover {
+      background: var(--bg-slot) !important;
+      fill: var(--accent-purple) !important;
     }
 
-    .canvas-note {
+    .react-flow__minimap {
+      background: var(--bg-surface) !important;
+      border: 1px solid var(--border-subtle) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+      margin-right: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Custom Figma Architecture Component Card (archNode) */
+    .figma-arch-card {
+      width: 240px;
+      min-height: 84px;
+      background: var(--bg-surface);
+      border: 1.5px solid var(--border-subtle);
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      position: relative;
       cursor: move;
-      filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.25));
+      transition: all 0.15s ease;
+      overflow: visible;
+    }
+    .figma-arch-card:hover {
+      border-color: var(--border-strong);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+    }
+    .figma-arch-card.selected {
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 2px var(--accent-purple-border), 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .card-accent-bar {
+      height: 4px;
+      width: 100%;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .card-header {
+      padding: 8px 12px 4px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-type-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-icon-badge {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-type-label {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .card-delete-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+    }
+    .card-delete-btn:hover {
+      opacity: 1;
+      color: var(--accent-crimson);
+      background: var(--accent-crimson-bg);
+    }
+
+    .card-body {
+      padding: 2px 12px 8px 12px;
+    }
+
+    .card-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .card-sub {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.25;
+    }
+
+    .card-footer {
+      padding: 4px 12px 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-subtle);
+      margin-top: 4px;
+    }
+
+    .author-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+    }
+
+    .author-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: var(--accent-green);
+      letter-spacing: 0.04em;
+    }
+
+    .live-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    /* Custom FigJam Sticky Note Node (stickyNote) */
+    .figjam-sticky-note {
+      width: 210px;
+      min-height: 110px;
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+      padding: 10px 12px;
+      position: relative;
+      cursor: move;
+      transform: rotate(-0.75deg);
+      transition: all 0.15s ease;
+      color: #713f12;
+    }
+    .figjam-sticky-note:hover {
+      transform: rotate(0deg) scale(1.02);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .figjam-sticky-note.selected {
+      box-shadow: 0 0 0 2px var(--accent-purple), 0 8px 24px rgba(0,0,0,0.35);
+    }
+
+    .sticky-dogear {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 0 16px 16px 0;
+      border-color: transparent rgba(0, 0, 0, 0.18) transparent transparent;
+      border-radius: 0 4px 0 0;
+    }
+
+    .sticky-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .sticky-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #854d0e;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sticky-delete-btn {
+      background: transparent;
+      border: none;
+      color: #854d0e;
+      cursor: pointer;
+      font-size: 0.75rem;
+      opacity: 0.6;
+    }
+    .sticky-delete-btn:hover {
+      opacity: 1;
+      color: #991b1b;
+    }
+
+    .sticky-body {
+      font-size: 0.78rem;
+      font-weight: 500;
+      line-height: 1.35;
+      word-break: break-word;
+      margin-bottom: 8px;
+    }
+
+    .sticky-footer {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .sticky-author {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #854d0e;
+    }
+
+    /* ReactFlow Handles */
+    .react-flow__handle {
+      width: 8px !important;
+      height: 8px !important;
+      background: var(--accent-blue) !important;
+      border: 2px solid var(--bg-surface) !important;
+      transition: transform 0.15s ease !important;
+    }
+    .react-flow__handle:hover {
+      transform: scale(1.5) !important;
+      background: var(--accent-purple) !important;
+    }
+
+    /* Floating Figma-Style Bottom Canvas Dock */
+    .figma-bottom-dock {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 30px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      z-index: 10;
+    }
+
+    .dock-btn {
+      background: var(--bg-slot);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .dock-btn:hover:not(:disabled) {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+    .dock-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .dock-btn.primary {
+      background: var(--accent-purple-bg);
+      border-color: var(--accent-purple-border);
+      color: var(--accent-purple);
+    }
+    .dock-btn.primary:hover:not(:disabled) {
+      background: var(--accent-purple);
+      color: #fff;
+    }
+
+    .dock-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border-subtle);
+    }
+
+    /* Top-Right Multiplayer Presence Bar on Canvas */
+    .canvas-presence-bar {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .presence-avatar-stack {
+      display: flex;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 3px 8px;
+      gap: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+
+    .presence-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: #fff;
+      position: relative;
+    }
+    .presence-avatar.alice { background: #8b5cf6; }
+    .presence-avatar.bob { background: #38bdf8; }
+    .presence-avatar.charlie { background: #f59e0b; }
+
+    .presence-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #56fd5a;
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      border: 1px solid var(--bg-surface);
+    }
+
+    .presence-chip-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-left: 2px;
+    }
+
+    .lock-view-banner {
+      background: var(--accent-amber-bg);
+      border: 1px solid var(--accent-amber-border);
+      color: var(--accent-amber);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    /* Full-Screen 403 Perimeter Shield Overlay When Denied Before Wakeup */
+    .perimeter-shield-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(7, 9, 13, 0.90);
+      backdrop-filter: blur(5px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 2rem;
+      text-align: center;
+      animation: fadeIn 0.25s ease;
+    }
+    [data-theme="light"] .perimeter-shield-overlay {
+      background: rgba(241, 245, 249, 0.92);
+    }
+
+    .shield-emblem-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--accent-crimson-bg);
+      border: 2px solid var(--accent-crimson);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-crimson);
+      margin-bottom: 1.25rem;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.35);
+      animation: shieldPulse 2.5s infinite;
+    }
+    @keyframes shieldPulse {
+      0% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+      50% { transform: scale(1.06); box-shadow: 0 0 36px rgba(239, 68, 68, 0.55); }
+      100% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+    }
+
+    .shield-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--accent-crimson);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .shield-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      max-width: 580px;
+      line-height: 1.45;
+      margin-bottom: 1.5rem;
+    }
+
+    .shield-proof-rack {
+      display: flex;
+      gap: 1.25rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0.85rem 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .proof-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .proof-lbl {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .proof-val {
+      font-size: 0.95rem;
+      font-weight: 800;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: var(--accent-green);
+    }
+    .proof-val.amber { color: var(--accent-amber); }
+
+    .shield-action-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-shield-grant {
+      background: var(--accent-green-bg);
+      border: 1px solid var(--accent-green-border);
+      color: var(--accent-green);
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+    .btn-shield-grant:hover {
+      background: var(--accent-green);
+      color: #07090d;
+      transform: translateY(-1px);
+    }
+
+    /* Fallback/DOM Denial Banner for Compatibility */
+    .denial-banner {
+      display: none;
     }
 
     /* Right Pane: OpenFGA & Perimeter Telemetry */
@@ -597,6 +1034,7 @@
       display: flex;
       flex-direction: column;
       overflow-y: auto;
+      border-left: 1px solid var(--border-subtle);
     }
 
     .section-box {
@@ -643,15 +1081,9 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       color: var(--text-primary);
     }
-    .kpi-value.green {
-      color: var(--accent-green);
-    }
-    .kpi-value.crimson {
-      color: var(--accent-crimson);
-    }
-    .kpi-value.blue {
-      color: var(--accent-blue);
-    }
+    .kpi-value.green { color: var(--accent-green); }
+    .kpi-value.crimson { color: var(--accent-crimson); }
+    .kpi-value.blue { color: var(--accent-blue); }
 
     /* OpenFGA Tuples List */
     .tuple-list {
@@ -770,7 +1202,7 @@
       display: flex;
       flex-direction: column;
       gap: 0.45rem;
-      max-height: 240px;
+      max-height: 220px;
       overflow-y: auto;
     }
 
@@ -784,16 +1216,12 @@
       flex-direction: column;
       gap: 2px;
     }
-    .log-entry.allowed {
-      border-left-color: var(--accent-green);
-    }
+    .log-entry.allowed { border-left-color: var(--accent-green); }
     .log-entry.denied {
       border-left-color: var(--accent-crimson);
       background: var(--accent-crimson-bg);
     }
-    .log-entry.policy {
-      border-left-color: var(--accent-purple);
-    }
+    .log-entry.policy { border-left-color: var(--accent-purple); }
 
     .log-header {
       display: flex;
@@ -860,7 +1288,7 @@
       line-height: 1.35;
     }
 
-    /* Modal for Add Node / Add Note */
+    /* Modals */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -939,7 +1367,6 @@
   <header class="top-header">
     <div class="brand-wrap">
       <div class="brand-icon">
-        <!-- Lucide Layout Grid SVG -->
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect width="7" height="7" x="3" y="3" rx="1"/>
           <rect width="7" height="7" x="14" y="3" rx="1"/>
@@ -949,7 +1376,7 @@
       </div>
       <div>
         <div class="brand-title">Demo 8: Canvas Collaborative Document Rooms</div>
-        <div class="brand-subtitle">Per-Actor OpenFGA AccessPolicy Relationship Authorization Enforced Before Wakeup</div>
+        <div class="brand-subtitle">Figma/FigJam Multiplayer Architecture Canvas • OpenFGA AccessPolicy Enforcement</div>
       </div>
     </div>
 
@@ -1089,28 +1516,28 @@
   <!-- Main Grid: Interactive Canvas + Telemetry & Policy Rack -->
   <main class="workspace-grid">
 
-    <!-- Left Pane: SVG Collaborative Canvas -->
+    <!-- Left Pane: Figma / FigJam ReactFlow Canvas -->
     <section class="canvas-pane">
 
-      <!-- Canvas Toolbar -->
-      <div class="canvas-toolbar">
+      <!-- Canvas Toolbar Strip -->
+      <div class="canvas-toolbar-strip">
         <div class="toolbar-tools">
-          <button type="button" class="tool-btn" id="btnAddNode" onclick="openNodeModal()" title="Add an Architecture Node">
+          <button type="button" class="tool-btn" id="btnAddNode" onclick="openNodeModal()" title="Add an Architecture Component">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            <span>Add Node</span>
+            <span>+ Component</span>
           </button>
 
-          <button type="button" class="tool-btn" id="btnAddNote" onclick="openNoteModal()" title="Add a Sticky Note">
+          <button type="button" class="tool-btn" id="btnAddNote" onclick="openNoteModal()" title="Add a FigJam Sticky Note">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
               <line x1="12" y1="18" x2="12" y2="12"></line>
               <line x1="9" y1="15" x2="15" y2="15"></line>
             </svg>
-            <span>Sticky Note</span>
+            <span>+ Sticky Note</span>
           </button>
 
           <button type="button" class="tool-btn" id="btnConnectEdge" onclick="openEdgeModal()" title="Connect Two Nodes">
@@ -1122,7 +1549,7 @@
             <span>Connect</span>
           </button>
 
-          <span id="readOnlyBadge" style="display:none; font-size:0.75rem; font-weight:700; color:var(--accent-amber); padding:4px 8px; border-radius:4px; background:var(--accent-amber-bg); border:1px solid var(--accent-amber-border);">
+          <span id="readOnlyBadge" style="display:none; font-size:0.72rem; font-weight:700; color:var(--accent-amber); padding:3px 8px; border-radius:4px; background:var(--accent-amber-bg); border:1px solid var(--accent-amber-border);">
             READ-ONLY (VIEWER)
           </span>
         </div>
@@ -1141,50 +1568,21 @@
             <span id="telRAM" class="telemetry-val">16 KB</span>
           </div>
           <div class="telemetry-item">
-            <span>Pod IP:</span>
+            <span>Worker Pod IP:</span>
             <span id="telPodIP" class="telemetry-val">10.120.1.14</span>
           </div>
         </div>
       </div>
 
-      <!-- Denied Before Wakeup High-Visibility Alert Banner -->
-      <div id="denialBanner" class="denial-banner" style="display:none;">
-        <div class="denial-icon">
-          <!-- Shield Alert SVG -->
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        </div>
-        <div class="denial-body">
-          <div class="denial-heading">
-            <span>403 PERMISSION DENIED AT SUBSTRATE PERIMETER</span>
-          </div>
-          <div id="denialMsg" class="denial-msg">
-            OpenFGA AccessPolicy Check: principal 'user:bob' lacks 'can_get' on 'actor:anything-but-agents/doc-merger-acquisition'.
-          </div>
-          <div class="denial-proof">
-            <span>ACTOR STATE: <strong id="proofActorState">SUSPENDED (IN GCS)</strong></span>
-            <span>COMPUTE WASTED: <strong>0 ms</strong></span>
-            <span>WORKER POD CPU: <strong>0 %</strong></span>
-            <span>WAKE COUNTER: <strong>UNTOUCHED</strong></span>
-          </div>
-        </div>
+      <!-- DOM Compatibility Banner (Hidden; Full-screen shield is rendered inside ReactFlow canvas) -->
+      <div id="denialBanner" class="denial-banner">
+        <div id="denialMsg"></div>
+        <div id="proofActorState"></div>
       </div>
 
-      <!-- Canvas SVG Viewport -->
-      <div class="canvas-viewport" id="canvasViewport">
-        <svg id="canvasSVG">
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--border-strong)" />
-            </marker>
-          </defs>
-          <g id="edgesLayer"></g>
-          <g id="nodesLayer"></g>
-          <g id="notesLayer"></g>
-        </svg>
+      <!-- ReactFlow Canvas Viewport -->
+      <div class="reactflow-viewport" id="canvasViewport">
+        <div id="reactflow-root"></div>
       </div>
 
     </section>
@@ -1196,7 +1594,6 @@
       <div class="section-box">
         <div class="section-title">
           <span>Perimeter Defense Metrics</span>
-          <!-- Shield Check SVG -->
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             <path d="m9 12 2 2 4-4"/>
@@ -1226,7 +1623,6 @@
       <div class="section-box">
         <div class="section-title">
           <span>OpenFGA Relationship Tuples</span>
-          <!-- Key / Users SVG -->
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
             <circle cx="9" cy="7" r="4"/>
@@ -1244,7 +1640,6 @@
       <div class="section-box">
         <div class="section-title">
           <span>Substrate AccessPolicy (Live YAML)</span>
-          <!-- Code SVG -->
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="16 18 22 12 16 6"/>
             <polyline points="8 6 2 12 8 18"/>
@@ -1257,7 +1652,6 @@
       <div class="section-box">
         <div class="section-title">
           <span>Perimeter Decision Log</span>
-          <!-- Activity / Pulse SVG -->
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
@@ -1295,15 +1689,15 @@
   <div id="modalNode" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-title">
-        <span>Add Architecture Node</span>
+        <span>Add Architecture Component</span>
         <button type="button" class="btn-auth" onclick="closeModal('modalNode')">✕</button>
       </div>
       <div class="form-group">
-        <label for="nodeLabel">Node Label</label>
+        <label for="nodeLabel">Component Title</label>
         <input type="text" id="nodeLabel" placeholder="e.g. Real-Time Ingest Service">
       </div>
       <div class="form-group">
-        <label for="nodeSubLabel">Sub-Label / Details</label>
+        <label for="nodeSubLabel">Details / Subtitle</label>
         <input type="text" id="nodeSubLabel" placeholder="e.g. 50k QPS Kafka Connector">
       </div>
       <div class="form-group">
@@ -1328,12 +1722,21 @@
   <div id="modalNote" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-title">
-        <span>Add Sticky Note</span>
+        <span>Add FigJam Sticky Note</span>
         <button type="button" class="btn-auth" onclick="closeModal('modalNote')">✕</button>
       </div>
       <div class="form-group">
         <label for="noteText">Note Content</label>
         <textarea id="noteText" rows="3" placeholder="e.g. Architecture decision approved by M&A committee..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="noteColor">Post-It Color</label>
+        <select id="noteColor">
+          <option value="#fef08a">Sunny Yellow (#fef08a)</option>
+          <option value="#bbf7d0">Mint Emerald (#bbf7d0)</option>
+          <option value="#bae6fd">Sky Blue (#bae6fd)</option>
+          <option value="#e9d5ff">Lavender Violet (#e9d5ff)</option>
+        </select>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-action" onclick="closeModal('modalNote')">Cancel</button>
@@ -1368,28 +1771,35 @@
     </div>
   </div>
 
+  <!-- React 18 & ReactFlow 11.11.4 CDN Bundles -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reactflow@11.11.4/dist/umd/index.js"></script>
+
   <script>
-    // State Variables
+    // Global Application State
     let currentPrincipal = 'user:alice';
     let currentDoc = 'doc-merger-acquisition';
-    let currentScene = null;
     let currentResponse = null;
-    let draggedNode = null;
-    let dragOffset = { x: 0, y: 0 };
+    let currentTheme = localStorage.getItem('canvas_theme') || 'dark';
+    let reactFlowBridge = null;
 
-    // Initialize Theme
+    // Theme Management
     (function initTheme() {
-      const saved = localStorage.getItem('canvas_theme') || 'dark';
-      applyTheme(saved);
+      applyTheme(currentTheme);
       document.getElementById('theme-toggle-dark').addEventListener('click', () => applyTheme('dark'));
       document.getElementById('theme-toggle-light').addEventListener('click', () => applyTheme('light'));
     })();
 
     function applyTheme(theme) {
+      currentTheme = theme;
       document.documentElement.setAttribute('data-theme', theme);
       localStorage.setItem('canvas_theme', theme);
       document.getElementById('theme-toggle-dark').classList.toggle('active', theme === 'dark');
       document.getElementById('theme-toggle-light').classList.toggle('active', theme === 'light');
+      if (reactFlowBridge && reactFlowBridge.updateTheme) {
+        reactFlowBridge.updateTheme(theme);
+      }
     }
 
     // Principal Switching
@@ -1417,53 +1827,43 @@
         const data = await res.json();
         currentResponse = data;
 
-        if (res.status === 403 || data.is_denied_before_wakeup) {
-          handleDenial(data);
-        } else {
-          handleAllowed(data);
+        const isDenied = (res.status === 403 || data.is_denied_before_wakeup);
+
+        // Update DOM state elements
+        updateStateBadge(data.actor_state || (isDenied ? 'SUSPENDED' : 'RUNNING'));
+
+        // Update compatibility banner elements
+        document.getElementById('denialMsg').textContent = data.denial_reason || '';
+        document.getElementById('proofActorState').textContent = data.actor_state || 'SUSPENDED';
+
+        if (data.scene) {
+          document.getElementById('telRev').textContent = `#${data.scene.revision}`;
+          document.getElementById('telObjects').textContent = data.scene.ram_object_count;
+          document.getElementById('telRAM').textContent = `${(data.scene.ram_bytes_estimate / 1024).toFixed(1)} KB`;
+          document.getElementById('telPodIP').textContent = data.scene.current_pod_ip || '10.120.1.14';
         }
 
+        toggleToolbar(data.can_edit, data.principal_role === 'viewer');
         renderMetrics(data.metrics);
         renderTuples(data.tuples);
         renderLog(data.decision_log);
         renderPolicyYAML(data.policy_yaml);
+
+        // Feed updated data to ReactFlow bridge
+        if (reactFlowBridge && reactFlowBridge.updateCanvasData) {
+          reactFlowBridge.updateCanvasData({
+            scene: data.scene,
+            isDenied: isDenied,
+            denialData: data,
+            canEdit: data.can_edit,
+            principalRole: data.principal_role,
+            docID: currentDoc,
+            principal: currentPrincipal
+          });
+        }
       } catch (err) {
         console.error("fetchState error:", err);
       }
-    }
-
-    function handleDenial(data) {
-      // Show Denial Banner with Proof
-      const banner = document.getElementById('denialBanner');
-      banner.style.display = 'flex';
-      document.getElementById('denialMsg').textContent = data.denial_reason || 'Access denied by OpenFGA AccessPolicy at Substrate perimeter.';
-      document.getElementById('proofActorState').textContent = data.actor_state === 'SUSPENDED' ? 'SUSPENDED (SLEEPING IN GCS)' : data.actor_state;
-
-      // Update Header State Badge
-      updateStateBadge(data.actor_state || 'SUSPENDED');
-
-      // Clear Canvas Rendering or show lock screen
-      renderDeniedCanvas(data);
-
-      // Disable toolbar buttons
-      toggleToolbar(false);
-    }
-
-    function handleAllowed(data) {
-      document.getElementById('denialBanner').style.display = 'none';
-      currentScene = data.scene;
-
-      updateStateBadge(data.actor_state || 'RUNNING');
-      renderCanvas(data.scene);
-
-      // Update Toolbar state based on CanEdit
-      toggleToolbar(data.can_edit, data.principal_role === 'viewer');
-
-      // Telemetry
-      document.getElementById('telRev').textContent = `#${data.scene.revision}`;
-      document.getElementById('telObjects').textContent = data.scene.ram_object_count;
-      document.getElementById('telRAM').textContent = `${(data.scene.ram_bytes_estimate / 1024).toFixed(1)} KB`;
-      document.getElementById('telPodIP').textContent = data.scene.current_pod_ip || '10.120.1.14';
     }
 
     function updateStateBadge(state) {
@@ -1484,251 +1884,6 @@
       document.getElementById('readOnlyBadge').style.display = isViewer ? 'inline-block' : 'none';
     }
 
-    function renderDeniedCanvas(data) {
-      const svg = document.getElementById('canvasSVG');
-      document.getElementById('edgesLayer').innerHTML = '';
-      document.getElementById('nodesLayer').innerHTML = '';
-      document.getElementById('notesLayer').innerHTML = '';
-
-      // Centered lock watermark
-      const width = svg.clientWidth || 800;
-      const height = svg.clientHeight || 500;
-      const cx = width / 2;
-      const cy = height / 2;
-
-      document.getElementById('nodesLayer').innerHTML = `
-        <g transform="translate(${cx - 150}, ${cy - 80})">
-          <rect width="300" height="160" rx="12" fill="var(--bg-surface)" stroke="var(--accent-crimson-border)" stroke-width="1.5"/>
-          <circle cx="150" cy="45" r="24" fill="var(--accent-crimson-bg)" stroke="var(--accent-crimson)" stroke-width="1.5"/>
-          <path d="M 143 45 L 143 38 C 143 34 146 31 150 31 C 154 31 157 34 157 38 L 157 45 Z" fill="none" stroke="var(--accent-crimson)" stroke-width="2"/>
-          <rect x="140" y="45" width="20" height="14" rx="2" fill="var(--accent-crimson)"/>
-          <text x="150" y="95" text-anchor="middle" fill="var(--text-primary)" font-size="14" font-weight="700">DOCUMENT ROOM LOCKED</text>
-          <text x="150" y="118" text-anchor="middle" fill="var(--text-muted)" font-size="11">OpenFGA check rejected at perimeter.</text>
-          <text x="150" y="136" text-anchor="middle" fill="var(--accent-green)" font-size="11" font-weight="600">0ms compute spent • Actor asleep in GCS</text>
-        </g>
-      `;
-    }
-
-    // Render Interactive Canvas SVG
-    function renderCanvas(scene) {
-      if (!scene) return;
-
-      const edgesLayer = document.getElementById('edgesLayer');
-      const nodesLayer = document.getElementById('nodesLayer');
-      const notesLayer = document.getElementById('notesLayer');
-
-      edgesLayer.innerHTML = '';
-      nodesLayer.innerHTML = '';
-      notesLayer.innerHTML = '';
-
-      const nodeMap = {};
-      (scene.nodes || []).forEach(n => { nodeMap[n.id] = n; });
-
-      // 1. Render Edges
-      (scene.edges || []).forEach(edge => {
-        const from = nodeMap[edge.from];
-        const to = nodeMap[edge.to];
-        if (!from || !to) return;
-
-        const x1 = from.x + (from.width || 210) / 2;
-        const y1 = from.y + (from.height || 80) / 2;
-        const x2 = to.x + (to.width || 210) / 2;
-        const y2 = to.y + (to.height || 80) / 2;
-
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
-        line.setAttribute('stroke', 'var(--border-strong)');
-        line.setAttribute('stroke-width', '2');
-        if (edge.style === 'dashed') {
-          line.setAttribute('stroke-dasharray', '5,5');
-        }
-        line.setAttribute('marker-end', 'url(#arrow)');
-        g.appendChild(line);
-
-        if (edge.label) {
-          const midX = (x1 + x2) / 2;
-          const midY = (y1 + y2) / 2 - 8;
-          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', midX);
-          text.setAttribute('y', midY);
-          text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('fill', 'var(--text-secondary)');
-          text.setAttribute('font-size', '10');
-          text.setAttribute('font-weight', '600');
-          text.textContent = edge.label;
-          g.appendChild(text);
-        }
-        edgesLayer.appendChild(g);
-      });
-
-      // 2. Render Nodes (Draggable)
-      (scene.nodes || []).forEach(node => {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', 'canvas-node');
-        g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
-        g.setAttribute('data-id', node.id);
-
-        const w = node.width || 210;
-        const h = node.height || 80;
-
-        // Card background
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('class', 'node-card');
-        rect.setAttribute('width', w);
-        rect.setAttribute('height', h);
-        rect.setAttribute('fill', 'var(--bg-surface)');
-        rect.setAttribute('stroke', node.color || 'var(--border-subtle)');
-
-        // Type color pill
-        const pill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        pill.setAttribute('x', 12);
-        pill.setAttribute('y', 10);
-        pill.setAttribute('width', 54);
-        pill.setAttribute('height', 16);
-        pill.setAttribute('rx', 4);
-        pill.setAttribute('fill', node.color || 'var(--accent-purple)');
-        pill.setAttribute('opacity', '0.2');
-
-        const pillText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        pillText.setAttribute('x', 39);
-        pillText.setAttribute('y', 22);
-        pillText.setAttribute('text-anchor', 'middle');
-        pillText.setAttribute('fill', node.color || 'var(--accent-purple)');
-        pillText.setAttribute('font-size', '8.5');
-        pillText.setAttribute('font-weight', '800');
-        pillText.textContent = (node.type || 'NODE').toUpperCase();
-
-        // Label
-        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('x', 14);
-        label.setAttribute('y', 44);
-        label.setAttribute('fill', 'var(--text-primary)');
-        label.setAttribute('font-size', '12');
-        label.setAttribute('font-weight', '700');
-        label.textContent = node.label;
-
-        // Sublabel
-        const sub = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        sub.setAttribute('x', 14);
-        sub.setAttribute('y', 60);
-        sub.setAttribute('fill', 'var(--text-muted)');
-        sub.setAttribute('font-size', '10');
-        sub.textContent = node.sub_label || `by ${node.author}`;
-
-        g.appendChild(rect);
-        g.appendChild(pill);
-        g.appendChild(pillText);
-        g.appendChild(label);
-        g.appendChild(sub);
-
-        // Attach Drag Listeners
-        attachDragEvents(g, node);
-        nodesLayer.appendChild(g);
-      });
-
-      // 3. Render Sticky Notes
-      (scene.notes || []).forEach(note => {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', 'canvas-note');
-        g.setAttribute('transform', `translate(${note.x}, ${note.y})`);
-
-        const w = note.width || 210;
-        const h = note.height || 100;
-
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('width', w);
-        rect.setAttribute('height', h);
-        rect.setAttribute('rx', 6);
-        rect.setAttribute('fill', note.color || '#fef08a');
-        rect.setAttribute('stroke', '#eab308');
-        rect.setAttribute('stroke-width', '1');
-
-        const foreign = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-        foreign.setAttribute('x', 10);
-        foreign.setAttribute('y', 10);
-        foreign.setAttribute('width', w - 20);
-        foreign.setAttribute('height', h - 20);
-
-        const div = document.createElement('div');
-        div.style.color = '#713f12';
-        div.style.fontSize = '11px';
-        div.style.fontWeight = '500';
-        div.style.lineHeight = '1.4';
-        div.style.wordBreak = 'break-word';
-        div.innerHTML = `<strong>📌 Note:</strong><br>${escapeHTML(note.text)}`;
-        foreign.appendChild(div);
-
-        g.appendChild(rect);
-        g.appendChild(foreign);
-        notesLayer.appendChild(g);
-      });
-    }
-
-    // Node Drag-and-Drop Implementation
-    function attachDragEvents(element, node) {
-      element.addEventListener('mousedown', (e) => {
-        if (!currentResponse || !currentResponse.can_edit) return;
-        e.preventDefault();
-        e.stopPropagation();
-        draggedNode = node;
-        const svg = document.getElementById('canvasSVG');
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
-        dragOffset.x = svgPt.x - node.x;
-        dragOffset.y = svgPt.y - node.y;
-      });
-    }
-
-    window.addEventListener('mousemove', (e) => {
-      if (!draggedNode) return;
-      const svg = document.getElementById('canvasSVG');
-      const pt = svg.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
-
-      draggedNode.x = Math.max(10, Math.round(svgPt.x - dragOffset.x));
-      draggedNode.y = Math.max(10, Math.round(svgPt.y - dragOffset.y));
-
-      const el = document.querySelector(`.canvas-node[data-id="${draggedNode.id}"]`);
-      if (el) {
-        el.setAttribute('transform', `translate(${draggedNode.x}, ${draggedNode.y})`);
-      }
-    });
-
-    window.addEventListener('mouseup', async () => {
-      if (!draggedNode) return;
-      const nodeToSave = draggedNode;
-      draggedNode = null;
-
-      try {
-        await fetch('/api/mutate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            doc_id: currentDoc,
-            principal: currentPrincipal,
-            op: 'move_node',
-            move: {
-              id: nodeToSave.id,
-              x: nodeToSave.x,
-              y: nodeToSave.y
-            }
-          })
-        });
-        fetchState();
-      } catch (err) {
-        console.error('Failed to move node:', err);
-      }
-    });
-
-    // Render Metrics
     function renderMetrics(m) {
       if (!m) return;
       document.getElementById('kpiBlockedSleep').textContent = m.blocked_while_asleep || 0;
@@ -1737,7 +1892,6 @@
       document.getElementById('kpiCPUSaved').textContent = `${(m.compute_saved_seconds || 0).toFixed(1)}s`;
     }
 
-    // Render OpenFGA Tuples List
     function renderTuples(tuples) {
       const container = document.getElementById('tupleList');
       container.innerHTML = '';
@@ -1764,13 +1918,13 @@
         if (isCallerOwner && u.id !== 'user:alice') {
           if (role === 'none') {
             btnHTML = `
-              <button class="tuple-btn btn-grant" onclick="grantRole('${u.id}', '${u.id === 'user:bob' ? 'editor' : 'viewer'}')">
+              <button type="button" class="tuple-btn btn-grant" onclick="grantRole('${u.id}', '${u.id === 'user:bob' ? 'editor' : 'viewer'}')">
                 + Grant ${u.id === 'user:bob' ? 'Editor' : 'Viewer'}
               </button>
             `;
           } else {
             btnHTML = `
-              <button class="tuple-btn btn-revoke" onclick="revokeRole('${u.id}')">
+              <button type="button" class="tuple-btn btn-revoke" onclick="revokeRole('${u.id}')">
                 ✕ Revoke
               </button>
             `;
@@ -1791,13 +1945,11 @@
       });
     }
 
-    // Render Policy YAML
     function renderPolicyYAML(yamlStr) {
       const el = document.getElementById('policyYAMLBox');
       el.textContent = yamlStr || '# No policy active';
     }
 
-    // Render Decision Log Feed
     function renderLog(log) {
       const container = document.getElementById('logFeed');
       container.innerHTML = '';
@@ -1811,7 +1963,6 @@
         if (dec.includes('policy')) decClass = 'policy';
 
         el.className = `log-entry ${decClass}`;
-
         const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
         el.innerHTML = `
           <div class="log-header">
@@ -1827,7 +1978,7 @@
       });
     }
 
-    // API Calls
+    // Role Management API Calls
     async function grantRole(targetUser, role) {
       try {
         const res = await fetch('/api/policy/grant', {
@@ -1835,7 +1986,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             doc_id: currentDoc,
-            principal: currentPrincipal,
+            principal: 'user:alice', // Alice is owner
             target_user: targetUser,
             role: role
           })
@@ -1857,7 +2008,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             doc_id: currentDoc,
-            principal: currentPrincipal,
+            principal: 'user:alice',
             target_user: targetUser
           })
         });
@@ -1930,8 +2081,8 @@
       const toSel = document.getElementById('edgeTo');
       fromSel.innerHTML = '';
       toSel.innerHTML = '';
-      if (currentScene && currentScene.nodes) {
-        currentScene.nodes.forEach(n => {
+      if (currentResponse && currentResponse.scene && currentResponse.scene.nodes) {
+        currentResponse.scene.nodes.forEach(n => {
           fromSel.innerHTML += `<option value="${n.id}">${escapeHTML(n.label)}</option>`;
           toSel.innerHTML += `<option value="${n.id}">${escapeHTML(n.label)}</option>`;
         });
@@ -1958,7 +2109,7 @@
         gateway: '#8b5cf6',
         queue: '#38bdf8',
         client: '#06b6d4',
-        milestone: '#ef4444'
+        milestone: '#f43f5e'
       };
 
       try {
@@ -1975,9 +2126,9 @@
               label: label,
               sub_label: sub,
               x: 180 + Math.floor(Math.random() * 150),
-              y: 200 + Math.floor(Math.random() * 100),
-              width: 210,
-              height: 80,
+              y: 180 + Math.floor(Math.random() * 100),
+              width: 240,
+              height: 84,
               color: colorMap[type] || '#10b981',
               author: currentPrincipal
             }
@@ -1991,6 +2142,7 @@
 
     async function submitAddNote() {
       const text = document.getElementById('noteText').value.trim();
+      const color = document.getElementById('noteColor').value;
       if (!text) return alert('Note content required');
       closeModal('modalNote');
       const id = `note-${Date.now().toString().slice(-4)}`;
@@ -2006,11 +2158,11 @@
             note: {
               id: id,
               text: text,
-              x: 100 + Math.floor(Math.random() * 120),
-              y: 260 + Math.floor(Math.random() * 80),
+              x: 120 + Math.floor(Math.random() * 120),
+              y: 240 + Math.floor(Math.random() * 80),
               width: 210,
-              height: 100,
-              color: '#bbf7d0',
+              height: 110,
+              color: color,
               author: currentPrincipal
             }
           })
@@ -2042,7 +2194,7 @@
               id: id,
               from: from,
               to: to,
-              label: label,
+              label: label || 'gRPC / mTLS',
               style: 'solid',
               author: currentPrincipal
             }
@@ -2062,10 +2214,557 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }
+  </script>
 
-    // Initial Load
+  <!-- React 18 + ReactFlow 11.11.4 Application Implementation -->
+  <script>
+    (function initReactFlowCanvas() {
+      const React = window.React;
+      const ReactDOM = window.ReactDOM;
+      const RF = window.ReactFlow || {};
+      const h = React.createElement;
+
+      const {
+        ReactFlow: FlowComponent,
+        Background,
+        BackgroundVariant,
+        Controls,
+        MiniMap,
+        Handle,
+        Position,
+        MarkerType,
+        applyNodeChanges,
+        applyEdgeChanges,
+        ReactFlowProvider,
+        ConnectionMode
+      } = RF;
+
+      // Icon generator for node components
+      function getNodeIcon(type) {
+        switch (type) {
+          case 'database':
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('ellipse', { cx: 12, cy: 5, rx: 9, ry: 3 }),
+              h('path', { d: 'M21 12c0 1.66-4 3-9 3s-9-1.34-9-3' }),
+              h('path', { d: 'M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5' })
+            );
+          case 'gateway':
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('rect', { width: 18, height: 18, x: 3, y: 3, rx: 2 }),
+              h('path', { d: 'm9 14 2 2 4-4' })
+            );
+          case 'queue':
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('line', { x1: 6, x2: 18, y1: 12, y2: 12 }),
+              h('line', { x1: 6, x2: 18, y1: 6, y2: 6 }),
+              h('line', { x1: 6, x2: 18, y1: 18, y2: 18 })
+            );
+          case 'client':
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('rect', { width: 20, height: 14, x: 2, y: 3, rx: 2 }),
+              h('line', { x1: 8, x2: 16, y1: 21, y2: 21 }),
+              h('line', { x1: 12, x2: 12, y1: 17, y2: 21 })
+            );
+          case 'milestone':
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('path', { d: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z' }),
+              h('line', { x1: 4, x2: 4, y1: 22, y2: 15 })
+            );
+          default: // service
+            return h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+              h('rect', { width: 20, height: 8, x: 2, y: 2, rx: 2 }),
+              h('rect', { width: 20, height: 8, x: 2, y: 14, rx: 2 }),
+              h('line', { x1: 6, x2: 6.01, y1: 6, y2: 6 }),
+              h('line', { x1: 6, x2: 6.01, y1: 18, y2: 18 })
+            );
+        }
+      }
+
+      // Custom ReactFlow Node: archNode (Figma Architecture Component Card)
+      function ArchNodeComponent({ id, data, selected }) {
+        const color = data.color || '#8b5cf6';
+        const canEdit = data.canEdit;
+
+        return h('div', {
+          className: `figma-arch-card ${selected ? 'selected' : ''}`,
+          style: { borderTopColor: color }
+        },
+          // 4 Connection Handles for loose connection
+          h(Handle, { type: 'target', position: Position.Top, id: 'top' }),
+          h(Handle, { type: 'target', position: Position.Left, id: 'left' }),
+          h(Handle, { type: 'source', position: Position.Right, id: 'right' }),
+          h(Handle, { type: 'source', position: Position.Bottom, id: 'bottom' }),
+
+          // Top Accent Color Stripe
+          h('div', { className: 'card-accent-bar', style: { backgroundColor: color } }),
+
+          // Header
+          h('div', { className: 'card-header' },
+            h('div', { className: 'card-type-wrap' },
+              h('span', { className: 'card-icon-badge', style: { color, backgroundColor: `${color}22` } },
+                getNodeIcon(data.type)
+              ),
+              h('span', { className: 'card-type-label', style: { color } },
+                (data.type || 'SERVICE').toUpperCase()
+              )
+            ),
+            canEdit && h('button', {
+              type: 'button',
+              className: 'card-delete-btn',
+              title: 'Delete node',
+              onClick: (e) => {
+                e.stopPropagation();
+                if (data.onDelete) data.onDelete(id, 'node');
+              }
+            }, '✕')
+          ),
+
+          // Body Content
+          h('div', { className: 'card-body' },
+            h('div', { className: 'card-title' }, data.label || id),
+            data.subLabel && h('div', { className: 'card-sub' }, data.subLabel)
+          ),
+
+          // Footer Meta
+          h('div', { className: 'card-footer' },
+            h('div', { className: 'author-chip' },
+              h('span', { className: 'author-dot', style: { backgroundColor: color } }),
+              h('span', { className: 'author-name' }, `@${(data.author || 'alice').replace('user:', '')}`)
+            ),
+            h('div', { className: 'live-badge' },
+              h('span', { className: 'live-dot' }),
+              h('span', null, 'LIVE HEAP')
+            )
+          )
+        );
+      }
+
+      // Custom ReactFlow Node: stickyNote (FigJam Sticky Note)
+      function StickyNoteComponent({ id, data, selected }) {
+        const color = data.color || '#fef08a';
+        const canEdit = data.canEdit;
+
+        return h('div', {
+          className: `figjam-sticky-note ${selected ? 'selected' : ''}`,
+          style: { backgroundColor: color }
+        },
+          // 4 Connection Handles
+          h(Handle, { type: 'target', position: Position.Top, id: 'top' }),
+          h(Handle, { type: 'target', position: Position.Left, id: 'left' }),
+          h(Handle, { type: 'source', position: Position.Right, id: 'right' }),
+          h(Handle, { type: 'source', position: Position.Bottom, id: 'bottom' }),
+
+          // Dog-ear folded corner
+          h('div', { className: 'sticky-dogear' }),
+
+          // Header
+          h('div', { className: 'sticky-header' },
+            h('div', { className: 'sticky-tag' },
+              h('span', null, '📌 Note')
+            ),
+            canEdit && h('button', {
+              type: 'button',
+              className: 'sticky-delete-btn',
+              title: 'Delete note',
+              onClick: (e) => {
+                e.stopPropagation();
+                if (data.onDelete) data.onDelete(id, 'note');
+              }
+            }, '✕')
+          ),
+
+          // Content
+          h('div', { className: 'sticky-body' }, data.text),
+
+          // Footer
+          h('div', { className: 'sticky-footer' },
+            h('span', { className: 'sticky-author' }, `— @${(data.author || 'alice').replace('user:', '')}`)
+          )
+        );
+      }
+
+      const nodeTypes = {
+        archNode: ArchNodeComponent,
+        stickyNote: StickyNoteComponent
+      };
+
+      // Top-level CanvasFlow React Component
+      function CanvasFlow() {
+        const [nodes, setNodes] = React.useState([]);
+        const [edges, setEdges] = React.useState([]);
+        const [theme, setTheme] = React.useState(currentTheme);
+        const [canvasState, setCanvasState] = React.useState({
+          isDenied: false,
+          denialData: null,
+          canEdit: false,
+          principalRole: 'owner',
+          principal: currentPrincipal,
+          docID: currentDoc
+        });
+
+        const reactFlowInstanceRef = React.useRef(null);
+
+        // Delete handler
+        const handleDelete = React.useCallback((id, targetType) => {
+          fetch('/api/mutate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              doc_id: currentDoc,
+              principal: currentPrincipal,
+              op: 'delete',
+              delete: { id, target_type: targetType }
+            })
+          }).then(() => fetchState());
+        }, []);
+
+        // Expose bridge to vanilla JS fetchState
+        React.useEffect(() => {
+          reactFlowBridge = {
+            updateTheme: (t) => setTheme(t),
+            updateCanvasData: (payload) => {
+              setCanvasState({
+                isDenied: payload.isDenied,
+                denialData: payload.denialData,
+                canEdit: payload.canEdit,
+                principalRole: payload.principalRole,
+                docID: payload.docID,
+                principal: payload.principal
+              });
+
+              if (payload.scene) {
+                // Map nodes
+                const mappedNodes = [];
+
+                (payload.scene.nodes || []).forEach(n => {
+                  mappedNodes.push({
+                    id: n.id,
+                    type: 'archNode',
+                    position: { x: n.x, y: n.y },
+                    data: {
+                      id: n.id,
+                      label: n.label,
+                      subLabel: n.sub_label,
+                      type: n.type,
+                      color: n.color,
+                      author: n.author,
+                      canEdit: payload.canEdit,
+                      onDelete: handleDelete
+                    },
+                    draggable: !!payload.canEdit
+                  });
+                });
+
+                (payload.scene.notes || []).forEach(nt => {
+                  mappedNodes.push({
+                    id: nt.id,
+                    type: 'stickyNote',
+                    position: { x: nt.x, y: nt.y },
+                    data: {
+                      id: nt.id,
+                      text: nt.text,
+                      color: nt.color,
+                      author: nt.author,
+                      canEdit: payload.canEdit,
+                      onDelete: handleDelete
+                    },
+                    draggable: !!payload.canEdit
+                  });
+                });
+
+                // Map edges
+                const mappedEdges = (payload.scene.edges || []).map(e => ({
+                  id: e.id,
+                  source: e.from,
+                  target: e.to,
+                  label: e.label || '',
+                  animated: (e.style === 'dashed' || true),
+                  style: {
+                    stroke: theme === 'light' ? '#475569' : '#38bdf8',
+                    strokeWidth: 2,
+                    strokeDasharray: e.style === 'dashed' ? '5 5' : undefined
+                  },
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    color: theme === 'light' ? '#475569' : '#38bdf8'
+                  }
+                }));
+
+                setNodes(mappedNodes);
+                setEdges(mappedEdges);
+              }
+            }
+          };
+
+          return () => { reactFlowBridge = null; };
+        }, [theme, handleDelete]);
+
+        // Drag node changes
+        const onNodesChange = React.useCallback((changes) => {
+          setNodes((nds) => applyNodeChanges(changes, nds));
+        }, []);
+
+        // Edge changes
+        const onEdgesChange = React.useCallback((changes) => {
+          setEdges((eds) => applyEdgeChanges(changes, eds));
+        }, []);
+
+        // Persist node movement on drag stop
+        const onNodeDragStop = React.useCallback((event, node) => {
+          if (!canvasState.canEdit) return;
+          fetch('/api/mutate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              doc_id: currentDoc,
+              principal: currentPrincipal,
+              op: 'move_node',
+              move: {
+                id: node.id,
+                x: Math.round(node.position.x),
+                y: Math.round(node.position.y)
+              }
+            })
+          }).then(() => fetchState());
+        }, [canvasState.canEdit]);
+
+        // Connect handles
+        const onConnect = React.useCallback((connection) => {
+          if (!canvasState.canEdit) return;
+          const newEdgeId = `edge-${Date.now().toString().slice(-4)}`;
+          fetch('/api/mutate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              doc_id: currentDoc,
+              principal: currentPrincipal,
+              op: 'add_edge',
+              edge: {
+                id: newEdgeId,
+                from: connection.source,
+                to: connection.target,
+                label: 'gRPC / mTLS',
+                style: 'solid',
+                author: currentPrincipal
+              }
+            })
+          }).then(() => fetchState());
+        }, [canvasState.canEdit]);
+
+        // Fit view helper
+        const handleFitView = React.useCallback(() => {
+          if (reactFlowInstanceRef.current) {
+            reactFlowInstanceRef.current.fitView({ padding: 0.25, duration: 400 });
+          }
+        }, []);
+
+        // Reset scene helper
+        const handleResetScene = React.useCallback(() => {
+          fetch('/api/mutate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              doc_id: currentDoc,
+              principal: currentPrincipal,
+              op: 'reset'
+            })
+          }).then(() => fetchState());
+        }, []);
+
+        return h('div', { style: { width: '100%', height: '100%', position: 'relative' } },
+          h(FlowComponent, {
+            nodes: nodes,
+            edges: edges,
+            nodeTypes: nodeTypes,
+            onNodesChange: onNodesChange,
+            onEdgesChange: onEdgesChange,
+            onNodeDragStop: onNodeDragStop,
+            onConnect: onConnect,
+            connectionMode: ConnectionMode.Loose,
+            fitView: true,
+            proOptions: { hideAttribution: true },
+            onInit: (instance) => { reactFlowInstanceRef.current = instance; }
+          },
+            // FigJam Dotted Background Grid
+            h(Background, {
+              variant: BackgroundVariant.Dots,
+              gap: 22,
+              size: 1.5,
+              color: theme === 'light' ? '#cbd5e1' : '#222f44'
+            }),
+
+            // ReactFlow Controls
+            h(Controls, { showInteractive: false }),
+
+            // ReactFlow MiniMap
+            h(MiniMap, {
+              nodeColor: (n) => n.type === 'stickyNote' ? '#f59e0b' : (n.data?.color || '#38bdf8'),
+              maskColor: theme === 'light' ? 'rgba(240, 240, 240, 0.65)' : 'rgba(10, 15, 25, 0.75)'
+            })
+          ),
+
+          // Top-Right Multiplayer Presence Dock on Canvas
+          h('div', { className: 'canvas-presence-bar' },
+            !canvasState.canEdit && !canvasState.isDenied && h('div', { className: 'lock-view-banner' },
+              h('span', null, '🔒 Read-Only (Viewer Role) • Mutations Restricted by OpenFGA')
+            ),
+            h('div', { className: 'presence-avatar-stack' },
+              h('div', { className: 'presence-avatar alice', title: 'Alice Chen • VP Strategy (Owner)' },
+                'A',
+                h('span', { className: 'presence-dot' })
+              ),
+              h('div', { className: 'presence-avatar bob', title: 'Bob Martinez • Staff Architect (Editor)' },
+                'B',
+                h('span', { className: 'presence-dot' })
+              ),
+              h('div', { className: 'presence-avatar charlie', title: 'Charlie Vance • Contractor (Viewer)' },
+                'C',
+                h('span', { className: 'presence-dot' })
+              ),
+              h('span', { className: 'presence-chip-label' }, '3 Co-Editors')
+            )
+          ),
+
+          // Floating FigJam / Figma Bottom Dock
+          h('div', { className: 'figma-bottom-dock' },
+            h('button', {
+              type: 'button',
+              className: 'dock-btn primary',
+              disabled: !canvasState.canEdit,
+              onClick: openNodeModal
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.5 },
+                h('line', { x1: 12, y1: 5, x2: 12, y2: 19 }),
+                h('line', { x1: 5, y1: 12, x2: 19, y2: 12 })
+              ),
+              h('span', null, 'Component')
+            ),
+            h('button', {
+              type: 'button',
+              className: 'dock-btn primary',
+              disabled: !canvasState.canEdit,
+              onClick: openNoteModal
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+                h('polyline', { points: '14 2 14 8 20 8' })
+              ),
+              h('span', null, 'Sticky Note')
+            ),
+            h('button', {
+              type: 'button',
+              className: 'dock-btn',
+              disabled: !canvasState.canEdit,
+              onClick: openEdgeModal
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                h('circle', { cx: 18, cy: 5, r: 3 }),
+                h('circle', { cx: 6, cy: 19, r: 3 }),
+                h('line', { x1: 8.59, y1: 13.51, x2: 15.42, y2: 10.49 })
+              ),
+              h('span', null, 'Connect')
+            ),
+            h('div', { className: 'dock-divider' }),
+            h('button', {
+              type: 'button',
+              className: 'dock-btn',
+              title: 'Fit View to Screen',
+              onClick: handleFitView
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                h('path', { d: 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3' })
+              ),
+              h('span', null, 'Fit View')
+            ),
+            h('button', {
+              type: 'button',
+              className: 'dock-btn',
+              disabled: !canvasState.canEdit,
+              title: 'Reset Scene Graph to Seed',
+              onClick: handleResetScene
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                h('path', { d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' }),
+                h('path', { d: 'M3 3v5h5' })
+              ),
+              h('span', null, 'Reset')
+            )
+          ),
+
+          // Full-Screen High-Contrast 403 Perimeter Shield Overlay
+          canvasState.isDenied && h('div', { className: 'perimeter-shield-overlay' },
+            h('div', { className: 'shield-emblem-wrap' },
+              h('svg', { width: 38, height: 38, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2 },
+                h('path', { d: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' }),
+                h('line', { x1: 12, y1: 8, x2: 12, y2: 12 }),
+                h('line', { x1: 12, y1: 16, x2: 12.01, y2: 16 })
+              )
+            ),
+            h('div', { className: 'shield-title' },
+              '403 PERMISSION DENIED AT SUBSTRATE PERIMETER'
+            ),
+            h('div', { className: 'shield-subtitle' },
+              canvasState.denialData?.denial_reason ||
+              `OpenFGA AccessPolicy Check: principal '${canvasState.principal}' lacks 'can_get' on 'actor:anything-but-agents/${canvasState.docID}'`
+            ),
+            h('div', { className: 'shield-proof-rack' },
+              h('div', { className: 'proof-item' },
+                h('span', { className: 'proof-lbl' }, 'Actor State in GCS'),
+                h('span', { className: 'proof-val amber' },
+                  canvasState.denialData?.actor_state === 'SUSPENDED' ? 'SUSPENDED (SLEEPING)' : (canvasState.denialData?.actor_state || 'SUSPENDED')
+                )
+              ),
+              h('div', { className: 'proof-item' },
+                h('span', { className: 'proof-lbl' }, 'Worker Pod Slots Held'),
+                h('span', { className: 'proof-val' }, '0 / 3 Slots')
+              ),
+              h('div', { className: 'proof-item' },
+                h('span', { className: 'proof-lbl' }, 'Worker CPU Wasted'),
+                h('span', { className: 'proof-val' }, '0.00 ms')
+              ),
+              h('div', { className: 'proof-item' },
+                h('span', { className: 'proof-lbl' }, 'Actor Wake Counter'),
+                h('span', { className: 'proof-val' }, 'UNTOUCHED')
+              )
+            ),
+            h('div', { className: 'shield-action-bar' },
+              (canvasState.principal === 'user:charlie' || canvasState.principal === 'user:bob') && h('button', {
+                type: 'button',
+                className: 'btn-shield-grant',
+                onClick: () => {
+                  const roleToGrant = (canvasState.principal === 'user:bob' ? 'editor' : 'viewer');
+                  grantRole(canvasState.principal, roleToGrant);
+                }
+              },
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                  h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+                  h('circle', { cx: 9, cy: 7, r: 4 }),
+                  h('line', { x1: 19, y1: 8, x2: 19, y2: 14 }),
+                  h('line', { x1: 22, y1: 11, x2: 16, y2: 11 })
+                ),
+                h('span', null, `Grant ${canvasState.principal === 'user:bob' ? 'Bob Editor' : 'Charlie Viewer'} Access (as Alice)`)
+              )
+            )
+          )
+        );
+      }
+
+      function AppRoot() {
+        return h(ReactFlowProvider, null, h(CanvasFlow, null));
+      }
+
+      const rootContainer = document.getElementById('reactflow-root');
+      if (rootContainer) {
+        const root = ReactDOM.createRoot(rootContainer);
+        root.render(h(AppRoot, null));
+      }
+    })();
+
+    // Initial Data Fetch
     fetchState();
   </script>
+
+  <!-- Presenter SSO Script -->
   <script src="/api/auth/presenter.js" defer></script>
 </body>
 </html>
