@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<!--
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 6: The 3-Stage Hermetic CI/CD Build Pipeline — Agent Substrate</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Dark Theme Tokens (Default) */
+      --bg-chassis: #05080f;
+      --bg-body: #070b14;
+      --bg-panel: #0b111e;
+      --bg-panel-alt: #0f172a;
+      --bg-subhead: #0d1424;
+      --bg-code: #03060c;
+      --border-subtle: #1e293b;
+      --border-strong: #334155;
+      --text-main: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+      --accent-green: #34d399;
+      --accent-green-bright: #56fd5a;
+      --accent-green-dim: rgba(52, 211, 153, 0.14);
+      --accent-cyan: #38bdf8;
+      --accent-cyan-dim: rgba(56, 189, 248, 0.14);
+      --accent-amber: #f59e0b;
+      --accent-amber-bright: #fbbf24;
+      --accent-amber-dim: rgba(245, 158, 11, 0.14);
+      --accent-crimson: #ef4444;
+      --accent-crimson-bright: #f87171;
+      --accent-crimson-dim: rgba(239, 68, 68, 0.14);
+      --accent-purple: #c084fc;
+      --accent-purple-dim: rgba(192, 132, 252, 0.14);
+
+      --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* High-Contrast Projector Light Mode (Pure Color Overrides — Zero Layout Shift) */
+    [data-theme="light"] {
+      --bg-chassis: #cbd5e1;
+      --bg-body: #f1f5f9;
+      --bg-panel: #ffffff;
+      --bg-panel-alt: #f8fafc;
+      --bg-subhead: #e2e8f0;
+      --bg-code: #f1f5f9;
+      --border-subtle: #cbd5e1;
+      --border-strong: #94a3b8;
+      --text-main: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --accent-green: #059669;
+      --accent-green-bright: #047857;
+      --accent-green-dim: rgba(5, 150, 105, 0.16);
+      --accent-cyan: #0284c7;
+      --accent-cyan-dim: rgba(2, 132, 199, 0.14);
+      --accent-amber: #d97706;
+      --accent-amber-bright: #b45309;
+      --accent-amber-dim: rgba(217, 119, 6, 0.14);
+      --accent-crimson: #dc2626;
+      --accent-crimson-bright: #b91c1c;
+      --accent-crimson-dim: rgba(220, 38, 38, 0.14);
+      --accent-purple: #7e22ce;
+      --accent-purple-dim: rgba(126, 34, 206, 0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-body);
+      color: var(--text-main);
+      font-family: var(--font-display);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    /* Layout Chassis */
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Top Bar Header */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 12px 18px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: var(--accent-green-dim);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green-bright);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .title-group h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.2px;
+    }
+
+    .title-group p {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Button System */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-panel-alt);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--bg-subhead);
+      color: var(--text-main);
+      border-color: var(--accent-cyan);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent-green-dim);
+      border-color: var(--accent-green);
+      color: var(--accent-green-bright);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-green);
+      color: #05080f;
+    }
+
+    .btn-danger {
+      background: var(--accent-crimson-dim);
+      border-color: var(--accent-crimson);
+      color: var(--accent-crimson-bright);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--accent-crimson);
+      color: #ffffff;
+    }
+
+    .btn-amber {
+      background: var(--accent-amber-dim);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber-bright);
+    }
+
+    .btn-amber:hover:not(:disabled) {
+      background: var(--accent-amber);
+      color: #05080f;
+    }
+
+    /* Segmented Moon/Sun Theme Toggle (Icon-Only, Constant Dimensions) */
+    .btn.theme-toggle {
+      padding: 3px;
+      gap: 3px;
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .theme-seg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 24px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      transition: all 0.15s ease;
+    }
+
+    .theme-seg.active {
+      background: var(--bg-subhead);
+      border-color: var(--border-strong);
+      color: var(--accent-amber-bright);
+    }
+
+    /* Job Selector Strip */
+    .job-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .job-tabs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .job-tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-panel-alt);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .job-tab.active {
+      border-color: var(--accent-green);
+      background: var(--accent-green-dim);
+      color: var(--accent-green-bright);
+      font-weight: 700;
+    }
+
+    .job-telemetry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      flex-wrap: wrap;
+    }
+
+    .telemetry-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: var(--bg-panel-alt);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    .status-dot.suspended {
+      background: var(--accent-amber);
+      box-shadow: 0 0 8px var(--accent-amber);
+    }
+
+    /* 3-Phase State Machine Banner */
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 900px) {
+      .pipeline-grid { grid-template-columns: 1fr; }
+    }
+
+    .phase-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .phase-card.active-phase {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 16px rgba(52, 211, 153, 0.15);
+    }
+
+    .phase-card.airgap-phase.active-phase {
+      border-color: var(--accent-amber);
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.18);
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .phase-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .phase-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .phase-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 3px;
+      border: 1px solid var(--border-subtle);
+      text-transform: uppercase;
+    }
+
+    .phase-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-height: 36px;
+    }
+
+    .policy-rule-preview {
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .phase-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+
+    /* Actions Toolbar */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .action-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Telemetry Two-Column Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 1080px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 10px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Code & YAML Viewer */
+    .code-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      overflow-x: auto;
+      max-height: 260px;
+      white-space: pre;
+    }
+
+    /* Data Table */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .data-table th, .data-table td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .data-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      background: var(--bg-subhead);
+    }
+
+    .data-table tr:hover td {
+      background: var(--bg-panel-alt);
+    }
+
+    /* Audit Log Feed */
+    .audit-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 380px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .audit-item {
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .audit-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-allowed {
+      background: var(--accent-green-dim);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green-bright);
+    }
+
+    .badge-denied, .badge-blocked {
+      background: var(--accent-crimson-dim);
+      border: 1px solid var(--accent-crimson);
+      color: var(--accent-crimson-bright);
+    }
+
+    .badge-nxdomain {
+      background: var(--accent-purple-dim);
+      border: 1px solid var(--accent-purple);
+      color: var(--accent-purple);
+    }
+
+    .audit-url {
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .audit-evidence {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    /* Airgap Proof Banner */
+    .airgap-verdict {
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--accent-green);
+      background: var(--accent-green-dim);
+      color: var(--accent-green-bright);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Rebel -> Agent Flip Card */
+    .flip-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .flip-card { grid-template-columns: 1fr; }
+    }
+
+    .flip-column h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .flip-column p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .flip-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-bottom: 6px;
+    }
+
+    .flip-rebel-badge {
+      background: var(--accent-cyan-dim);
+      border: 1px solid var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .flip-agent-badge {
+      background: var(--accent-green-dim);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green-bright);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="header-left">
+        <span class="badge-demo">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          DEMO 06 / 08
+        </span>
+        <div class="title-group">
+          <h1>The 3-Stage Hermetic CI/CD Build Pipeline</h1>
+          <p>SLSA L3 • Dynamic ActorEgressPolicy Hot-Swap • Zero-Restart Airgapping</p>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button id="btnResetStage" class="btn" title="Reset all demo build jobs back to initial state">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset Stage
+        </button>
+
+        <button id="btnLogout" class="btn" title="Sign out of presenter session">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
+
+        <!-- Segmented Moon/Sun Projector Light Mode Toggle (Zero Layout Shift) -->
+        <button type="button" class="btn theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Projector Light Mode (Shortcut: T)" aria-label="Toggle Light and Dark Theme">
+          <span class="theme-seg active" id="themeSegDark" title="Dark Mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </span>
+          <span class="theme-seg" id="themeSegLight" title="Projector Light Mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Job Selector & Runtime Telemetry Strip -->
+    <div class="job-strip">
+      <div class="job-tabs">
+        <button class="job-tab active" data-job="build-pr-104" onclick="selectJob('build-pr-104')">
+          <span class="status-dot" id="dot-build-pr-104"></span>
+          build-pr-104 (Feature PR)
+        </button>
+        <button class="job-tab" data-job="build-release-v2" onclick="selectJob('build-release-v2')">
+          <span class="status-dot suspended" id="dot-build-release-v2"></span>
+          build-release-v2 (Golden)
+        </button>
+        <button class="job-tab" data-job="build-hotfix-88" onclick="selectJob('build-hotfix-88')">
+          <span class="status-dot suspended" id="dot-build-hotfix-88"></span>
+          build-hotfix-88 (Hotfix)
+        </button>
+      </div>
+
+      <div class="job-telemetry">
+        <span class="telemetry-pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          Worker Pod: <strong id="lblCurrentPodIP">10.44.0.12</strong>
+        </span>
+        <span class="telemetry-pill">
+          Migrations: <strong id="lblPodHistory">1</strong>
+        </span>
+        <span class="telemetry-pill">
+          RAM Cache: <strong id="lblCacheSize">0 MB</strong>
+        </span>
+        <span class="telemetry-pill">
+          Hit Rate: <strong id="lblCacheHitRate">0%</strong>
+        </span>
+        <span class="telemetry-pill">
+          Actor State: <strong id="lblActorStatus">RUNNING</strong>
+        </span>
+      </div>
+    </div>
+
+    <!-- 3-Phase State Machine Banner -->
+    <div class="pipeline-grid">
+      <!-- Phase 1 -->
+      <div class="phase-card active-phase" id="phaseCard1">
+        <div class="phase-header">
+          <span class="phase-num">PHASE 01</span>
+          <span class="phase-badge" id="badgePhase1" style="color:var(--accent-green);border-color:var(--accent-green);background:var(--accent-green-dim)">ACTIVE</span>
+        </div>
+        <div class="phase-title">1. Dependency Fetch</div>
+        <div class="phase-desc">Dynamic EgressPolicy allows ONLY internal package mirror on port 8087. Pulls packages into warm Go heap RAM.</div>
+        <div class="policy-rule-preview">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>ALLOW: buildbox-gateway:8087/api/mirror/*</span>
+        </div>
+        <div class="phase-actions">
+          <button id="btnFetchDeps" class="btn btn-primary" onclick="triggerAction('fetch-deps')">
+            1. Fetch Dependencies
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="phase-card airgap-phase" id="phaseCard2">
+        <div class="phase-header">
+          <span class="phase-num">PHASE 02</span>
+          <span class="phase-badge" id="badgePhase2" style="color:var(--text-muted)">WAITING</span>
+        </div>
+        <div class="phase-title">2. Hermetic Compile & Airgap</div>
+        <div class="phase-desc">EgressPolicy locked to Total Airgap (0 rules). Compiles from warm heap RAM. Test rogue egress probes.</div>
+        <div class="policy-rule-preview" style="color:var(--accent-amber)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <span>TOTAL AIRGAP: 0 Rules (NXDOMAIN on DNS)</span>
+        </div>
+        <div class="phase-actions">
+          <button id="btnCompileTest" class="btn btn-amber" onclick="triggerAction('compile-test')">
+            2. Lock Airgap & Compile
+          </button>
+          <button id="btnTestRogue" class="btn btn-danger" onclick="triggerAction('test-rogue')">
+            Test Rogue Egress
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="phase-card" id="phaseCard3">
+        <div class="phase-header">
+          <span class="phase-num">PHASE 03</span>
+          <span class="phase-badge" id="badgePhase3" style="color:var(--text-muted)">WAITING</span>
+        </div>
+        <div class="phase-title">3. Artifact Publish & Suspend</div>
+        <div class="phase-desc">EgressPolicy opens internal registry only. Uploads signed binary & SBOM, then suspends cleanly to GCS ($0/hr idle).</div>
+        <div class="policy-rule-preview" style="color:var(--accent-green-bright)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>ALLOW: POST /api/registry/releases</span>
+        </div>
+        <div class="phase-actions">
+          <button id="btnPublish" class="btn btn-primary" onclick="triggerAction('publish')">
+            3. Open Registry & Publish
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Toolbar -->
+    <div class="action-bar">
+      <div class="action-bar-left">
+        <button id="btnAutoRun" class="btn btn-primary" onclick="triggerAction('autorun')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Run Full 3-Phase Pipeline
+        </button>
+        <button id="btnSuspend" class="btn" onclick="triggerAction('suspend')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          Suspend Actor to GCS
+        </button>
+        <button id="btnResetJob" class="btn" onclick="triggerAction('reset')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+          Reset Current Job
+        </button>
+      </div>
+
+      <div class="action-bar-right" id="airgapProofBanner">
+        <span class="telemetry-pill" id="lblAirgapVerdict">
+          Airgap Status: Ready for verification
+        </span>
+      </div>
+    </div>
+
+    <!-- Two-Column Telemetry & Inspection Grid -->
+    <div class="main-grid">
+      <!-- Left Column: Policy & Cache -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <!-- Live ActorEgressPolicy YAML -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Live ActorEgressPolicy (Cluster Rules)
+            </span>
+            <span class="badge-status badge-allowed" id="lblEgressRuleCount">1 Rule Active</span>
+          </div>
+          <pre class="code-box" id="egressPolicyCode"># Loading live EgressPolicy manifest...</pre>
+        </div>
+
+        <!-- In-Memory Compiler & Dependency Cache -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              In-Memory Compiler Cache (Go Heap RAM)
+            </span>
+            <span class="badge-status badge-allowed" id="lblCacheCount">0 Packages</span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Package</th>
+                <th>Version</th>
+                <th>Size</th>
+                <th>License</th>
+              </tr>
+            </thead>
+            <tbody id="tblCacheEntries">
+              <tr>
+                <td colspan="4" style="color:var(--text-muted);text-align:center;">Cache is empty. Click "1. Fetch Dependencies" to pull packages into RAM.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right Column: Audit Log & Signed Artifact -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <!-- Outbound Network & DNS Audit Feed -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+              Outbound Egress & DNS Audit Feed
+            </span>
+            <span class="badge-status badge-allowed" id="lblAuditCount">0 Probes</span>
+          </div>
+          <div class="audit-feed" id="auditLogFeed">
+            <div style="color:var(--text-muted);text-align:center;padding:16px;">
+              No outbound requests recorded yet.
+            </div>
+          </div>
+        </div>
+
+        <!-- Signed Build Artifact & SLSA Provenance -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              Signed Build Artifact & SLSA L3 Provenance
+            </span>
+            <span class="badge-status badge-allowed" id="lblArtifactStatus">NOT BUILT</span>
+          </div>
+          <div id="artifactBox" style="font-family:var(--font-mono);font-size:11px;display:flex;flex-direction:column;gap:6px;color:var(--text-secondary);">
+            <div>Binary Digest: <strong id="lblBinaryDigest" style="color:var(--accent-cyan);">-</strong></div>
+            <div>Git Commit: <span id="lblGitCommit">-</span></div>
+            <div>Signature: <span id="lblSignature" style="color:var(--accent-green);">-</span></div>
+            <div>Release URI: <span id="lblReleaseURI">-</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rebel -> Agent Flip Summary Card -->
+    <div class="flip-card">
+      <div class="flip-column">
+        <span class="flip-badge flip-rebel-badge">THE REBEL: HERMETIC CI/CD</span>
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          Why Run Builds on Agent Substrate?
+        </h3>
+        <p>
+          Traditional CI/CD systems either run unconfined with open outbound Internet access (leaking secrets and risking dependency confusion attacks) or require slow, multi-container workflows where each phase stops and boots from scratch. With Agent Substrate, a build runner holds its warm compiler and dependency cache inside gVisor heap RAM across phases, while the control plane dynamically hot-swaps <code>ActorEgressPolicy</code> on the fly—guaranteeing 100% SLSA L3 hermetic compilation with zero container restarts.
+        </p>
+      </div>
+
+      <div class="flip-column">
+        <span class="flip-badge flip-agent-badge">THE AGENT EPIPHANY: PROMPT INJECTION DEFENSE</span>
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Phase-Locked Egress Stops Agent Data Exfiltration
+        </h3>
+        <p>
+          When autonomous AI agents execute untrusted Python code or shell commands, prompt injection attacks attempt to phone home to attacker C2 servers or query internal cloud metadata (<code>169.254.169.254</code>). By pairing agent turn loops with <code>ActorEgressPolicy</code>, the orchestrator only enables specific external API hostnames during authorized tool steps, locking the sandbox into Total Airgap while the agent synthesizes answers!
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentJob = "build-pr-104";
+    let pollTimer = null;
+    let currentTheme = "dark";
+
+    function applyTheme(theme) {
+      currentTheme = theme === "light" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", currentTheme);
+      const segDark = document.getElementById("themeSegDark");
+      const segLight = document.getElementById("themeSegLight");
+      if (segDark && segLight) {
+        segDark.className = "theme-seg" + (currentTheme === "dark" ? " active" : "");
+        segLight.className = "theme-seg" + (currentTheme === "light" ? " active" : "");
+      }
+    }
+
+    function toggleTheme() {
+      applyTheme(currentTheme === "light" ? "dark" : "light");
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if ((e.key === "t" || e.key === "T") && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+        toggleTheme();
+      }
+    });
+
+    async function selectJob(name) {
+      currentJob = name;
+      document.querySelectorAll(".job-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-job") === name);
+      });
+      await refreshState();
+    }
+
+    async function refreshState() {
+      try {
+        const [stateRes, jobsRes, policyRes] = await Promise.all([
+          fetch(`/api/state?job=${encodeURIComponent(currentJob)}&wake=1`),
+          fetch(`/api/jobs`),
+          fetch(`/api/build/egress-policy?job=${encodeURIComponent(currentJob)}`)
+        ]);
+
+        if (stateRes.ok) {
+          const state = await stateRes.json();
+          renderJobState(state);
+        }
+        if (jobsRes.ok) {
+          const jobs = await jobsRes.json();
+          renderJobDots(jobs);
+        }
+        if (policyRes.ok) {
+          const policy = await policyRes.json();
+          document.getElementById("egressPolicyCode").textContent = policy.yaml || "# No policy";
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+      }
+    }
+
+    function renderJobDots(jobs) {
+      jobs.forEach(j => {
+        const dot = document.getElementById(`dot-${j.job_name}`);
+        if (dot) {
+          dot.className = "status-dot" + (j.status === "SUSPENDED" ? " suspended" : "");
+        }
+      });
+    }
+
+    function renderJobState(state) {
+      document.getElementById("lblCurrentPodIP").textContent = state.current_pod_ip || "10.44.0.12";
+      document.getElementById("lblPodHistory").textContent = state.pod_ip_history ? state.pod_ip_history.length : 1;
+      const mb = (state.cache_size_bytes / (1024 * 1024)).toFixed(1);
+      document.getElementById("lblCacheSize").textContent = `${mb} MB`;
+      document.getElementById("lblCacheHitRate").textContent = `${state.cache_hit_rate_pct.toFixed(0)}%`;
+      document.getElementById("lblActorStatus").textContent = state.status;
+      document.getElementById("lblActorStatus").style.color = state.status === "RUNNING" ? "var(--accent-green-bright)" : "var(--accent-amber-bright)";
+
+      // Update Phase Cards
+      updatePhaseCards(state.phase);
+
+      // Egress Rule Count Badge
+      const ruleCount = state.active_egress_rules || 0;
+      const ruleBadge = document.getElementById("lblEgressRuleCount");
+      if (ruleCount === 0) {
+        ruleBadge.textContent = "0 Rules (Airgap Active)";
+        ruleBadge.className = "badge-status badge-denied";
+      } else {
+        ruleBadge.textContent = `${ruleCount} Rule Active`;
+        ruleBadge.className = "badge-status badge-allowed";
+      }
+
+      // Render In-Memory Cache Table
+      const tbl = document.getElementById("tblCacheEntries");
+      document.getElementById("lblCacheCount").textContent = `${state.cache_entries ? state.cache_entries.length : 0} Packages`;
+      if (!state.cache_entries || state.cache_entries.length === 0) {
+        tbl.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted);text-align:center;">Cache is empty. Click "1. Fetch Dependencies" to pull packages into RAM.</td></tr>`;
+      } else {
+        tbl.innerHTML = state.cache_entries.map(pkg => `
+          <tr>
+            <td><strong style="color:var(--text-main);">${pkg.name}</strong></td>
+            <td>${pkg.version}</td>
+            <td>${(pkg.size_bytes / (1024 * 1024)).toFixed(1)} MB</td>
+            <td><span class="badge-status badge-allowed">${pkg.license}</span></td>
+          </tr>
+        `).join("");
+      }
+
+      // Render Outbound Audit Log
+      const auditDiv = document.getElementById("auditLogFeed");
+      document.getElementById("lblAuditCount").textContent = `${state.audit_log ? state.audit_log.length : 0} Probes`;
+      if (!state.audit_log || state.audit_log.length === 0) {
+        auditDiv.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:16px;">No outbound requests recorded yet.</div>`;
+      } else {
+        auditDiv.innerHTML = state.audit_log.slice(0, 15).map(entry => {
+          let badgeClass = "badge-allowed";
+          if (entry.status === "NXDOMAIN") badgeClass = "badge-nxdomain";
+          else if (entry.status === "DENIED" || entry.status === "BLOCKED" || entry.status === "403_FORBIDDEN") badgeClass = "badge-denied";
+
+          return `
+            <div class="audit-item">
+              <div class="audit-top">
+                <span class="badge-status ${badgeClass}">${entry.status}</span>
+                <span style="color:var(--text-muted);">${entry.phase} • ${entry.protocol} • ${entry.latency_ms}ms</span>
+              </div>
+              <div class="audit-url">${entry.method} ${entry.target_url}</div>
+              <div class="audit-evidence">${entry.evidence || entry.error || ""}</div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      // Airgap Verdict Banner
+      const verdictEl = document.getElementById("lblAirgapVerdict");
+      if (state.last_rogue_test && state.last_rogue_test.all_blocked) {
+        verdictEl.innerHTML = `<span style="color:var(--accent-green-bright);font-weight:700;">PROVEN: ${state.last_rogue_test.verdict}</span>`;
+      } else if (state.last_rogue_test && !state.last_rogue_test.all_blocked) {
+        verdictEl.innerHTML = `<span style="color:var(--accent-crimson-bright);font-weight:700;">WARNING: Airgap Breach Detected</span>`;
+      } else {
+        verdictEl.textContent = `Airgap Status: Ready for verification`;
+      }
+
+      // Render Signed Artifact
+      if (state.build_artifact) {
+        const art = state.build_artifact;
+        document.getElementById("lblArtifactStatus").textContent = "SLSA L3 VERIFIED";
+        document.getElementById("lblArtifactStatus").className = "badge-status badge-allowed";
+        document.getElementById("lblBinaryDigest").textContent = art.binary_digest;
+        document.getElementById("lblGitCommit").textContent = art.git_commit;
+        document.getElementById("lblSignature").textContent = art.signature;
+        document.getElementById("lblReleaseURI").textContent = art.release_uri || "(pending publish)";
+      } else {
+        document.getElementById("lblArtifactStatus").textContent = "NOT BUILT";
+        document.getElementById("lblArtifactStatus").className = "badge-status badge-denied";
+        document.getElementById("lblBinaryDigest").textContent = "-";
+        document.getElementById("lblGitCommit").textContent = "-";
+        document.getElementById("lblSignature").textContent = "-";
+        document.getElementById("lblReleaseURI").textContent = "-";
+      }
+    }
+
+    function updatePhaseCards(phase) {
+      const c1 = document.getElementById("phaseCard1");
+      const c2 = document.getElementById("phaseCard2");
+      const c3 = document.getElementById("phaseCard3");
+      const b1 = document.getElementById("badgePhase1");
+      const b2 = document.getElementById("badgePhase2");
+      const b3 = document.getElementById("badgePhase3");
+
+      c1.classList.remove("active-phase");
+      c2.classList.remove("active-phase");
+      c3.classList.remove("active-phase");
+
+      if (phase === "DEPENDENCY_FETCH") {
+        c1.classList.add("active-phase");
+        b1.textContent = "ACTIVE";
+        b1.style.color = "var(--accent-green)";
+        b2.textContent = "WAITING";
+        b3.textContent = "WAITING";
+      } else if (phase === "HERMETIC_COMPILE_AND_TEST") {
+        c2.classList.add("active-phase");
+        b1.textContent = "DONE";
+        b2.textContent = "AIRGAP LOCKED";
+        b2.style.color = "var(--accent-amber)";
+        b3.textContent = "WAITING";
+      } else if (phase === "ARTIFACT_PUBLISH" || phase === "COMPLETED") {
+        c3.classList.add("active-phase");
+        b1.textContent = "DONE";
+        b2.textContent = "DONE";
+        b3.textContent = phase === "COMPLETED" ? "PUBLISHED" : "ACTIVE";
+        b3.style.color = "var(--accent-green-bright)";
+      } else {
+        // IDLE
+        c1.classList.add("active-phase");
+        b1.textContent = "READY";
+        b2.textContent = "WAITING";
+        b3.textContent = "WAITING";
+      }
+    }
+
+    async function triggerAction(action) {
+      let endpoint = `/api/build/${action}`;
+      let body = { job_name: currentJob };
+
+      if (action === "reset-stage") {
+        endpoint = "/api/build/reset-stage";
+        body = {};
+      }
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        await refreshState();
+      } catch (err) {
+        console.error("Action error:", err);
+      }
+    }
+
+    document.getElementById("btnResetStage").addEventListener("click", () => triggerAction("reset-stage"));
+
+    // Start polling
+    refreshState();
+    pollTimer = setInterval(refreshState, 2000);
+  </script>
+  <script src="/api/auth/presenter.js" defer></script>
+</body>
+</html>

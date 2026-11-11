@@ -15,6 +15,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 3. **`cmd/tenantdb` ("One Database Per Customer")**: Multi-mode binary (`--mode=actor|gateway|local`) combining a single-tenant embedded database (`DurableDir` `/data/wal.jsonl` + lazy `16.0 MB` Hot RAM Buffer Pool & Materialized View) with a **Storage & Memory Tiering X-Ray Console** (`:8086` / `/dashboard`). Demonstrates memory vs. volume snapshot fidelity (`SNAPSHOT_FIDELITY_MEMORY` keeping the `16.0 MB` RAM Buffer Pool hot on `suspend --mode=async` vs. `SNAPSHOT_FIDELITY_VOLUMES` / pre-commit RAM discard committing only `/data/wal.jsonl` to GCS on `suspend --mode=sync` for `99.997%` bandwidth savings + `<1ms` WAL replay on wakeup), 4 customer databases (`db-acme`, `db-globex`, `db-initech`, `db-umbrella`) multiplexing across the 3-replica `WorkerPool` with zero `WHERE tenant_id` queries, and 1-command GDPR Article 17 deletion (`kubectl ate delete actor ...`).
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`sandboxClass: gvisor`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
+6. **`cmd/buildbox` ("The 3-Stage Hermetic CI/CD Build Pipeline")**: Multi-mode binary (`--mode=actor|gateway|local`) showcasing **`ActorEgressPolicy` dynamic per-actor L7 HTTP & DNS airgapping** without container restarts across a 3-phase SLSA L3 build pipeline (`build-pr-104`, `build-release-v2`, `build-hotfix-88`). Phase 1 (`DEPENDENCY_FETCH`) allows only an internal package mirror (`GET /api/mirror/pkgs/*`), populating a warm in-memory compiler cache in Go heap RAM; Phase 2 (`HERMETIC_COMPILE_AND_TEST`) locks the actor into **Total Airgap (0 allowed rules)** where in-memory compilation runs with a 100% cache hit rate and a "Test Rogue Egress" trigger proves that external CI telemetry, compile-time mirror fetches, and link-local cloud metadata (`169.254.169.254`) are 100% refused (`NXDOMAIN` / blocked); Phase 3 (`ARTIFACT_PUBLISH`) updates the policy to allow only release publishing (`POST /api/registry/releases`) to the internal artifact registry before cleanly suspending to GCS ($0/hr idle compute).
 
 ## Repository Structure
 
@@ -27,10 +28,11 @@ cmd/
   tenantdb/                     # Demo 3: Per-tenant embedded DB (DurableDir + 16MB Buffer Pool + Storage X-Ray Gateway)
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
   timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
+  buildbox/                     # Demo 6: 3-stage Hermetic CI/CD Pipeline & EgressPolicy airgapping (actor, gateway, local)
 internal/
   presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
-  workerpool.yaml.tmpl          # K8s Namespace + 6 dedicated ate.dev/v1 WorkerPools (wp-slides..wp-timewarp)
+  workerpool.yaml.tmpl          # K8s Namespace + dedicated ate.dev/v1 WorkerPools (wp-slides..wp-buildbox)
   slides-template.yaml.tmpl     # ActorTemplate (Presentation deck slide actor, FULL pause, FULL commit)
   slides-gateway.yaml.tmpl      # K8s Secret, RBAC, Deployment & Service for slides-gateway
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
@@ -44,6 +46,8 @@ manifests/
   honeypot-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for honeypot-gateway
   timewarp-template.yaml.tmpl   # ActorTemplate (FULL pause/commit, heartbeat/lease anti-pattern)
   timewarp-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for timewarp-gateway
+  buildbox-template.yaml.tmpl   # ActorTemplate (SLSA L3 build runner, SNAPSHOT_FIDELITY_MEMORY)
+  buildbox-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for buildbox-gateway
   gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner
@@ -90,12 +94,14 @@ Always run `go test ./...` after modifying any file under `cmd/`.
    ./hack/stage-demo.sh cleanup-honeypot      # Clean up Honeypot Gateway deployment/service/actors/tags
    ./hack/stage-demo.sh deploy-timewarp       # Deploy interactive Time-Warp Split-Brain Lab Gateway & LoadBalancer
    ./hack/stage-demo.sh cleanup-timewarp      # Clean up Time-Warp Gateway deployment/service/actors
+   ./hack/stage-demo.sh deploy-buildbox       # Deploy interactive Buildbox Hermetic Pipeline Gateway & LoadBalancer
+   ./hack/stage-demo.sh cleanup-buildbox      # Clean up Buildbox Gateway deployment/service/actors
    ./hack/stage-demo.sh deploy-gateway-tls    # Deploy GKE Gateway API + Certificate Manager TLS routes
    ./hack/stage-demo.sh cleanup-gateway-tls   # Clean up GKE Gateway API + HTTPRoute + HealthCheckPolicy resources
-   ./hack/stage-demo.sh run-all               # Run all 5 live demos interactively
-   PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all 5 demos non-interactively
+   ./hack/stage-demo.sh run-all               # Run all live demos interactively
+   PAUSE_BETWEEN_STEPS=0 ./hack/stage-demo.sh run-all  # Run all demos non-interactively
    ./hack/stage-demo.sh act0-slides           # Run Demo 0 (Presentation deck)
-   ./hack/stage-demo.sh act1-dungeon          # Run individual act (act1-dungeon, act1b-dungeon2d .. act5-timewarp)
+   ./hack/stage-demo.sh act1-dungeon          # Run individual act (act1-dungeon, act1b-dungeon2d .. act6-buildbox)
    ./hack/stage-demo.sh cleanup               # Delete demo actors, tags, templates, atespace, and namespace
    ```
    Each `act*` target is idempotent and self-contained: `reset_act_resources` deletes that act's prior actors/tags before starting, and `free_workers` suspends any `RUNNING` or `PAUSED` actors before and after each act so the 3-replica `WorkerPool` is never exhausted across runs.

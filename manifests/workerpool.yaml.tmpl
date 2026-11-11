@@ -176,3 +176,28 @@ spec:
       requests:
         cpu: 100m
         memory: 512Mi
+
+---
+# Demo 6: Buildbox Hermetic CI/CD Pipeline (2 pods x 2 sandboxes/pod = 4 slots)
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: wp-buildbox
+  namespace: anything-but-agents
+  labels:
+    workload: buildbox
+spec:
+  replicas: 2
+  workerImage: ${ATEOM_GVISOR_IMAGE}
+  sandboxClasses:
+  - name: gvisor
+  template:
+    labels:
+      workload: buildbox
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
