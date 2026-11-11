@@ -1994,6 +1994,78 @@ run_all_acts() {
   act4_honeypot
   act5_timewarp
   act6_buildbox
+  act7_billing
+  act8_canvas
+}
+
+act7_billing() {
+  ensure_router_port_forward
+  banner "ACT VII: 'The 30-Day Sleeping Subscription Billing & Escrow Engine' — Zero-Secret Memory Snapshots & Live Secret Rotation"
+  reset_act_resources sub-acme sub-globex sub-initech
+
+  local bl_port="${BILLING_PORT:-8088}"
+  local bl_url="http://localhost:${bl_port}"
+  local cluster_lb_ip=""
+  local presenter_token=""
+  presenter_token="$(kubectl get secret billing-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
+  cluster_lb_ip="$(kubectl get svc billing-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+
+  if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
+    bl_url="http://${cluster_lb_ip}"
+    echo "Using in-cluster Billing Vault Console Gateway at ${bl_url}..."
+  fi
+
+  echo ""
+  echo "  Billing Vault Console UI : ${bl_url}/dashboard?key=${presenter_token}"
+  echo ""
+
+  step "1. Reset vault to v1 and settle Cycle #1 ($5,000 USD) for 'sub-acme' (ate-secret:// + actorJwt injected on the wire)"
+  run_cmd curl -fsS -X POST "${bl_url}/api/reset" -H "X-Presenter-Key: ${presenter_token}"
+  run_cmd curl -fsS -X POST "${bl_url}/api/subscription/settle" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"actor_name":"sub-acme"}'
+
+  step "2. Inspect 'sub-acme' Go heap RAM & environment -> 0 raw secrets in actor memory or GCS snapshot"
+  run_cmd curl -fsS "${bl_url}/api/subscription/inspect-memory?actor=sub-acme" -H "X-Presenter-Key: ${presenter_token}"
+
+  step "3. Rotate Kubernetes Secret (v1 -> v2) while 'sub-acme' is sleeping in GCS, then settle Cycle #2 (receives v2 key automatically!)"
+  run_cmd curl -fsS -X POST "${bl_url}/api/vault/rotate" -H "X-Presenter-Key: ${presenter_token}"
+  run_cmd curl -fsS -X POST "${bl_url}/api/subscription/settle" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"actor_name":"sub-acme"}'
+
+  step "4. Run Host-Binding Exfiltration Trap against untrusted-echo -> inert ate-secret:// URI received (0 secrets leaked)"
+  run_cmd curl -fsS -X POST "${bl_url}/api/subscription/test-exfiltrate" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"actor_name":"sub-acme"}'
+
+  free_workers '^sub-'
+}
+
+act8_canvas() {
+  ensure_router_port_forward
+  banner "ACT VIII: 'Multiplayer Collaborative Canvas & Document Rooms' — OpenFGA AccessPolicy Perimeter Authorization"
+  reset_act_resources doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem
+
+  local cv_port="${CANVAS_PORT:-8089}"
+  local cv_url="http://localhost:${cv_port}"
+  local cluster_lb_ip=""
+  cluster_lb_ip="$(kubectl get svc canvas-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+
+  if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
+    cv_url="http://${cluster_lb_ip}"
+    echo "Using in-cluster Canvas Collaborative Document Rooms Gateway at ${cv_url}..."
+  fi
+
+  echo ""
+  echo "  Canvas Document Rooms UI : ${cv_url}/dashboard"
+  echo ""
+
+  step "1. Unauthorized principal 'user:charlie' attempts to open sleeping 'doc-merger-acquisition' -> 403 Denied at Perimeter (Actor NOT Woken)"
+  run_cmd curl -s "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
+
+  step "2. Owner 'user:alice' opens 'doc-merger-acquisition' (wakes actor from GCS) and grants 'viewer' tuple to 'user:charlie'"
+  run_cmd curl -fsS "${cv_url}/api/state?principal=user:alice&doc=doc-merger-acquisition"
+  run_cmd curl -fsS -X POST "${cv_url}/api/policy/grant" -H "Content-Type: application/json" -d '{"principal":"user:alice","target_user":"user:charlie","role":"viewer","doc_id":"doc-merger-acquisition"}'
+
+  step "3. 'user:charlie' can now view 'doc-merger-acquisition' (200 OK), while mutations remain blocked"
+  run_cmd curl -fsS "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
+
+  free_workers '^doc-'
 }
 
 deploy_billing_gateway() {
@@ -2004,11 +2076,12 @@ deploy_billing_gateway() {
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
   ensure_router_ingress_spiffe_ids
+  ensure_credential_provider_namespace_policy
   ensure_presenter_auth
 
   kubectl create secret generic billing-vault-api \
     -n anything-but-agents \
-    --from-literal=token="sk_live_vault_v1_9988776655443322" \
+    --from-literal=token="sk_live_vault_v1_8f92a14c6e0b7d3a" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
   ensure_template_ready billing
@@ -2044,6 +2117,7 @@ cleanup_billing_gateway() {
     kubectl ate delete egress-policy "${act}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl delete deployment,service,secret,serviceaccount billing-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete service untrusted-echo -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding billing-gateway-secret-rotator -n anything-but-agents --ignore-not-found
   kubectl delete role,rolebinding billing-gateway-token-minter -n ate-system --ignore-not-found
   kubectl delete clusterrole,clusterrolebinding billing-gateway-ate-client --ignore-not-found
@@ -2160,9 +2234,11 @@ case "${1:-}" in
   act4-honeypot)         act4_honeypot ;;
   act5-timewarp)         act5_timewarp ;;
   act6-buildbox)         act6_buildbox ;;
+  act7-billing)          act7_billing ;;
+  act8-canvas)           act8_canvas ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-buildbox|cleanup-buildbox|deploy-billing|cleanup-billing|deploy-canvas|cleanup-canvas|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|act6-buildbox|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-buildbox|cleanup-buildbox|deploy-billing|cleanup-billing|deploy-canvas|cleanup-canvas|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|act6-buildbox|act7-billing|act8-canvas|cleanup}" >&2
     exit 1
     ;;
 esac
