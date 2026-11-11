@@ -24,6 +24,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,17 @@ import (
 	"sync"
 	"time"
 )
+
+type ctxKeyNoWake struct{}
+
+func withNoWake(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyNoWake{}, true)
+}
+
+func isNoWake(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxKeyNoWake{}).(bool)
+	return v
+}
 
 // CanvasBackend defines the control plane contract for the collaborative canvas gateway.
 type CanvasBackend interface {
@@ -197,9 +209,10 @@ func (b *LocalSimulatorBackend) GetCanvasState(ctx context.Context, principal, d
 		}, nil
 	}
 
-	// ALLOWED CASE: If suspended, wake it up!
+	// ALLOWED CASE: If suspended, wake it up unless caller requested a no-wake status peek!
 	actorWoken := false
-	if actorState == ActorStateSuspended {
+	noWake := isNoWake(ctx)
+	if actorState == ActorStateSuspended && !noWake {
 		// Simulate fast Substrate memory wake-on-HTTP (~80-110ms)
 		time.Sleep(20 * time.Millisecond)
 		newIP := b.mockWorkerIPs[rand.Intn(len(b.mockWorkerIPs))]
@@ -209,21 +222,23 @@ func (b *LocalSimulatorBackend) GetCanvasState(ctx context.Context, principal, d
 		b.metrics.WakeupsOnValidTraffic++
 	}
 
-	b.metrics.TotalAllowedCalls++
-	logEntry := PerimeterLogEntry{
-		Timestamp:       time.Now(),
-		Principal:       principal,
-		Action:          PermCanGet,
-		Resource:        fmt.Sprintf("actor:%s/%s", b.atespace, docID),
-		Role:            role,
-		Decision:        "ALLOWED",
-		Reason:          reason,
-		ActorState:      actorState,
-		ActorWoken:      actorWoken,
-		ComputeWastedMs: 0,
-		LatencyMs:       latencyMs + int(time.Since(start).Milliseconds()),
+	if !noWake {
+		b.metrics.TotalAllowedCalls++
+		logEntry := PerimeterLogEntry{
+			Timestamp:       time.Now(),
+			Principal:       principal,
+			Action:          PermCanGet,
+			Resource:        fmt.Sprintf("actor:%s/%s", b.atespace, docID),
+			Role:            role,
+			Decision:        "ALLOWED",
+			Reason:          reason,
+			ActorState:      actorState,
+			ActorWoken:      actorWoken,
+			ComputeWastedMs: 0,
+			LatencyMs:       latencyMs + int(time.Since(start).Milliseconds()),
+		}
+		b.recordLog(logEntry)
 	}
-	b.recordLog(logEntry)
 
 	sg := actor.BuildSceneGraph()
 	canEdit := (role == RoleOwner || role == RoleEditor)
@@ -545,8 +560,10 @@ type ClusterAteBackend struct {
 	metrics       PerimeterMetrics
 	decisionLog   []PerimeterLogEntry
 	httpClient    *http.Client
-	actorStates   map[string]string // Tracks local known actor state (RUNNING | SUSPENDED)
-	createdActors map[string]bool   // Tracks whether actor has been created via kubectl-ate
+	actorStates   map[string]string     // Tracks local known actor state (RUNNING | SUSPENDED)
+	createdActors map[string]bool       // Tracks whether actor has been created via kubectl-ate
+	lastScenes    map[string]SceneGraph // Cached last-known scene graph per document for suspended inspection
+	podHistories  map[string][]string   // Worker pod IP migration history per document
 }
 
 // NewClusterAteBackend creates a cluster backend.
@@ -560,6 +577,8 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 		fga:           NewOpenFGAEngine(atespace),
 		actorStates:   make(map[string]string),
 		createdActors: make(map[string]bool),
+		lastScenes:    make(map[string]SceneGraph),
+		podHistories:  make(map[string][]string),
 	}
 	b.httpClient = b.buildHTTPClient()
 	b.initClusterState()
@@ -572,11 +591,19 @@ func (b *ClusterAteBackend) initClusterState() {
 		ActiveTuplesCount: len(b.fga.AllTuples()),
 	}
 	b.createdActors = make(map[string]bool)
+	b.lastScenes = make(map[string]SceneGraph)
+	b.podHistories = make(map[string][]string)
 	for _, entry := range DefaultDocumentCatalog {
 		b.actorStates[entry.DocID] = ActorStateRunning
+		seedActor := NewCanvasActor(entry.DocID)
+		b.lastScenes[entry.DocID] = seedActor.BuildSceneGraph()
 	}
 	// Default doc-merger-acquisition to suspended for initial demo setup
 	b.actorStates[DocMergerAcquisition] = ActorStateSuspended
+	if sg, ok := b.lastScenes[DocMergerAcquisition]; ok {
+		sg.ActorState = ActorStateSuspended
+		b.lastScenes[DocMergerAcquisition] = sg
+	}
 
 	b.decisionLog = []PerimeterLogEntry{
 		{
@@ -590,6 +617,29 @@ func (b *ClusterAteBackend) initClusterState() {
 			ActorState: "INITIALIZED",
 		},
 	}
+}
+
+func (b *ClusterAteBackend) queryWorkerPodIP(ctx context.Context, docID string) string {
+	args := []string{}
+	if b.ateEndpoint != "" {
+		args = append(args, "--endpoint", b.ateEndpoint)
+	}
+	args = append(args, "get", "actors", "-a", b.atespace)
+	cmd := exec.CommandContext(ctx, b.kubectlAte, args...)
+	raw, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 || fields[0] == "ATESPACE" || strings.HasPrefix(fields[0], "Warning:") {
+			continue
+		}
+		if fields[1] == docID && strings.Contains(fields[5], ".") {
+			return fields[5]
+		}
+	}
+	return ""
 }
 
 func (b *ClusterAteBackend) ensureActor(ctx context.Context, docID string) error {
@@ -736,6 +786,33 @@ func (b *ClusterAteBackend) GetCanvasState(ctx context.Context, principal, docID
 		}, nil
 	}
 
+	// 1b. If caller requested a no-wake status peek on a SUSPENDED actor, do NOT contact atenet-router!
+	if actorState == ActorStateSuspended && isNoWake(ctx) {
+		sg := b.lastScenes[docID]
+		sg.ActorState = ActorStateSuspended
+		tuples := b.fga.ListTuples(docID)
+		metrics := b.metrics
+		logs := make([]PerimeterLogEntry, len(b.decisionLog))
+		copy(logs, b.decisionLog)
+		policyYAML := b.fga.GenerateAccessPolicyYAML(docID)
+		b.mu.Unlock()
+
+		return &CanvasStateResponse{
+			Scene:                &sg,
+			DocID:                docID,
+			Principal:            principal,
+			PrincipalRole:        role,
+			CanEdit:              (role == RoleOwner || role == RoleEditor),
+			CanManage:            (role == RoleOwner),
+			Tuples:               tuples,
+			Metrics:              metrics,
+			DecisionLog:          logs,
+			PolicyYAML:           policyYAML,
+			ActorState:           ActorStateSuspended,
+			IsDeniedBeforeWakeup: false,
+		}, nil
+	}
+
 	b.mu.Unlock()
 
 	// 2. ALLOWED: Ensure actor exists and dispatch through atenet-router
@@ -743,12 +820,13 @@ func (b *ClusterAteBackend) GetCanvasState(ctx context.Context, principal, docID
 		return nil, err
 	}
 
-	reqURL := fmt.Sprintf("%s/canvas", strings.TrimRight(b.routerURL, "/"))
+	reqURL := fmt.Sprintf("%s/canvas?doc=%s", strings.TrimRight(b.routerURL, "/"), url.QueryEscape(docID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", b.atespace, docID))
+	req.Header.Set("X-Doc-ID", docID)
 	req.Header.Set("X-Principal", principal)
 
 	resp, err := b.httpClient.Do(req)
@@ -767,11 +845,29 @@ func (b *ClusterAteBackend) GetCanvasState(ctx context.Context, principal, docID
 		return nil, fmt.Errorf("failed decoding scene graph: %w", err)
 	}
 
+	livePodIP := b.queryWorkerPodIP(ctx, docID)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	if livePodIP != "" {
+		sg.CurrentPodIP = livePodIP
+		hist := b.podHistories[docID]
+		if len(hist) == 0 || hist[len(hist)-1] != livePodIP {
+			hist = append(hist, livePodIP)
+			b.podHistories[docID] = hist
+		}
+		sg.PodIPHistory = append([]string{}, hist...)
+	}
+	sg.ActorState = ActorStateRunning
+	b.lastScenes[docID] = sg
+
+	wasSuspended := (actorState == ActorStateSuspended)
 	b.actorStates[docID] = ActorStateRunning
 	b.metrics.TotalAllowedCalls++
+	if wasSuspended {
+		b.metrics.WakeupsOnValidTraffic++
+	}
 
 	logEntry := PerimeterLogEntry{
 		Timestamp:       time.Now(),
@@ -782,7 +878,7 @@ func (b *ClusterAteBackend) GetCanvasState(ctx context.Context, principal, docID
 		Decision:        "ALLOWED",
 		Reason:          reason,
 		ActorState:      ActorStateRunning,
-		ActorWoken:      (actorState == ActorStateSuspended),
+		ActorWoken:      wasSuspended,
 		ComputeWastedMs: 0,
 		LatencyMs:       int(time.Since(start).Milliseconds()),
 	}
@@ -891,13 +987,14 @@ func (b *ClusterAteBackend) MutateCanvas(ctx context.Context, principal, docID s
 		return nil, err
 	}
 
-	reqURL := fmt.Sprintf("%s%s", strings.TrimRight(b.routerURL, "/"), path)
+	reqURL := fmt.Sprintf("%s%s?doc=%s", strings.TrimRight(b.routerURL, "/"), path, url.QueryEscape(docID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("ate-target-actor", fmt.Sprintf("%s/%s", b.atespace, docID))
+	req.Header.Set("X-Doc-ID", docID)
 	req.Header.Set("X-Principal", principal)
 
 	resp, err := b.httpClient.Do(req)
@@ -916,11 +1013,29 @@ func (b *ClusterAteBackend) MutateCanvas(ctx context.Context, principal, docID s
 		return nil, fmt.Errorf("failed decoding mutation response: %w", err)
 	}
 
+	livePodIP := b.queryWorkerPodIP(ctx, docID)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	if livePodIP != "" {
+		sg.CurrentPodIP = livePodIP
+		hist := b.podHistories[docID]
+		if len(hist) == 0 || hist[len(hist)-1] != livePodIP {
+			hist = append(hist, livePodIP)
+			b.podHistories[docID] = hist
+		}
+		sg.PodIPHistory = append([]string{}, hist...)
+	}
+	sg.ActorState = ActorStateRunning
+	b.lastScenes[docID] = sg
+
+	wasSuspended := (actorState == ActorStateSuspended)
 	b.actorStates[docID] = ActorStateRunning
 	b.metrics.TotalAllowedCalls++
+	if wasSuspended {
+		b.metrics.WakeupsOnValidTraffic++
+	}
 
 	logEntry := PerimeterLogEntry{
 		Timestamp:       time.Now(),
@@ -931,7 +1046,7 @@ func (b *ClusterAteBackend) MutateCanvas(ctx context.Context, principal, docID s
 		Decision:        "ALLOWED",
 		Reason:          fmt.Sprintf("OpenFGA permitted %s (holding '%s')", PermCanUpdate, role),
 		ActorState:      ActorStateRunning,
-		ActorWoken:      false,
+		ActorWoken:      wasSuspended,
 		ComputeWastedMs: 0,
 		LatencyMs:       int(time.Since(start).Milliseconds()),
 	}
@@ -1059,6 +1174,10 @@ func (b *ClusterAteBackend) SuspendDocument(ctx context.Context, principal, docI
 	_ = cmd.Run()
 
 	b.actorStates[docID] = ActorStateSuspended
+	if sg, ok := b.lastScenes[docID]; ok {
+		sg.ActorState = ActorStateSuspended
+		b.lastScenes[docID] = sg
+	}
 	entry := PerimeterLogEntry{
 		Timestamp:  time.Now(),
 		Principal:  principal,
@@ -1066,7 +1185,7 @@ func (b *ClusterAteBackend) SuspendDocument(ctx context.Context, principal, docI
 		Resource:   fmt.Sprintf("actor:%s/%s", b.atespace, docID),
 		Role:       callerRole,
 		Decision:   "ALLOWED",
-		Reason:     "Actor checkpointed to GCS (ACTOR_STATE_SUSPENDED, 0 slots held)",
+		Reason:     "Actor checkpointed to GCS (ACTOR_STATE_SUSPENDED, 0/3 worker slots held)",
 		ActorState: ActorStateSuspended,
 		ActorWoken: false,
 	}

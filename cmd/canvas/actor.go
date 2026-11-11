@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -393,6 +394,47 @@ func (a *CanvasActor) Wake(newPodIP string) {
 	}
 }
 
+// BindDocID ensures that an actor cloned from the shared ActorTemplate/canvas
+// Golden Snapshot re-seeds its in-memory catalog to match its assigned document ID
+// on first request, and refreshes its worker pod IP across cross-pod migrations.
+func (a *CanvasActor) BindDocID(docID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if ip := resolvePodIP(); ip != "" && ip != a.currentPodIP {
+		a.currentPodIP = ip
+		if len(a.podIPHistory) == 0 || a.podIPHistory[len(a.podIPHistory)-1] != ip {
+			a.podIPHistory = append(a.podIPHistory, ip)
+		}
+	}
+
+	if docID == "" || docID == a.docID {
+		return
+	}
+	a.docID = docID
+	a.nodes = make(map[string]CanvasNode)
+	a.edges = make(map[string]CanvasEdge)
+	a.notes = make(map[string]CanvasNote)
+	a.collaborators = make(map[string]Collaborator)
+	a.seedFromCatalog(docID)
+}
+
+func requestedDocID(r *http.Request) string {
+	if qdoc := strings.TrimSpace(r.URL.Query().Get("doc")); qdoc != "" {
+		return qdoc
+	}
+	if hdoc := strings.TrimSpace(r.Header.Get("X-Doc-ID")); hdoc != "" {
+		return hdoc
+	}
+	if target := strings.TrimSpace(r.Header.Get("ate-target-actor")); target != "" {
+		if idx := strings.LastIndexByte(target, '/'); idx >= 0 && idx+1 < len(target) {
+			return target[idx+1:]
+		}
+		return target
+	}
+	return ""
+}
+
 func truncateStr(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -429,6 +471,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		actor.mu.Lock()
 		actor.queryCount++
 		actor.mu.Unlock()
@@ -440,6 +483,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		var node CanvasNode
 		if err := json.NewDecoder(r.Body).Decode(&node); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
@@ -466,6 +510,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		var move MoveNodePayload
 		if err := json.NewDecoder(r.Body).Decode(&move); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
@@ -489,6 +534,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		var note CanvasNote
 		if err := json.NewDecoder(r.Body).Decode(&note); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
@@ -515,6 +561,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		var edge CanvasEdge
 		if err := json.NewDecoder(r.Body).Decode(&edge); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
@@ -541,6 +588,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		var del DeletePayload
 		if err := json.NewDecoder(r.Body).Decode(&del); err != nil {
 			http.Error(w, fmt.Sprintf("invalid json: %v", err), http.StatusBadRequest)
@@ -564,6 +612,7 @@ func newActorMux(actor *CanvasActor) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		actor.BindDocID(requestedDocID(r))
 		author := r.Header.Get("X-Principal")
 		sg, err := actor.Mutate(CanvasOp{
 			Op:        "reset",

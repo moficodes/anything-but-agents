@@ -111,7 +111,12 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			docID = DocMergerAcquisition
 		}
 
-		resp, err := g.backend.GetCanvasState(r.Context(), principal, docID)
+		ctx := r.Context()
+		if r.URL.Query().Get("wake") == "false" {
+			ctx = withNoWake(ctx)
+		}
+
+		resp, err := g.backend.GetCanvasState(ctx, principal, docID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return

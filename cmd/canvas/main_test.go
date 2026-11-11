@@ -502,3 +502,125 @@ func TestGatewayHTTP(t *testing.T) {
 		t.Fatalf("expected 200 on /api/reset, got %d", resReset.StatusCode)
 	}
 }
+
+func TestDistinctDocumentsAndGoldenSnapshotBinding(t *testing.T) {
+	// 1. Verify the 3 documents in the catalog have distinct topologies (node/edge/note counts)
+	mna := NewCanvasActor(DocMergerAcquisition).BuildSceneGraph()
+	roadmap := NewCanvasActor(DocQ4Roadmap).BuildSceneGraph()
+	incident := NewCanvasActor(DocIncidentPostmortem).BuildSceneGraph()
+
+	if len(mna.Nodes) != 4 || len(roadmap.Nodes) != 6 || len(incident.Nodes) != 5 {
+		t.Fatalf("expected node counts (4, 6, 5), got (%d, %d, %d)", len(mna.Nodes), len(roadmap.Nodes), len(incident.Nodes))
+	}
+	if len(mna.Edges) != 3 || len(roadmap.Edges) != 6 || len(incident.Edges) != 4 {
+		t.Fatalf("expected edge counts (3, 6, 4), got (%d, %d, %d)", len(mna.Edges), len(roadmap.Edges), len(incident.Edges))
+	}
+	if len(mna.Notes) != 1 || len(roadmap.Notes) != 2 || len(incident.Notes) != 2 {
+		t.Fatalf("expected note counts (1, 2, 2), got (%d, %d, %d)", len(mna.Notes), len(roadmap.Notes), len(incident.Notes))
+	}
+
+	// 2. Simulate an actor cloned from ActorTemplate/canvas Golden Snapshot
+	// (which originally booted with default DocMergerAcquisition) receiving its first
+	// request for doc-q4-roadmap via ?doc= or ate-target-actor header.
+	clonedActor := NewCanvasActor(DocMergerAcquisition)
+	srv := httptest.NewServer(newActorMux(clonedActor))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/canvas?doc="+DocQ4Roadmap, nil)
+	if err != nil {
+		t.Fatalf("failed building request: %v", err)
+	}
+	req.Header.Set("ate-target-actor", "anything-but-agents/"+DocQ4Roadmap)
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET /canvas failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	var sg SceneGraph
+	if err := json.NewDecoder(res.Body).Decode(&sg); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if sg.DocID != DocQ4Roadmap {
+		t.Fatalf("expected cloned actor to bind DocID %s, got %s", DocQ4Roadmap, sg.DocID)
+	}
+	if len(sg.Nodes) != 6 {
+		t.Fatalf("expected 6 nodes after binding %s, got %d", DocQ4Roadmap, len(sg.Nodes))
+	}
+}
+
+func TestSuspendNoWakeAndWakeLifecycle(t *testing.T) {
+	backend := NewLocalSimulatorBackend("anything-but-agents", "canvas")
+	token := "test-secret-presenter-token"
+	gw := NewGatewayServer(backend, token)
+	srv := httptest.NewServer(gw.Mux())
+	defer srv.Close()
+
+	client := srv.Client()
+	doAuthReq := func(method, urlStr string, body io.Reader) (*http.Response, error) {
+		req, err := http.NewRequest(method, urlStr, body)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Presenter-Key", token)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return client.Do(req)
+	}
+
+	// 1. Alice reads doc-q4-roadmap (RUNNING)
+	res1, err := doAuthReq(http.MethodGet, srv.URL+"/api/state?principal=user:alice&doc=doc-q4-roadmap", nil)
+	if err != nil || res1.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for Alice on roadmap")
+	}
+	var st1 CanvasStateResponse
+	_ = json.NewDecoder(res1.Body).Decode(&st1)
+	if st1.ActorState != ActorStateRunning {
+		t.Fatalf("expected RUNNING, got %s", st1.ActorState)
+	}
+
+	// 2. Alice clicks Suspend to GCS -> POST /api/actor/suspend
+	suspBody, _ := json.Marshal(map[string]string{
+		"doc_id":    DocQ4Roadmap,
+		"principal": PrincipalAlice,
+	})
+	resSusp, err := doAuthReq(http.MethodPost, srv.URL+"/api/actor/suspend", bytes.NewReader(suspBody))
+	if err != nil || resSusp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on suspend, got %v", resSusp)
+	}
+
+	// 3. UI immediately refreshes state with wake=false -> actor must remain SUSPENDED!
+	resPeek, err := doAuthReq(http.MethodGet, srv.URL+"/api/state?principal=user:alice&doc=doc-q4-roadmap&wake=false", nil)
+	if err != nil || resPeek.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on wake=false peek")
+	}
+	var stPeek CanvasStateResponse
+	_ = json.NewDecoder(resPeek.Body).Decode(&stPeek)
+	if stPeek.ActorState != ActorStateSuspended {
+		t.Fatalf("expected actor to stay SUSPENDED on wake=false peek, got %s", stPeek.ActorState)
+	}
+
+	// 4. Now unauthorized Charlie tries to access doc-q4-roadmap while it is SUSPENDED -> BlockedWhileAsleep increments!
+	resDenied, err := doAuthReq(http.MethodGet, srv.URL+"/api/state?principal=user:charlie&doc=doc-q4-roadmap", nil)
+	if err != nil || resDenied.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for Charlie on suspended doc-q4-roadmap")
+	}
+	var stDenied CanvasStateResponse
+	_ = json.NewDecoder(resDenied.Body).Decode(&stDenied)
+	if stDenied.ActorState != ActorStateSuspended || stDenied.Metrics.BlockedWhileAsleep < 1 {
+		t.Fatalf("expected actor to stay SUSPENDED and BlockedWhileAsleep >= 1, got state=%s blocked=%d",
+			stDenied.ActorState, stDenied.Metrics.BlockedWhileAsleep)
+	}
+
+	// 5. Alice clicks Wake from GCS -> POST /api/actor/wake
+	resWake, err := doAuthReq(http.MethodPost, srv.URL+"/api/actor/wake", bytes.NewReader(suspBody))
+	if err != nil || resWake.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on wake")
+	}
+	var stWake CanvasStateResponse
+	_ = json.NewDecoder(resWake.Body).Decode(&stWake)
+	if stWake.ActorState != ActorStateRunning {
+		t.Fatalf("expected actor to be RUNNING after Wake, got %s", stWake.ActorState)
+	}
+}
