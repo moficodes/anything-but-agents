@@ -16,6 +16,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 4. **`cmd/honeypot` ("The Truman Show Honeypot")**: Dual-mode binary (`--mode=actor|gateway|local`) with a Split-Screen "Movie Set vs. Director's Booth" Web UI (`:8084`) and per-attacker-IP deception sandbox running real `/bin/sh -c` commands inside `gVisor` (`sandboxClass: gvisor`, using `debian:13-slim` in `.ko.yaml`). Strictly separates attacker `/shell` output from SOC `/forensics` (`canary_alerts`, SHA-256 `rootfs_delta` tracking `UNCHANGED`/`ADDED`/`MODIFIED`/`DELETED`, `gvisor_sandbox_proof`, and `pod_ip_history`), and demonstrates auto-checkpointing (`kubectl ate save actor`) + `kubectl ate revert actor` to recover deleted malware after an attacker's `rm -rf` wipe alongside `--tag` forensic cloning.
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
 6. **`cmd/buildbox` ("The 3-Stage Hermetic CI/CD Build Pipeline")**: Multi-mode binary (`--mode=actor|gateway|local`) showcasing **`ActorEgressPolicy` dynamic per-actor L7 HTTP & DNS airgapping** without container restarts across a 3-phase SLSA L3 build pipeline (`build-pr-104`, `build-release-v2`, `build-hotfix-88`). Phase 1 (`DEPENDENCY_FETCH`) allows only an internal package mirror (`GET /api/mirror/pkgs/*`), populating a warm in-memory compiler cache in Go heap RAM; Phase 2 (`HERMETIC_COMPILE_AND_TEST`) locks the actor into **Total Airgap (0 allowed rules)** where in-memory compilation runs with a 100% cache hit rate and a "Test Rogue Egress" trigger proves that external CI telemetry, compile-time mirror fetches, and link-local cloud metadata (`169.254.169.254`) are 100% refused (`NXDOMAIN` / blocked); Phase 3 (`ARTIFACT_PUBLISH`) updates the policy to allow only release publishing (`POST /api/registry/releases`) to the internal artifact registry before cleanly suspending to GCS ($0/hr idle compute).
+7. **`cmd/billing` ("Demo 7: The 30-Day Sleeping Billing & Escrow Engine")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **`ate-secret://` Egress Credential Injection**, **`actorJwt` identity minting**, and **zero-downtime secret rotation across frozen GCS memory snapshots** (`SNAPSHOT_FIDELITY_MEMORY`) for enterprise recurring subscriptions (`sub-acme`, `sub-globex`, `sub-initech`) sleeping in GCS between 30-day turns with zero database or disk I/O, paired with the **Payment Vault & Egress Credential X-Ray Console** (`:8088` / `/dashboard`, with icon-only Moon/Sun Projector Light Mode toggle).
 
 ## Repository Structure
 
@@ -29,10 +30,11 @@ cmd/
   honeypot/                     # Demo 4: Per-attacker gVisor sandbox + Split-Screen SOC Gateway (actor, gateway, local)
   timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
   buildbox/                     # Demo 6: 3-stage Hermetic CI/CD Pipeline & EgressPolicy airgapping (actor, gateway, local)
+  billing/                      # Demo 7: 30-Day Sleeping Billing & Escrow Engine (actor, gateway, local)
 internal/
   presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
-  workerpool.yaml.tmpl          # K8s Namespace + dedicated ate.dev/v1 WorkerPools (wp-slides..wp-buildbox)
+  workerpool.yaml.tmpl          # K8s Namespace + dedicated ate.dev/v1 WorkerPools (wp-slides..wp-canvas)
   slides-template.yaml.tmpl     # ActorTemplate (Presentation deck slide actor, FULL pause, FULL commit)
   slides-gateway.yaml.tmpl      # K8s Secret, RBAC, Deployment & Service for slides-gateway
   dungeon-template.yaml.tmpl    # ActorTemplate (FULL pause, FULL commit)
@@ -48,6 +50,9 @@ manifests/
   timewarp-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for timewarp-gateway
   buildbox-template.yaml.tmpl   # ActorTemplate (SLSA L3 build runner, SNAPSHOT_FIDELITY_MEMORY)
   buildbox-gateway.yaml.tmpl    # K8s RBAC, Deployment & LoadBalancer Service for buildbox-gateway
+  billing-template.yaml.tmpl    # ActorTemplate (FULL pause/commit, ate-secret:// egress injection)
+  billing-egress-policy.yaml.tmpl # EgressPolicy (replaceHeaders Authorization + actorJwt)
+  billing-gateway.yaml.tmpl     # K8s RBAC, Deployment & LoadBalancer Service for billing-gateway
   gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner

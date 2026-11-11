@@ -1,0 +1,171 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Demo 7: "The 30-Day Sleeping Subscription Billing & Escrow Engine"
+# Payment Vault & Egress Credential Inspector Gateway Deployment and LoadBalancer Service.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: billing-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: billing-gateway-ate-client
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["clustertrustbundles"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: billing-gateway-ate-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: billing-gateway-ate-client
+subjects:
+- kind: ServiceAccount
+  name: billing-gateway
+  namespace: anything-but-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: billing-gateway-token-minter
+  namespace: ate-system
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  resourceNames: ["ate-client"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: billing-gateway-token-minter
+  namespace: ate-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: billing-gateway-token-minter
+subjects:
+- kind: ServiceAccount
+  name: billing-gateway
+  namespace: anything-but-agents
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-gateway
+  namespace: anything-but-agents
+  labels:
+    app: billing-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: billing-gateway
+  template:
+    metadata:
+      labels:
+        app: billing-gateway
+      annotations:
+        anything-but-agents.dev/presenter-auth-hash: "${PRESENTER_AUTH_HASH}"
+    spec:
+      serviceAccountName: billing-gateway
+      initContainers:
+      - name: copy-kubectl-ate
+        image: ${KUBECTL_ATE_IMAGE}
+        command: ["/bin/cp", "/ko-app/kubectl-ate", "/tools/kubectl-ate"]
+        volumeMounts:
+        - name: tools
+          mountPath: /tools
+      containers:
+      - name: gateway
+        image: ko://github.com/moficodes/anything-but-agents/cmd/billing
+        command:
+        - /ko-app/billing
+        - --mode=gateway
+        - --addr=:8088
+        - --atespace=anything-but-agents
+        - --template=billing
+        - --router-url=https://atenet-router.ate-system.svc:443
+        - --ate-endpoint=api.ate-system.svc:443
+        - --kubectl-ate-bin=/tools/kubectl-ate
+        envFrom:
+        - configMapRef:
+            name: presenter-auth
+            optional: true
+        - secretRef:
+            name: presenter-auth
+            optional: true
+        env:
+        - name: PRESENTER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: billing-gateway
+              key: PRESENTER_TOKEN
+              optional: true
+        volumeMounts:
+        - name: tools
+          mountPath: /tools
+        - name: router-client
+          mountPath: /run/router-client
+          readOnly: true
+        ports:
+        - containerPort: 8088
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8088
+      volumes:
+      - name: tools
+        emptyDir: {}
+      - name: router-client
+        projected:
+          sources:
+          - podCertificate:
+              signerName: podidentity.podcert.ate.dev/identity
+              keyType: ECDSAP256
+              credentialBundlePath: credential-bundle.pem
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: trust-bundle.pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-gateway
+  namespace: anything-but-agents
+spec:
+  type: LoadBalancer
+  selector:
+    app: billing-gateway
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8088
+  - name: http-direct
+    port: 8088
+    targetPort: 8088

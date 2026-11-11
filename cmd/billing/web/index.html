@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<!--
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo 7: The 30-Day Sleeping Billing & Escrow Engine • Agent Substrate</title>
+  <style>
+    :root {
+      --bg: #07090D;
+      --bg-card: #0D1117;
+      --bg-slot: #161B22;
+      --border: #21262D;
+      --border-strong: #30363D;
+      --text: #C9D1D9;
+      --text-muted: #8B949E;
+      --text-bright: #F0F6FC;
+      --accent-green: #56FD5A;
+      --accent-green-bg: rgba(86, 253, 90, 0.1);
+      --accent-amber: #D29922;
+      --accent-amber-bg: rgba(210, 153, 34, 0.12);
+      --accent-blue: #58A6FF;
+      --accent-blue-bg: rgba(88, 166, 255, 0.12);
+      --accent-purple: #BC8CFF;
+      --accent-purple-bg: rgba(188, 140, 255, 0.12);
+      --accent-red: #F85149;
+      --accent-red-bg: rgba(248, 81, 73, 0.12);
+      --font-mono: "Ubuntu Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --font-sans: "Ubuntu", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    [data-theme="light"] {
+      --bg: #F6F8FA;
+      --bg-card: #FFFFFF;
+      --bg-slot: #EAECEF;
+      --border: #D0D7DE;
+      --border-strong: #AFB8C1;
+      --text: #1F2328;
+      --text-muted: #57606A;
+      --text-bright: #090C10;
+      --accent-green: #1A7F37;
+      --accent-green-bg: rgba(26, 127, 55, 0.12);
+      --accent-amber: #9A6700;
+      --accent-amber-bg: rgba(154, 103, 0, 0.12);
+      --accent-blue: #0969DA;
+      --accent-blue-bg: rgba(9, 105, 218, 0.12);
+      --accent-purple: #8250DF;
+      --accent-purple-bg: rgba(130, 80, 223, 0.12);
+      --accent-red: #CF222E;
+      --accent-red-bg: rgba(207, 34, 46, 0.12);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Top bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-substrate {
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+      border: 1px solid var(--accent-green);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+    }
+    .top-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+    .top-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Secret Version Pill */
+    .secret-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-amber-bg);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+      padding: 4px 10px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    /* Buttons */
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      border-radius: 7px;
+      transition: all 0.15s ease;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-slot);
+      color: var(--text);
+    }
+    .btn:hover {
+      background: var(--border);
+      color: var(--text-bright);
+    }
+    .btn-primary {
+      background: var(--accent-green-bg);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+    .btn-primary:hover {
+      background: var(--accent-green);
+      color: #000;
+    }
+    .btn-warning {
+      background: var(--accent-amber-bg);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+    }
+    .btn-warning:hover {
+      background: var(--accent-amber);
+      color: #000;
+    }
+    .btn-blue {
+      background: var(--accent-blue-bg);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .btn-blue:hover {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+    .btn-purple {
+      background: var(--accent-purple-bg);
+      border-color: var(--accent-purple);
+      color: var(--accent-purple);
+    }
+    .btn-purple:hover {
+      background: var(--accent-purple);
+      color: #fff;
+    }
+
+    /* Theme toggle */
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-slot);
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      padding: 2px;
+      gap: 2px;
+      height: 34px;
+    }
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 8px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .theme-btn.active {
+      background: var(--bg-card);
+      color: var(--text-bright);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    /* Stats strip */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 12px 16px;
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-bright);
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Fleet Section */
+    .fleet-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .sub-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .sub-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+    .sub-card.selected {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 0 1px var(--accent-green);
+    }
+    .sub-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .sub-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+    .sub-tier {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .status-suspended {
+      background: var(--accent-blue-bg);
+      color: var(--accent-blue);
+      border: 1px solid var(--accent-blue);
+    }
+    .status-running {
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+      border: 1px solid var(--accent-green);
+    }
+    .sub-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0;
+      background: var(--bg-slot);
+      padding: 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+    }
+    .sub-metric-item {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .sub-metric-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-bright);
+      font-family: var(--font-mono);
+    }
+    .pod-history-row {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .pod-pill {
+      font-family: var(--font-mono);
+      background: var(--bg-slot);
+      border: 1px solid var(--border-strong);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--text-bright);
+    }
+
+    /* Action bar */
+    .action-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .action-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .action-banner {
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 7px;
+      background: var(--bg-slot);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Side-by-Side X-Ray Inspector */
+    .xray-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .xray-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    .xray-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .xray-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .xray-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+    .xray-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+    }
+    .xray-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .xray-field-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+    .code-box {
+      background: var(--bg-slot);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-bright);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .code-highlight-green {
+      color: var(--accent-green);
+      font-weight: 700;
+    }
+    .code-highlight-amber {
+      color: var(--accent-amber);
+      font-weight: 700;
+    }
+
+    /* Rebel Flip Card */
+    .rebel-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rebel-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+    .rebel-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .rebel-grid { grid-template-columns: 1fr; }
+    }
+    .rebel-col {
+      background: var(--bg-slot);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+    }
+    .rebel-col-title {
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Ledger table */
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      margin-top: 6px;
+    }
+    .ledger-table th, .ledger-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .ledger-table th {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Top bar -->
+    <header class="top-bar">
+      <div class="brand">
+        <span class="badge-substrate">Agent Substrate</span>
+        <div>
+          <div class="top-title">Demo 7: The 30-Day Sleeping Billing &amp; Escrow Engine</div>
+          <div class="top-subtitle">Egress Credential Injection (<code style="font-family:var(--font-mono)">ate-secret://</code>), Actor JWTs, &amp; Zero-Downtime Secret Rotation Across Frozen GCS Snapshots</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <div id="vaultKeyPill" class="secret-pill" title="Active Payment Vault Secret Version">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <span id="txtActiveKeyVersion">Vault Key: v1</span>
+        </div>
+        <button id="btnLogout" type="button" class="btn" title="Sign out" aria-label="Sign out">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Sign out</span>
+        </button>
+        <div class="theme-toggle" role="group" aria-label="Theme Toggle">
+          <button type="button" id="theme-toggle-dark" class="theme-btn active" title="Dark Mode" aria-label="Dark Mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </button>
+          <button type="button" id="theme-toggle-light" class="theme-btn" title="Projector Light Mode" aria-label="Projector Light Mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats strip -->
+    <div class="stats-strip">
+      <div class="stat-card">
+        <div class="stat-label">Total Fleet Settled Revenue</div>
+        <div class="stat-val" id="statTotalRevenue">$0.00</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Subscription Actors in GCS</div>
+        <div class="stat-val" id="statSleepingActors">3 / 3 Sleeping</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Vault Credential</div>
+        <div class="stat-val" id="statActiveKey">v1 (Live)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Plaintext Secrets in RAM / Snapshots</div>
+        <div class="stat-val" style="color:var(--accent-green)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          0 Found (Pure URIs)
+        </div>
+      </div>
+    </div>
+
+    <!-- Fleet Cards -->
+    <section>
+      <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">
+        Subscription Actor Fleet (Stateful gVisor Actors Sleeping in GCS Between 30-Day Turns)
+      </div>
+      <div class="fleet-grid" id="fleetGrid">
+        <!-- Rendered by JavaScript -->
+      </div>
+    </section>
+
+    <!-- Action panel -->
+    <section class="action-panel">
+      <div class="action-panel-header">
+        <div style="font-size:14px; font-weight:700; color:var(--text-bright);">
+          Interactive Stage Controls • Selected Actor: <span id="lblSelectedActor" style="color:var(--accent-green); font-family:var(--font-mono);">sub-acme</span>
+        </div>
+      </div>
+      <div class="action-buttons">
+        <button id="btnSettle" type="button" class="btn btn-primary" title="Advance cycle, wake actor, charge vault via egress injection, and suspend">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>Settle Billing Cycle &amp; Suspend (30-Day Sleep)</span>
+        </button>
+        <button id="btnRotateSecret" type="button" class="btn btn-warning" title="Rotate vault secret in K8s while actor is completely frozen in GCS">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span>Rotate Vault Secret (v1 &rarr; v2) While Frozen</span>
+        </button>
+        <button id="btnInspectRAM" type="button" class="btn btn-blue" title="Audit process environment and Go heap memory to verify zero secrets">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span>Dump Actor RAM &amp; Env</span>
+        </button>
+        <button id="btnTestExfil" type="button" class="btn btn-purple" title="Test sending placeholder to untrusted echo server to prove host-binding">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <span>Test Echo Exfiltration Trap</span>
+        </button>
+        <button id="btnReset" type="button" class="btn" title="Reset actors and vault back to initial state">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <polyline points="3 3 3 8 8 8"></polyline>
+          </svg>
+          <span>Reset Stage</span>
+        </button>
+      </div>
+      <div id="actionBanner" class="action-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-green); flex-shrink:0;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span id="txtActionBanner">Stage ready. Select a customer subscription actor and trigger a 30-day billing settlement turn.</span>
+      </div>
+    </section>
+
+    <!-- Side-by-Side X-Ray Inspector -->
+    <div class="xray-container">
+      <!-- Left: Inside Actor RAM / Snapshot -->
+      <div class="xray-panel">
+        <div class="xray-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-blue)">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+          </svg>
+          <div>
+            <div class="xray-title">Inside Actor RAM &amp; GCS Memory Dump</div>
+            <div style="font-size:11px; color:var(--text-muted)">What lives in Go heap RAM &amp; serialized container snapshot</div>
+          </div>
+          <span class="xray-badge" style="background:var(--accent-blue-bg); color:var(--accent-blue); margin-left:auto;">0 SECRETS IN RAM</span>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Environment Variable (PAYMENT_VAULT_TOKEN)</div>
+          <div class="code-box" id="xrRamEnv">ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token</div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Outbound Authorization Header Generated By Actor</div>
+          <div class="code-box">Authorization: Bearer <span class="code-highlight-green" id="xrRamAuthHeader">ate-secret://k8s.io/default/anything-but-agents/billing-vault-api/token</span></div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Go Heap Memory Scan (Audit Proof)</div>
+          <div class="code-box" id="xrRamAuditProof">Scanning Heap: 0 raw API tokens (sk_live_*) detected.
+Only inert URI placeholder string exists in process RAM.
+GCS checkpoint write will contain zero plaintext keys.</div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Memory Snapshot Fidelity &amp; Trust Projection</div>
+          <div class="code-box" style="font-size:11px;">Preferred Fidelity: SNAPSHOT_FIDELITY_MEMORY
+Trust Bundle Mount: /run/ate/trust-bundle.pem (egress-mitm.ate.dev)
+Multi-month invoice ledger &amp; escrow balances preserved across suspends.</div>
+        </div>
+      </div>
+
+      <!-- Right: On the Wire at Payment Vault -->
+      <div class="xray-panel">
+        <div class="xray-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-green)">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <div>
+            <div class="xray-title">On-the-Wire Intercept at Payment Vault</div>
+            <div style="font-size:11px; color:var(--text-muted)">What atenet-egress substituted before leaving cluster boundary</div>
+          </div>
+          <span class="xray-badge" style="background:var(--accent-green-bg); color:var(--accent-green); margin-left:auto;" id="xrWireKeyVersion">ACTIVE KEY: v1</span>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Injected Upstream Authorization Header</div>
+          <div class="code-box">Authorization: Bearer <span class="code-highlight-amber" id="xrWireAuthHeader">sk_live_vault_v1_8f92a14c6e0b7d3a</span></div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Injected Upstream Actor JWT (Cryptographic Identity Proof)</div>
+          <div class="code-box" style="font-size:11px;" id="xrWireJWT">X-Actor-Identity-JWT: eyJhbGciOiJSUzI1NiIs...</div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Decoded Actor JWT Claims (Verified by Vault)</div>
+          <div class="code-box" style="font-size:11px;" id="xrWireClaims">{
+  "iss": "https://idp.ate-system.svc",
+  "sub": "actor/anything-but-agents/sub-acme",
+  "aud": ["https://billing-gateway.anything-but-agents.svc.cluster.local"],
+  "actor.ate.dev": { "atespace": "anything-but-agents", "actorName": "sub-acme" }
+}</div>
+        </div>
+
+        <div class="xray-field">
+          <div class="xray-field-label">Payment Vault Settle Status</div>
+          <div class="code-box" id="xrWireStatus">Status: 200 OK - SETTLED</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rebel to Agent Flip -->
+    <section class="rebel-card">
+      <div class="rebel-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+        <span>Rebel Workload &rarr; Agent Substrate Epiphany</span>
+      </div>
+      <div class="rebel-grid">
+        <div class="rebel-col">
+          <div class="rebel-col-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-amber)">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            <span>The Conference Rebel: 30-Day Sleeping Billing</span>
+          </div>
+          <div>
+            Subscription actors sleep in GCS for 30 days between billing cycles, holding multi-year invoice ledgers and escrow state in Go heap RAM. By using <code>ate-secret://</code> egress credential injection, actors never hold Stripe or Vault API keys in memory. When operations rotates keys in Kubernetes, sleeping actors pick up fresh credentials automatically on their next turn—without restarting PID 1 or discarding in-memory RAM state!
+          </div>
+        </div>
+        <div class="rebel-col">
+          <div class="rebel-col-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-green)">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+              <line x1="9" y1="9" x2="9.01" y2="9"></line>
+              <line x1="15" y1="9" x2="15.01" y2="9"></line>
+            </svg>
+            <span>The Agent Epiphany: Zero-Secret Memory Checkpoints</span>
+          </div>
+          <div>
+            AI agents often sleep in GCS for days waiting for user approval, webhook triggers, or delayed tool runs. If an agent held live OAuth tokens or Anthropic/OpenAI keys in memory, every GCS snapshot would contain plaintext credentials. With Substrate, agents hold only inert <code>ate-secret://</code> URIs. <code>atenet-egress</code> injects live keys at network egress and mints cryptographic <code>actorJwt</code>s on the wire, keeping cold storage completely secret-free!
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/api/auth/presenter.js" defer></script>
+  <script>
+    let globalState = null;
+    let selectedActor = 'sub-acme';
+
+    (function initTheme() {
+      const saved = localStorage.getItem('billing_theme') || 'dark';
+      applyTheme(saved);
+      document.getElementById('theme-toggle-dark').addEventListener('click', () => applyTheme('dark'));
+      document.getElementById('theme-toggle-light').addEventListener('click', () => applyTheme('light'));
+    })();
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('billing_theme', theme);
+      document.getElementById('theme-toggle-dark').classList.toggle('active', theme === 'dark');
+      document.getElementById('theme-toggle-light').classList.toggle('active', theme === 'light');
+    }
+
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state?actor=' + encodeURIComponent(selectedActor));
+        if (res.ok) {
+          globalState = await res.json();
+          renderUI();
+        }
+      } catch (err) {
+        console.error('Failed to fetch state:', err);
+      }
+    }
+
+    function renderUI() {
+      if (!globalState) return;
+
+      // Stats
+      let totalRev = 0;
+      let sleepingCount = 0;
+      globalState.subscriptions.forEach(s => {
+        totalRev += s.cumulative_settled || 0;
+        if (s.status === 'SUSPENDED') sleepingCount++;
+      });
+      document.getElementById('statTotalRevenue').textContent = '$' + totalRev.toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('statSleepingActors').textContent = `${sleepingCount} / ${globalState.subscriptions.length} Sleeping`;
+
+      if (globalState.vault) {
+        document.getElementById('statActiveKey').textContent = `${globalState.vault.current_version} (Live)`;
+        document.getElementById('txtActiveKeyVersion').textContent = `Vault Key: ${globalState.vault.current_version}`;
+        document.getElementById('xrWireKeyVersion').textContent = `ACTIVE KEY: ${globalState.vault.current_version}`;
+      }
+
+      document.getElementById('lblSelectedActor').textContent = selectedActor;
+
+      // Fleet grid
+      const grid = document.getElementById('fleetGrid');
+      grid.innerHTML = '';
+      globalState.subscriptions.forEach(sub => {
+        const isSel = sub.actor_name === selectedActor;
+        const card = document.createElement('div');
+        card.className = `sub-card ${isSel ? 'selected' : ''}`;
+        card.onclick = () => {
+          selectedActor = sub.actor_name;
+          fetchState();
+        };
+
+        const isSuspended = sub.status === 'SUSPENDED';
+        const statusBadgeClass = isSuspended ? 'status-suspended' : 'status-running';
+        const statusText = isSuspended ? 'SUSPENDED (In GCS)' : 'RUNNING (On Pod)';
+
+        const podPills = (sub.pod_ip_history || []).map(ip => `<span class="pod-pill">${ip}</span>`).join(' &rarr; ');
+
+        let ledgerRows = '';
+        if (sub.ledger && sub.ledger.length > 0) {
+          ledgerRows = sub.ledger.slice(-3).map(inv => `
+            <tr>
+              <td>Cycle #${inv.cycle}</td>
+              <td>$${inv.amount_usd.toFixed(2)}</td>
+              <td><span style="color:var(--accent-amber)">${inv.key_version_used || 'v1'}</span></td>
+              <td><span style="color:var(--accent-green)">${inv.status}</span></td>
+            </tr>
+          `).join('');
+        } else {
+          ledgerRows = '<tr><td colspan="4" style="color:var(--text-muted)">No cycles settled yet. Ready for Cycle #1.</td></tr>';
+        }
+
+        card.innerHTML = `
+          <div class="sub-header">
+            <div>
+              <div class="sub-title">${sub.customer_name}</div>
+              <div class="sub-tier">${sub.plan_tier}</div>
+            </div>
+            <span class="status-badge ${statusBadgeClass}">${statusText}</span>
+          </div>
+          <div class="sub-metrics">
+            <div class="sub-metric-item">
+              Current Cycle
+              <div class="sub-metric-val">Cycle #${sub.current_cycle}</div>
+            </div>
+            <div class="sub-metric-item">
+              Settled Revenue
+              <div class="sub-metric-val">$${(sub.cumulative_settled || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+            </div>
+          </div>
+          <div style="font-size:11px; font-weight:700; color:var(--text-muted); margin-top:8px;">Recent In-Memory Ledger (Go Heap RAM)</div>
+          <table class="ledger-table">
+            <thead>
+              <tr><th>Cycle</th><th>Amount</th><th>Key</th><th>Status</th></tr>
+            </thead>
+            <tbody>${ledgerRows}</tbody>
+          </table>
+          <div class="pod-history-row">
+            <span>Pod Migration:</span>
+            ${podPills}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      // X-Ray Inspector
+      const xr = globalState.xray;
+      if (xr) {
+        document.getElementById('xrRamEnv').textContent = xr.inside_actor_ram.token_env;
+        document.getElementById('xrRamAuthHeader').textContent = xr.inside_actor_ram.token_env;
+        document.getElementById('xrWireAuthHeader').textContent = xr.on_the_wire_vault.injected_authorization.replace('Bearer ', '');
+        document.getElementById('xrWireJWT').textContent = xr.on_the_wire_vault.injected_actor_jwt;
+        document.getElementById('xrWireStatus').textContent = xr.on_the_wire_vault.upstream_status;
+        if (xr.on_the_wire_vault.decoded_claims) {
+          document.getElementById('xrWireClaims').textContent = JSON.stringify(xr.on_the_wire_vault.decoded_claims, null, 2);
+        }
+      }
+
+      if (globalState.last_action_msg) {
+        document.getElementById('txtActionBanner').textContent = globalState.last_action_msg;
+      }
+    }
+
+    // Interactive button event listeners
+    document.getElementById('btnSettle').addEventListener('click', async () => {
+      document.getElementById('txtActionBanner').textContent = `Waking ${selectedActor} from GCS and settling billing turn...`;
+      try {
+        const res = await fetch('/api/subscription/settle', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({actor_name: selectedActor}),
+        });
+        if (res.ok) {
+          globalState = await res.json();
+          renderUI();
+        } else {
+          const txt = await res.text();
+          document.getElementById('txtActionBanner').textContent = `Error: ${txt}`;
+        }
+      } catch (err) {
+        document.getElementById('txtActionBanner').textContent = `Settlement failed: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btnRotateSecret').addEventListener('click', async () => {
+      document.getElementById('txtActionBanner').textContent = `Rotating Kubernetes Secret in Payment Vault while actor is frozen...`;
+      try {
+        const res = await fetch('/api/vault/rotate?actor=' + encodeURIComponent(selectedActor), {
+          method: 'POST',
+        });
+        if (res.ok) {
+          globalState = await res.json();
+          renderUI();
+        } else {
+          const txt = await res.text();
+          document.getElementById('txtActionBanner').textContent = `Rotation error: ${txt}`;
+        }
+      } catch (err) {
+        document.getElementById('txtActionBanner').textContent = `Rotation failed: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btnInspectRAM').addEventListener('click', async () => {
+      document.getElementById('txtActionBanner').textContent = `Inspecting Go heap RAM and environment of ${selectedActor}...`;
+      try {
+        const res = await fetch('/api/subscription/inspect-memory?actor=' + encodeURIComponent(selectedActor));
+        if (res.ok) {
+          const insp = await res.json();
+          const proof = `PID: ${insp.process_pid} | Goroutines: ${insp.goroutine_count} | HeapAlloc: ${(insp.heap_alloc_bytes/1024).toFixed(1)} KB
+Raw Keys in Process Environment: ${insp.raw_secrets_in_env}
+Raw Keys in Go Heap RAM: ${insp.raw_secrets_in_heap}
+Placeholder URI verified: ${insp.zero_secrets_verified ? 'TRUE (Zero Plaintext Secrets)' : 'FALSE'}
+Trust Bundle (/run/ate/trust-bundle.pem): ${insp.trust_bundle_present ? 'Present' : 'Simulated'}`;
+          document.getElementById('xrRamAuditProof').textContent = proof;
+          document.getElementById('txtActionBanner').textContent = `Audit Complete for ${selectedActor}: 0 raw keys in process memory. GCS snapshot is 100% secret-free.`;
+        }
+      } catch (err) {
+        document.getElementById('txtActionBanner').textContent = `Inspect failed: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btnTestExfil').addEventListener('click', async () => {
+      document.getElementById('txtActionBanner').textContent = `Sending placeholder Authorization header to untrusted echo server...`;
+      try {
+        const res = await fetch('/api/subscription/test-exfiltrate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({actor_name: selectedActor, target_url: '/api/echo'}),
+        });
+        if (res.ok) {
+          const exfil = await res.json();
+          document.getElementById('txtActionBanner').textContent = `Exfiltration Trap Result: ${exfil.security_proof} (Received: ${exfil.header_received_by_target})`;
+        }
+      } catch (err) {
+        document.getElementById('txtActionBanner').textContent = `Test failed: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btnReset').addEventListener('click', async () => {
+      document.getElementById('txtActionBanner').textContent = `Resetting all customer subscriptions and vault secret to v1...`;
+      try {
+        const res = await fetch('/api/reset', {method: 'POST'});
+        if (res.ok) {
+          globalState = await res.json();
+          renderUI();
+        }
+      } catch (err) {
+        document.getElementById('txtActionBanner').textContent = `Reset failed: ${err.message}`;
+      }
+    });
+
+    // Initial load
+    fetchState();
+    setInterval(fetchState, 5000);
+  </script>
+</body>
+</html>
