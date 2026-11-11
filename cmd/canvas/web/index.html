@@ -385,24 +385,145 @@
       gap: 6px;
       transition: all 0.15s ease;
     }
-    .btn-action:hover {
+    .btn-action:hover:not(:disabled) {
       background: var(--bg-slot);
       color: var(--text-primary);
       border-color: var(--border-strong);
+    }
+    .btn-action:disabled {
+      opacity: 0.38;
+      cursor: not-allowed;
+      filter: grayscale(0.4);
     }
     .btn-action.btn-suspend {
       border-color: var(--accent-amber-border);
       color: var(--accent-amber);
     }
-    .btn-action.btn-suspend:hover {
+    .btn-action.btn-suspend:hover:not(:disabled) {
       background: var(--accent-amber-bg);
     }
     .btn-action.btn-wake {
       border-color: var(--accent-green-border);
       color: var(--accent-green);
     }
-    .btn-action.btn-wake:hover {
+    .btn-action.btn-wake:hover:not(:disabled) {
       background: var(--accent-green-bg);
+    }
+
+    .doc-theme-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .doc-count-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--bg-slot);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* Floating Top-Left Document Room Identity Card on Canvas */
+    .canvas-doc-identity-card {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-left: 4px solid var(--accent-purple);
+      border-radius: 10px;
+      padding: 10px 14px;
+      z-index: 10;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+      max-width: 420px;
+      pointer-events: auto;
+    }
+
+    .doc-id-top-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .doc-class-pill {
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .doc-actor-uri {
+      font-size: 0.68rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--text-muted);
+    }
+
+    .doc-id-title {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: var(--text-primary);
+      line-height: 1.25;
+    }
+
+    .doc-id-meta {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Sleeping in GCS Snapshot Banner on Canvas */
+    .canvas-sleeping-banner {
+      position: absolute;
+      top: 96px;
+      left: 14px;
+      right: 14px;
+      max-width: 680px;
+      background: var(--bg-surface);
+      border: 1.5px solid var(--accent-amber);
+      border-radius: 10px;
+      padding: 10px 14px;
+      z-index: 11;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .sleeping-banner-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .sleeping-banner-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--accent-amber);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .sleeping-banner-desc {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.35;
     }
 
     /* Main Workspace Layout */
@@ -1452,58 +1573,65 @@
 
     <!-- Document Selector -->
     <div class="switcher-group">
-      <span class="group-label">Document:</span>
+      <span class="group-label">Document Room:</span>
       <div class="seg-group">
-        <button type="button" class="doc-pill active" id="btnDocMNA" onclick="switchDocument('doc-merger-acquisition')">
+        <button type="button" class="doc-pill active" id="btnDocMNA" onclick="switchDocument('doc-merger-acquisition')" title="Project Titan: $2.4B M&A Deal Flow & Escrow (Alice Only)">
+          <span class="doc-theme-dot" style="background:#ef4444;"></span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
-          <span>M&amp;A Topology (Restricted)</span>
+          <span>M&amp;A Deal Room</span>
+          <span class="doc-count-tag">4 Nodes</span>
         </button>
 
-        <button type="button" class="doc-pill" id="btnDocRoadmap" onclick="switchDocument('doc-q4-roadmap')">
+        <button type="button" class="doc-pill" id="btnDocRoadmap" onclick="switchDocument('doc-q4-roadmap')" title="Q4 Multi-Region Mesh & WorkerPool Topology (Alice + Bob)">
+          <span class="doc-theme-dot" style="background:#38bdf8;"></span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
             <line x1="9" x2="9" y1="3" y2="18"/>
             <line x1="15" x2="15" y1="6" y2="21"/>
           </svg>
-          <span>Q4 Mesh Roadmap</span>
+          <span>Q4 Global Mesh</span>
+          <span class="doc-count-tag">6 Nodes</span>
         </button>
 
-        <button type="button" class="doc-pill" id="btnDocIncident" onclick="switchDocument('doc-incident-postmortem')">
+        <button type="button" class="doc-pill" id="btnDocIncident" onclick="switchDocument('doc-incident-postmortem')" title="Sev-1 CoreDNS Outage Timeline RCA (Alice + Bob + Charlie Read-Only)">
+          <span class="doc-theme-dot" style="background:#f97316;"></span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" x2="12" y1="8" y2="12"/>
             <line x1="12" x2="12.01" y1="16" y2="16"/>
           </svg>
-          <span>Sev-1 RCA</span>
+          <span>Sev-1 Timeline RCA</span>
+          <span class="doc-count-tag">5 Nodes</span>
         </button>
       </div>
     </div>
 
     <!-- State & Quick Actions -->
     <div class="room-actions">
-      <span id="actorStateBadge" class="doc-state-badge suspended">
+      <span class="group-label">Actor State:</span>
+      <span id="actorStateBadge" class="doc-state-badge suspended" title="Current Agent Substrate Actor Lifecycle State">
         <span class="dot-pulse anim"></span>
-        <span id="actorStateText">SUSPENDED</span>
+        <span id="actorStateText">SUSPENDED IN GCS</span>
       </span>
 
-      <button type="button" class="btn-action btn-suspend" id="btnSuspend" onclick="suspendDocument()" title="Suspend actor to GCS (saves worker slots)">
+      <button type="button" class="btn-action btn-suspend" id="btnSuspend" onclick="suspendDocument()" title="Checkpoint actor RAM to GCS & release worker pod slot (0/3 slots held)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
-        <span>Suspend</span>
+        <span>Suspend to GCS</span>
       </button>
 
-      <button type="button" class="btn-action btn-wake" id="btnWake" onclick="wakeDocument()" title="Wake actor from GCS">
+      <button type="button" class="btn-action btn-wake" id="btnWake" onclick="wakeDocument()" title="Trigger Wake-on-HTTP (~100ms) to restore actor from GCS snapshot into worker pod RAM">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        <span>Wake</span>
+        <span>Wake from GCS</span>
       </button>
 
-      <button type="button" class="btn-action" onclick="resetDemo()" title="Reset demo catalog and OpenFGA policies">
+      <button type="button" class="btn-action" onclick="resetDemo()" title="Reset all 3 documents and OpenFGA policies to initial demo state">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
           <path d="M3 3v5h5"/>
@@ -1821,20 +1949,23 @@
     }
 
     // Fetch Full Canvas State
-    async function fetchState() {
+    async function fetchState(opts) {
+      const noWake = !!(opts && opts.noWake);
       try {
-        const res = await fetch(`/api/state?principal=${encodeURIComponent(currentPrincipal)}&doc=${encodeURIComponent(currentDoc)}`);
+        const wakeParam = noWake ? '&wake=false' : '';
+        const res = await fetch(`/api/state?principal=${encodeURIComponent(currentPrincipal)}&doc=${encodeURIComponent(currentDoc)}${wakeParam}`);
         const data = await res.json();
         currentResponse = data;
 
         const isDenied = (res.status === 403 || data.is_denied_before_wakeup);
+        const actorState = data.actor_state || (isDenied ? 'SUSPENDED' : 'RUNNING');
 
         // Update DOM state elements
-        updateStateBadge(data.actor_state || (isDenied ? 'SUSPENDED' : 'RUNNING'));
+        updateStateBadge(actorState, data.can_manage);
 
         // Update compatibility banner elements
         document.getElementById('denialMsg').textContent = data.denial_reason || '';
-        document.getElementById('proofActorState').textContent = data.actor_state || 'SUSPENDED';
+        document.getElementById('proofActorState').textContent = actorState;
 
         if (data.scene) {
           document.getElementById('telRev').textContent = `#${data.scene.revision}`;
@@ -1857,6 +1988,7 @@
             denialData: data,
             canEdit: data.can_edit,
             principalRole: data.principal_role,
+            actorState: actorState,
             docID: currentDoc,
             principal: currentPrincipal
           });
@@ -1866,14 +1998,36 @@
       }
     }
 
-    function updateStateBadge(state) {
+    function updateStateBadge(state, canManage) {
       const badge = document.getElementById('actorStateBadge');
       const text = document.getElementById('actorStateText');
-      text.textContent = state;
+      const btnSuspend = document.getElementById('btnSuspend');
+      const btnWake = document.getElementById('btnWake');
+
       if (state === 'RUNNING') {
+        text.textContent = 'RUNNING IN RAM (1/3 SLOTS)';
         badge.className = 'doc-state-badge running';
+        if (btnSuspend) {
+          btnSuspend.disabled = (canManage === false);
+          btnSuspend.title = (canManage === false)
+            ? 'Only the document owner (Alice) can suspend the actor to GCS'
+            : 'Checkpoint actor RAM to GCS & release worker pod slot (0/3 slots held)';
+        }
+        if (btnWake) {
+          btnWake.disabled = true;
+          btnWake.title = 'Actor is already running in worker pod RAM';
+        }
       } else {
+        text.textContent = 'SUSPENDED IN GCS (0/3 SLOTS)';
         badge.className = 'doc-state-badge suspended';
+        if (btnSuspend) {
+          btnSuspend.disabled = true;
+          btnSuspend.title = 'Actor is already suspended in GCS';
+        }
+        if (btnWake) {
+          btnWake.disabled = false;
+          btnWake.title = 'Trigger Wake-on-HTTP (~100ms) to restore actor from GCS snapshot into worker pod RAM';
+        }
       }
     }
 
@@ -1979,7 +2133,7 @@
     }
 
     // Role Management API Calls
-    async function grantRole(targetUser, role) {
+    async function grantRole(targetUser, role, wakeAfter) {
       try {
         const res = await fetch('/api/policy/grant', {
           method: 'POST',
@@ -1995,7 +2149,9 @@
           const err = await res.json();
           alert(`Grant failed: ${err.reason || err.error}`);
         }
-        fetchState();
+        // Keep actor suspended if owner edited policy while actor was asleep (unless waking from 403 shield)
+        const stayAsleep = !wakeAfter && currentResponse && currentResponse.actor_state === 'SUSPENDED' && !currentResponse.is_denied_before_wakeup;
+        fetchState({ noWake: stayAsleep });
       } catch (e) {
         console.error('grantRole error:', e);
       }
@@ -2016,7 +2172,8 @@
           const err = await res.json();
           alert(`Revoke failed: ${err.reason || err.error}`);
         }
-        fetchState();
+        const stayAsleep = currentResponse && currentResponse.actor_state === 'SUSPENDED';
+        fetchState({ noWake: stayAsleep });
       } catch (e) {
         console.error('revokeRole error:', e);
       }
@@ -2024,7 +2181,7 @@
 
     async function suspendDocument() {
       try {
-        await fetch('/api/actor/suspend', {
+        const res = await fetch('/api/actor/suspend', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2032,7 +2189,13 @@
             principal: currentPrincipal
           })
         });
-        fetchState();
+        if (!res.ok) {
+          const err = await res.json();
+          alert(`Suspend denied by OpenFGA: ${err.reason || err.error || 'Only the document owner can suspend the actor'}`);
+          return;
+        }
+        // Refresh UI state with noWake=true so the actor stays SUSPENDED in GCS!
+        await fetchState({ noWake: true });
       } catch (e) {
         console.error('suspendDocument error:', e);
       }
@@ -2040,7 +2203,7 @@
 
     async function wakeDocument() {
       try {
-        await fetch('/api/actor/wake', {
+        const res = await fetch('/api/actor/wake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2048,7 +2211,11 @@
             principal: currentPrincipal
           })
         });
-        fetchState();
+        if (!res.ok) {
+          await fetchState();
+          return;
+        }
+        await fetchState();
       } catch (e) {
         console.error('wakeDocument error:', e);
       }
@@ -2360,7 +2527,11 @@
           // Header
           h('div', { className: 'sticky-header' },
             h('div', { className: 'sticky-tag' },
-              h('span', null, '📌 Note')
+              h('svg', { width: 11, height: 11, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2 },
+                h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+                h('polyline', { points: '14 2 14 8 20 8' })
+              ),
+              h('span', null, 'Note')
             ),
             canEdit && h('button', {
               type: 'button',
@@ -2388,6 +2559,40 @@
         stickyNote: StickyNoteComponent
       };
 
+      // Per-document visual theme config
+      const DOC_THEMES = {
+        'doc-merger-acquisition': {
+          accent: '#ef4444',
+          edgeColorDark: '#f43f5e',
+          edgeColorLight: '#be123c',
+          pillBg: 'rgba(239, 68, 68, 0.14)',
+          pillBorder: 'rgba(239, 68, 68, 0.4)',
+          classification: 'CONFIDENTIAL // RESTRICTED',
+          title: 'Project Titan: $2.4B M&A Topology & Asset Escrow',
+          layoutDesc: 'Deal & Escrow Flow Diamond'
+        },
+        'doc-q4-roadmap': {
+          accent: '#38bdf8',
+          edgeColorDark: '#38bdf8',
+          edgeColorLight: '#0284c7',
+          pillBg: 'rgba(56, 189, 248, 0.14)',
+          pillBorder: 'rgba(56, 189, 248, 0.4)',
+          classification: 'INTERNAL // STAFF ARCHITECTURE',
+          title: 'Q4 Global Multi-Region Mesh & WorkerPool Topology',
+          layoutDesc: '4-Tier Dual-Region Fan-Out Mesh'
+        },
+        'doc-incident-postmortem': {
+          accent: '#f97316',
+          edgeColorDark: '#f97316',
+          edgeColorLight: '#c2410c',
+          pillBg: 'rgba(249, 115, 22, 0.14)',
+          pillBorder: 'rgba(249, 115, 22, 0.4)',
+          classification: 'EXTERNAL AUDIT // POSTMORTEM',
+          title: 'Sev-1 Outage RCA: CoreDNS UDP Exhaustion Cascade',
+          layoutDesc: 'Chronological Incident Timeline Swimlane'
+        }
+      };
+
       // Top-level CanvasFlow React Component
       function CanvasFlow() {
         const [nodes, setNodes] = React.useState([]);
@@ -2398,11 +2603,14 @@
           denialData: null,
           canEdit: false,
           principalRole: 'owner',
+          actorState: 'RUNNING',
+          scene: null,
           principal: currentPrincipal,
           docID: currentDoc
         });
 
         const reactFlowInstanceRef = React.useRef(null);
+        const prevDocRef = React.useRef(currentDoc);
 
         // Delete handler
         const handleDelete = React.useCallback((id, targetType) => {
@@ -2423,16 +2631,24 @@
           reactFlowBridge = {
             updateTheme: (t) => setTheme(t),
             updateCanvasData: (payload) => {
+              const docChanged = prevDocRef.current !== payload.docID;
+              prevDocRef.current = payload.docID;
+
               setCanvasState({
                 isDenied: payload.isDenied,
                 denialData: payload.denialData,
                 canEdit: payload.canEdit,
                 principalRole: payload.principalRole,
+                actorState: payload.actorState || 'RUNNING',
+                scene: payload.scene || null,
                 docID: payload.docID,
                 principal: payload.principal
               });
 
               if (payload.scene) {
+                const docTheme = DOC_THEMES[payload.docID] || DOC_THEMES['doc-merger-acquisition'];
+                const edgeStroke = theme === 'light' ? docTheme.edgeColorLight : docTheme.edgeColorDark;
+
                 // Map nodes
                 const mappedNodes = [];
 
@@ -2472,26 +2688,34 @@
                   });
                 });
 
-                // Map edges
+                // Map edges with document-specific theme color
                 const mappedEdges = (payload.scene.edges || []).map(e => ({
                   id: e.id,
                   source: e.from,
                   target: e.to,
                   label: e.label || '',
-                  animated: (e.style === 'dashed' || true),
+                  animated: true,
                   style: {
-                    stroke: theme === 'light' ? '#475569' : '#38bdf8',
-                    strokeWidth: 2,
-                    strokeDasharray: e.style === 'dashed' ? '5 5' : undefined
+                    stroke: edgeStroke,
+                    strokeWidth: 2.2,
+                    strokeDasharray: e.style === 'dashed' ? '6 5' : undefined
                   },
                   markerEnd: {
                     type: MarkerType.ArrowClosed,
-                    color: theme === 'light' ? '#475569' : '#38bdf8'
+                    color: edgeStroke
                   }
                 }));
 
                 setNodes(mappedNodes);
                 setEdges(mappedEdges);
+
+                if (docChanged && reactFlowInstanceRef.current) {
+                  setTimeout(() => {
+                    if (reactFlowInstanceRef.current) {
+                      reactFlowInstanceRef.current.fitView({ padding: 0.24, duration: 350 });
+                    }
+                  }, 45);
+                }
               }
             }
           };
@@ -2571,6 +2795,11 @@
           }).then(() => fetchState());
         }, []);
 
+        const activeDocTheme = DOC_THEMES[canvasState.docID] || DOC_THEMES['doc-merger-acquisition'];
+        const sceneNodesCount = canvasState.scene?.nodes?.length || 0;
+        const sceneEdgesCount = canvasState.scene?.edges?.length || 0;
+        const sceneNotesCount = canvasState.scene?.notes?.length || 0;
+
         return h('div', { style: { width: '100%', height: '100%', position: 'relative' } },
           h(FlowComponent, {
             nodes: nodes,
@@ -2603,10 +2832,67 @@
             })
           ),
 
+          // Top-Left Document Room Identity Card on Canvas
+          !canvasState.isDenied && h('div', {
+            className: 'canvas-doc-identity-card',
+            style: { borderLeftColor: activeDocTheme.accent }
+          },
+            h('div', { className: 'doc-id-top-row' },
+              h('span', {
+                className: 'doc-class-pill',
+                style: {
+                  color: activeDocTheme.accent,
+                  backgroundColor: activeDocTheme.pillBg,
+                  border: `1px solid ${activeDocTheme.pillBorder}`
+                }
+              }, canvasState.scene?.security_classification || activeDocTheme.classification),
+              h('span', { className: 'doc-actor-uri' }, `actor:anything-but-agents/${canvasState.docID}`)
+            ),
+            h('div', { className: 'doc-id-title' },
+              canvasState.scene?.title || activeDocTheme.title
+            ),
+            h('div', { className: 'doc-id-meta' },
+              h('span', { style: { fontWeight: 700, color: activeDocTheme.accent } }, activeDocTheme.layoutDesc),
+              h('span', null, '•'),
+              h('span', null, `${sceneNodesCount} Nodes · ${sceneEdgesCount} Edges · ${sceneNotesCount} Notes`),
+              h('span', null, '•'),
+              h('span', { style: { fontWeight: 700 } }, `Role: ${(canvasState.principalRole || 'viewer').toUpperCase()}`)
+            )
+          ),
+
+          // Sleeping in GCS Snapshot Banner (shown when actor is SUSPENDED and authorized user is viewing)
+          !canvasState.isDenied && canvasState.actorState === 'SUSPENDED' && h('div', { className: 'canvas-sleeping-banner' },
+            h('div', { className: 'sleeping-banner-text' },
+              h('div', { className: 'sleeping-banner-title' },
+                h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2 },
+                  h('path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' })
+                ),
+                h('span', null, 'Actor Frozen in GCS Snapshot (0/3 Worker Pod Slots Held)')
+              ),
+              h('div', { className: 'sleeping-banner-desc' },
+                'Switch Principal to an unauthorized user (Bob or Charlie) to see OpenFGA reject calls BEFORE waking this sleeping actor (0ms CPU spent) — or click "Wake from GCS" / drag any node to trigger Wake-on-HTTP (~100ms).'
+              )
+            ),
+            h('button', {
+              type: 'button',
+              className: 'btn-action btn-wake',
+              onClick: wakeDocument
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+                h('polygon', { points: '5 3 19 12 5 21 5 3' })
+              ),
+              h('span', null, 'Wake Now')
+            )
+          ),
+
           // Top-Right Multiplayer Presence Dock on Canvas
           h('div', { className: 'canvas-presence-bar' },
             !canvasState.canEdit && !canvasState.isDenied && h('div', { className: 'lock-view-banner' },
-              h('span', null, '🔒 Read-Only (Viewer Role) • Mutations Restricted by OpenFGA')
+              h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, style: { marginRight: '5px', verticalAlign: 'middle' } },
+                h('rect', { width: 18, height: 11, x: 3, y: 11, rx: 2, ry: 2 }),
+                h('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' })
+              ),
+              h('span', null, 'Read-Only (Viewer Role) • Mutations Restricted by OpenFGA')
             ),
             h('div', { className: 'presence-avatar-stack' },
               h('div', { className: 'presence-avatar alice', title: 'Alice Chen • VP Strategy (Owner)' },
@@ -2733,7 +3019,7 @@
                 className: 'btn-shield-grant',
                 onClick: () => {
                   const roleToGrant = (canvasState.principal === 'user:bob' ? 'editor' : 'viewer');
-                  grantRole(canvasState.principal, roleToGrant);
+                  grantRole(canvasState.principal, roleToGrant, true);
                 }
               },
                 h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
