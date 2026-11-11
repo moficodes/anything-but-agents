@@ -319,3 +319,17 @@ func TestGateway_Endpoints(t *testing.T) {
 		t.Errorf("expected reset to restore v1, got %s", resetResp.Vault.CurrentVersion)
 	}
 }
+
+func TestIndexHTML_RotateKeyButtonLabel(t *testing.T) {
+	data, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatalf("failed to read web/index.html: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "<span>Rotate Key</span>") {
+		t.Errorf("expected button label to say '<span>Rotate Key</span>', but not found")
+	}
+	if strings.Contains(content, "v1 &rarr; v2") || strings.Contains(content, "v1 -> v2") {
+		t.Errorf("expected no hardcoded 'v1 -> v2' button label in index.html")
+	}
+}
