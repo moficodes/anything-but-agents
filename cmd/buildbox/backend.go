@@ -229,6 +229,9 @@ func (b *LocalSimulatorBackend) GetJobState(_ context.Context, jobName string, w
 	}
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -250,6 +253,9 @@ func (b *LocalSimulatorBackend) FetchDeps(ctx context.Context, jobName string) (
 
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -272,6 +278,9 @@ func (b *LocalSimulatorBackend) CompileAndTest(ctx context.Context, jobName stri
 
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -288,6 +297,9 @@ func (b *LocalSimulatorBackend) TestRogueEgress(ctx context.Context, jobName str
 	_, _ = sim.actor.TestRogueEgress(ctx)
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -315,6 +327,9 @@ func (b *LocalSimulatorBackend) PublishArtifact(ctx context.Context, jobName str
 
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -358,6 +373,9 @@ func (b *LocalSimulatorBackend) ResetJob(_ context.Context, jobName string) (*Bu
 	sim.status = "RUNNING"
 	state := sim.actor.State(sim.actor.currentPodIP)
 	state.Status = sim.status
+	if sim.status == "SUSPENDED" {
+		state.CurrentPodIP = ""
+	}
 	state.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, state.Phase)
 	return &state, nil
 }
@@ -388,15 +406,17 @@ func (b *LocalSimulatorBackend) GetEgressPolicyYAML(_ context.Context, jobName s
 // --- ClusterAteBackend (--mode=gateway against real Agent Substrate cluster) ---
 
 type ClusterAteBackend struct {
-	mu            sync.Mutex
-	atespace      string
-	template      string
-	routerURL     string
-	ateEndpoint   string
-	kubectlAteBin string
-	httpClient    *http.Client
-	currentPhases map[string]string
-	createdActors map[string]bool
+	mu              sync.Mutex
+	atespace        string
+	template        string
+	routerURL       string
+	ateEndpoint     string
+	kubectlAteBin   string
+	httpClient      *http.Client
+	currentPhases   map[string]string
+	createdActors   map[string]bool
+	cachedTrackers  map[string]*BuildJobTracker
+	suspendedActors map[string]bool
 }
 
 func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAteBin string) *ClusterAteBackend {
@@ -407,15 +427,20 @@ func NewClusterAteBackend(atespace, template, routerURL, ateEndpoint, kubectlAte
 		routerURL = "https://atenet-router.ate-system.svc:443"
 	}
 	b := &ClusterAteBackend{
-		atespace:      atespace,
-		template:      template,
-		routerURL:     strings.TrimRight(routerURL, "/"),
-		ateEndpoint:   ateEndpoint,
-		kubectlAteBin: kubectlAteBin,
-		currentPhases: make(map[string]string),
-		createdActors: make(map[string]bool),
-		httpClient:    createClusterHTTPClient(),
+		atespace:        atespace,
+		template:        template,
+		routerURL:       strings.TrimRight(routerURL, "/"),
+		ateEndpoint:     ateEndpoint,
+		kubectlAteBin:   kubectlAteBin,
+		currentPhases:   make(map[string]string),
+		createdActors:   make(map[string]bool),
+		cachedTrackers:  make(map[string]*BuildJobTracker),
+		suspendedActors: make(map[string]bool),
+		httpClient:      createClusterHTTPClient(),
 	}
+	// Initially mark secondary baseline actors as suspended
+	b.suspendedActors[defaultBuildJobs[1]] = true
+	b.suspendedActors[defaultBuildJobs[2]] = true
 	return b
 }
 
@@ -555,10 +580,24 @@ func (b *ClusterAteBackend) callActor(ctx context.Context, actorName, method, su
 }
 
 func (b *ClusterAteBackend) inspectActor(ctx context.Context, actorName string) (status, workerIP, workerPod string) {
-	raw, err := b.runKubectlAte(ctx, "get", "actors", actorName, "-a", b.atespace, "-o", "json")
-	if err != nil {
+	b.mu.Lock()
+	if b.suspendedActors[actorName] {
+		b.mu.Unlock()
 		return "SUSPENDED", "", ""
 	}
+	b.mu.Unlock()
+
+	raw, err := b.runKubectlAte(ctx, "get", "actors", actorName, "-a", b.atespace, "-o", "json")
+	if err != nil {
+		b.mu.Lock()
+		isSusp := b.suspendedActors[actorName]
+		b.mu.Unlock()
+		if isSusp {
+			return "SUSPENDED", "", ""
+		}
+		return "RUNNING", "", ""
+	}
+
 	var doc struct {
 		Status struct {
 			State            string `json:"state"`
@@ -568,7 +607,7 @@ func (b *ClusterAteBackend) inspectActor(ctx context.Context, actorName string) 
 			} `json:"workerAssignment"`
 		} `json:"status"`
 	}
-	if err := json.Unmarshal(raw, &doc); err == nil {
+	if err := json.Unmarshal(raw, &doc); err == nil && doc.Status.State != "" {
 		state := doc.Status.State
 		if strings.HasPrefix(state, "ACTOR_STATE_") {
 			state = strings.TrimPrefix(state, "ACTOR_STATE_")
@@ -579,6 +618,37 @@ func (b *ClusterAteBackend) inspectActor(ctx context.Context, actorName string) 
 		workerPod = doc.Status.WorkerAssignment.WorkerPod
 		return state, workerIP, workerPod
 	}
+
+	var docList struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Status struct {
+				State            string `json:"state"`
+				WorkerAssignment struct {
+					WorkerPodIps []string `json:"workerPodIps"`
+					WorkerPod    string   `json:"workerPod"`
+				} `json:"workerAssignment"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &docList); err == nil && len(docList.Items) > 0 {
+		for _, item := range docList.Items {
+			if item.Metadata.Name == actorName {
+				state := item.Status.State
+				if strings.HasPrefix(state, "ACTOR_STATE_") {
+					state = strings.TrimPrefix(state, "ACTOR_STATE_")
+				}
+				if len(item.Status.WorkerAssignment.WorkerPodIps) > 0 {
+					workerIP = item.Status.WorkerAssignment.WorkerPodIps[0]
+				}
+				workerPod = item.Status.WorkerAssignment.WorkerPod
+				return state, workerIP, workerPod
+			}
+		}
+	}
+
 	return "RUNNING", "", ""
 }
 
@@ -605,14 +675,30 @@ func (b *ClusterAteBackend) GetJobState(ctx context.Context, jobName string, wak
 	if !isValidJobName(jobName) {
 		return nil, fmt.Errorf("invalid job name %q", jobName)
 	}
+
+	b.mu.Lock()
+	cached := b.cachedTrackers[jobName]
+	explicitlySuspended := b.suspendedActors[jobName]
+	phase := b.currentPhases[jobName]
+	if phase == "" {
+		phase = PhaseIdle
+	}
+	b.mu.Unlock()
+
 	status, workerIP, workerPod := b.inspectActor(ctx, jobName)
-	if status == "SUSPENDED" && !wake {
-		b.mu.Lock()
-		phase := b.currentPhases[jobName]
-		if phase == "" {
-			phase = PhaseIdle
+	isSuspended := explicitlySuspended || strings.Contains(status, "SUSPEND")
+
+	if isSuspended && !wake {
+		// When the actor is sleeping in GCS, do NOT call callActor over atenet-router,
+		// because any incoming HTTP request will immediately wake the actor!
+		if cached != nil {
+			cachedCopy := *cached
+			cachedCopy.Status = "SUSPENDED"
+			cachedCopy.CurrentPodIP = ""
+			cachedCopy.WorkerPodName = ""
+			cachedCopy.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, cachedCopy.Phase)
+			return &cachedCopy, nil
 		}
-		b.mu.Unlock()
 		return &BuildJobTracker{
 			JobName:          jobName,
 			Label:            formatJobLabel(jobName),
@@ -625,19 +711,33 @@ func (b *ClusterAteBackend) GetJobState(ctx context.Context, jobName string, wak
 
 	body, err := b.callActor(ctx, jobName, http.MethodGet, "/state", nil)
 	if err != nil {
+		if isSuspended && cached != nil {
+			cachedCopy := *cached
+			cachedCopy.Status = "SUSPENDED"
+			return &cachedCopy, nil
+		}
 		return nil, err
 	}
 	var tracker BuildJobTracker
 	if err := json.Unmarshal(body, &tracker); err != nil {
 		return nil, err
 	}
-	tracker.Status = status
-	tracker.WorkerPodName = workerPod
+	tracker.Status = "RUNNING"
+	if workerPod != "" {
+		tracker.WorkerPodName = workerPod
+	}
 	if workerIP != "" && !slices.Contains(tracker.PodIPHistory, workerIP) {
 		tracker.PodIPHistory = append(tracker.PodIPHistory, workerIP)
 		tracker.CurrentPodIP = workerIP
 	}
 	tracker.EgressPolicyYAML = generateEgressPolicyYAML(b.atespace, jobName, tracker.Phase)
+
+	b.mu.Lock()
+	b.cachedTrackers[jobName] = &tracker
+	b.suspendedActors[jobName] = false
+	b.currentPhases[jobName] = tracker.Phase
+	b.mu.Unlock()
+
 	return &tracker, nil
 }
 
@@ -645,6 +745,10 @@ func (b *ClusterAteBackend) FetchDeps(ctx context.Context, jobName string) (*Bui
 	if err := b.EnsureActor(ctx, jobName); err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	b.suspendedActors[jobName] = false
+	b.mu.Unlock()
+
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseDependencyFetch); err != nil {
 		slog.Warn("Failed to apply Phase 1 EgressPolicy", slog.Any("err", err))
 	}
@@ -652,13 +756,17 @@ func (b *ClusterAteBackend) FetchDeps(ctx context.Context, jobName string) (*Bui
 	if err != nil {
 		return nil, err
 	}
-	return b.GetJobState(ctx, jobName, false)
+	return b.GetJobState(ctx, jobName, true)
 }
 
 func (b *ClusterAteBackend) CompileAndTest(ctx context.Context, jobName string) (*BuildJobTracker, error) {
 	if err := b.EnsureActor(ctx, jobName); err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	b.suspendedActors[jobName] = false
+	b.mu.Unlock()
+
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseHermeticCompile); err != nil {
 		slog.Warn("Failed to lock airgap in Phase 2", slog.Any("err", err))
 	}
@@ -666,26 +774,34 @@ func (b *ClusterAteBackend) CompileAndTest(ctx context.Context, jobName string) 
 	if err != nil {
 		return nil, err
 	}
-	return b.GetJobState(ctx, jobName, false)
+	return b.GetJobState(ctx, jobName, true)
 }
 
 func (b *ClusterAteBackend) TestRogueEgress(ctx context.Context, jobName string) (*BuildJobTracker, error) {
 	if err := b.EnsureActor(ctx, jobName); err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	b.suspendedActors[jobName] = false
+	b.mu.Unlock()
+
 	// Ensure airgap is locked
 	_ = b.applyEgressPolicy(ctx, jobName, PhaseHermeticCompile)
 	_, err := b.callActor(ctx, jobName, http.MethodPost, "/action/test-rogue-egress", []byte("{}"))
 	if err != nil {
 		return nil, err
 	}
-	return b.GetJobState(ctx, jobName, false)
+	return b.GetJobState(ctx, jobName, true)
 }
 
 func (b *ClusterAteBackend) PublishArtifact(ctx context.Context, jobName string) (*BuildJobTracker, error) {
 	if err := b.EnsureActor(ctx, jobName); err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	b.suspendedActors[jobName] = false
+	b.mu.Unlock()
+
 	if err := b.applyEgressPolicy(ctx, jobName, PhaseArtifactPublish); err != nil {
 		slog.Warn("Failed to apply Phase 3 EgressPolicy", slog.Any("err", err))
 	}
@@ -693,7 +809,7 @@ func (b *ClusterAteBackend) PublishArtifact(ctx context.Context, jobName string)
 	if err != nil {
 		return nil, err
 	}
-	return b.GetJobState(ctx, jobName, false)
+	return b.GetJobState(ctx, jobName, true)
 }
 
 func (b *ClusterAteBackend) AutoRunPipeline(ctx context.Context, jobName string) (*BuildJobTracker, error) {
@@ -714,6 +830,15 @@ func (b *ClusterAteBackend) AutoRunPipeline(ctx context.Context, jobName string)
 }
 
 func (b *ClusterAteBackend) SuspendActor(ctx context.Context, jobName string) error {
+	b.mu.Lock()
+	b.suspendedActors[jobName] = true
+	if tr, ok := b.cachedTrackers[jobName]; ok && tr != nil {
+		tr.Status = "SUSPENDED"
+		tr.CurrentPodIP = ""
+		tr.WorkerPodName = ""
+	}
+	b.mu.Unlock()
+
 	_, err := b.runKubectlAte(ctx, "suspend", "actor", jobName, "-a", b.atespace, "--mode=sync")
 	return err
 }
@@ -724,6 +849,8 @@ func (b *ClusterAteBackend) ResetJob(ctx context.Context, jobName string) (*Buil
 	b.mu.Lock()
 	delete(b.createdActors, jobName)
 	delete(b.currentPhases, jobName)
+	delete(b.cachedTrackers, jobName)
+	b.suspendedActors[jobName] = false
 	b.mu.Unlock()
 
 	if err := b.EnsureActor(ctx, jobName); err != nil {

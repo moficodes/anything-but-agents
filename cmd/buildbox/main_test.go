@@ -335,8 +335,8 @@ func TestGatewayServerAPIRoutesAndAuth(t *testing.T) {
 		t.Fatalf("unexpected release response: %s", recRelease.Body.String())
 	}
 
-	// 6. Test /api/build/fetch-deps, /api/build/compile-test, /api/build/test-rogue, /api/build/publish
-	actions := []string{"fetch-deps", "compile-test", "test-rogue", "publish"}
+	// 6. Test /api/build/fetch-deps, /api/build/compile-test, /api/build/test-rogue, /api/build/publish, /api/build/suspend
+	actions := []string{"fetch-deps", "compile-test", "test-rogue", "publish", "suspend"}
 	for _, action := range actions {
 		reqAct := httptest.NewRequest(http.MethodPost, "/api/build/"+action, strings.NewReader(`{"job_name":"build-pr-104"}`))
 		reqAct.Header.Set(PresenterHeaderName, testToken)
@@ -346,6 +346,22 @@ func TestGatewayServerAPIRoutesAndAuth(t *testing.T) {
 		if recAct.Code != http.StatusOK {
 			t.Fatalf("action %s failed with %d: %s", action, recAct.Code, recAct.Body.String())
 		}
+	}
+
+	// Verify that polling /api/state with wake=0 preserves SUSPENDED state
+	reqPoll := httptest.NewRequest(http.MethodGet, "/api/state?job=build-pr-104&wake=0", nil)
+	reqPoll.Header.Set(PresenterHeaderName, testToken)
+	recPoll := httptest.NewRecorder()
+	mux.ServeHTTP(recPoll, reqPoll)
+	if recPoll.Code != http.StatusOK {
+		t.Fatalf("expected 200 on poll, got %d", recPoll.Code)
+	}
+	var polledState BuildJobTracker
+	if err := json.Unmarshal(recPoll.Body.Bytes(), &polledState); err != nil {
+		t.Fatalf("unmarshal polled state: %v", err)
+	}
+	if polledState.Status != "SUSPENDED" {
+		t.Fatalf("expected status SUSPENDED after suspend action, got %s", polledState.Status)
 	}
 
 	// 7. Test /dashboard and / UI routes
@@ -386,6 +402,12 @@ func TestGatewayServerAPIRoutesAndAuth(t *testing.T) {
 		}
 		if !strings.Contains(body, "theme-toggle") {
 			t.Fatalf("UI route %s missing theme-toggle in HTML", uiPath)
+		}
+		if !strings.Contains(body, "pipelineStepper") {
+			t.Fatalf("UI route %s missing pipelineStepper in HTML", uiPath)
+		}
+		if !strings.Contains(body, "stepperProgressBar") {
+			t.Fatalf("UI route %s missing stepperProgressBar in HTML", uiPath)
 		}
 	}
 }

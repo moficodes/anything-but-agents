@@ -331,6 +331,139 @@ limitations under the License.
       .pipeline-grid { grid-template-columns: 1fr; }
     }
 
+    /* Live Pipeline Step Progress Banner / Stepper */
+    .stepper-banner {
+      background: var(--bg-panel);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 0 16px var(--accent-cyan-dim);
+      transition: all 0.3s ease;
+    }
+
+    .stepper-banner.completed {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 16px var(--accent-green-dim);
+    }
+
+    .stepper-banner.airgap {
+      border-color: var(--accent-amber);
+      box-shadow: 0 0 16px var(--accent-amber-dim);
+    }
+
+    .stepper-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stepper-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stepper-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--accent-cyan-dim);
+      border: 1px solid var(--accent-cyan);
+      color: var(--accent-cyan);
+      letter-spacing: 0.5px;
+    }
+
+    .stepper-banner.completed .stepper-pill {
+      background: var(--accent-green-dim);
+      border-color: var(--accent-green);
+      color: var(--accent-green-bright);
+    }
+
+    .stepper-banner.airgap .stepper-pill {
+      background: var(--accent-amber-dim);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber-bright);
+    }
+
+    .stepper-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .stepper-spinner {
+      display: flex;
+      align-items: center;
+      color: var(--accent-cyan);
+    }
+
+    .stepper-banner.completed .stepper-spinner {
+      color: var(--accent-green-bright);
+    }
+
+    .stepper-banner.airgap .stepper-spinner {
+      color: var(--accent-amber-bright);
+    }
+
+    .spin-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .stepper-progress-track {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-panel-alt);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .stepper-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+      border-radius: 3px;
+      transition: width 0.4s ease-in-out;
+    }
+
+    .stepper-banner.airgap .stepper-progress-bar {
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-amber));
+    }
+
+    /* Phase Card Executing & Glow */
+    .phase-card.step-executing {
+      border-color: var(--accent-cyan) !important;
+      box-shadow: 0 0 24px var(--accent-cyan-dim) !important;
+      animation: pulse-glow 1.5s infinite;
+    }
+
+    .phase-card.airgap-phase.step-executing {
+      border-color: var(--accent-amber) !important;
+      box-shadow: 0 0 24px var(--accent-amber-dim) !important;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.96; transform: scale(1.008); }
+    }
+
+    .btn.in-flight {
+      opacity: 0.65;
+      pointer-events: none;
+      position: relative;
+    }
+
     .phase-card {
       background: var(--bg-panel);
       border: 1px solid var(--border-subtle);
@@ -722,6 +855,22 @@ limitations under the License.
       </div>
     </div>
 
+    <!-- Live Pipeline Step Progress Banner / Stepper -->
+    <div id="pipelineStepper" class="stepper-banner" style="display: none;">
+      <div class="stepper-header">
+        <div class="stepper-title-group">
+          <span class="stepper-pill" id="stepperStepPill">STEP 1 OF 4</span>
+          <span class="stepper-label" id="stepperStepLabel">Applying Phase 1 EgressPolicy (Package Mirror Only) &amp; Fetching Dependencies into Go Heap RAM...</span>
+        </div>
+        <div class="stepper-spinner" id="stepperSpinner">
+          <svg class="spin-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        </div>
+      </div>
+      <div class="stepper-progress-track">
+        <div class="stepper-progress-bar" id="stepperProgressBar" style="width: 25%;"></div>
+      </div>
+    </div>
+
     <!-- 3-Phase State Machine Banner -->
     <div class="pipeline-grid">
       <!-- Phase 1 -->
@@ -919,6 +1068,7 @@ limitations under the License.
     let currentJob = "build-pr-104";
     let pollTimer = null;
     let currentTheme = "dark";
+    let isPipelineRunning = false;
 
     function applyTheme(theme) {
       currentTheme = theme === "light" ? "light" : "dark";
@@ -941,7 +1091,59 @@ limitations under the License.
       }
     });
 
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function showStepper(step, total, label, pct, type) {
+      const banner = document.getElementById("pipelineStepper");
+      const pill = document.getElementById("stepperStepPill");
+      const lbl = document.getElementById("stepperStepLabel");
+      const bar = document.getElementById("stepperProgressBar");
+      const spinner = document.getElementById("stepperSpinner");
+
+      banner.style.display = "flex";
+      banner.className = "stepper-banner" + (type ? " " + type : "");
+      pill.textContent = total > 1 ? `STEP ${step} OF ${total}` : `ACTION IN PROGRESS`;
+      lbl.textContent = label;
+      bar.style.width = pct + "%";
+      if (type === "completed") {
+        spinner.style.display = "none";
+      } else {
+        spinner.style.display = "flex";
+      }
+    }
+
+    function hideStepper() {
+      const banner = document.getElementById("pipelineStepper");
+      banner.style.display = "none";
+    }
+
+    function highlightExecutingCard(cardId) {
+      document.querySelectorAll(".phase-card").forEach(c => c.classList.remove("step-executing"));
+      if (cardId) {
+        const c = document.getElementById(cardId);
+        if (c) c.classList.add("step-executing");
+      }
+    }
+
+    function disableActionButtons(disabled) {
+      const ids = [
+        "btnAutoRun", "btnSuspend", "btnResetJob", "btnResetStage",
+        "btnFetchDeps", "btnCompileTest", "btnTestRogue", "btnPublish"
+      ];
+      ids.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.disabled = disabled;
+          if (disabled) btn.classList.add("in-flight");
+          else btn.classList.remove("in-flight");
+        }
+      });
+    }
+
     async function selectJob(name) {
+      if (isPipelineRunning) return;
       currentJob = name;
       document.querySelectorAll(".job-tab").forEach(tab => {
         tab.classList.toggle("active", tab.getAttribute("data-job") === name);
@@ -951,8 +1153,9 @@ limitations under the License.
 
     async function refreshState() {
       try {
+        // Query with wake=0 so periodic polling never automatically wakes sleeping GCS actors!
         const [stateRes, jobsRes, policyRes] = await Promise.all([
-          fetch(`/api/state?job=${encodeURIComponent(currentJob)}&wake=1`),
+          fetch(`/api/state?job=${encodeURIComponent(currentJob)}&wake=0`),
           fetch(`/api/jobs`),
           fetch(`/api/build/egress-policy?job=${encodeURIComponent(currentJob)}`)
         ]);
@@ -984,7 +1187,7 @@ limitations under the License.
     }
 
     function renderJobState(state) {
-      document.getElementById("lblCurrentPodIP").textContent = state.current_pod_ip || "10.44.0.12";
+      document.getElementById("lblCurrentPodIP").textContent = state.current_pod_ip || (state.status === "SUSPENDED" ? "sleeping (GCS)" : "10.44.0.12");
       document.getElementById("lblPodHistory").textContent = state.pod_ip_history ? state.pod_ip_history.length : 1;
       const mb = (state.cache_size_bytes / (1024 * 1024)).toFixed(1);
       document.getElementById("lblCacheSize").textContent = `${mb} MB`;
@@ -1114,7 +1317,7 @@ limitations under the License.
       }
     }
 
-    async function triggerAction(action) {
+    async function fetchAction(action) {
       let endpoint = `/api/build/${action}`;
       let body = { job_name: currentJob };
 
@@ -1123,15 +1326,128 @@ limitations under the License.
         body = {};
       }
 
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+      return res;
+    }
+
+    async function runFullPipeline() {
+      if (isPipelineRunning) return;
+      isPipelineRunning = true;
+      disableActionButtons(true);
+
       try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body)
-        });
+        // Step 1 of 4: Phase 1 Dependency Fetch
+        showStepper(1, 4, "Applying Phase 1 EgressPolicy (Package Mirror Only) & Fetching Dependencies into Go Heap RAM...", 25, "active");
+        highlightExecutingCard("phaseCard1");
+        await fetchAction("fetch-deps");
         await refreshState();
+        await sleep(1600);
+
+        // Step 2 of 4: Phase 2 Hermetic Compile & Airgap Lock
+        showStepper(2, 4, "Hot-Swapping EgressPolicy to Total Airgap (0 Rules) & Compiling Hermetically in RAM...", 50, "airgap");
+        highlightExecutingCard("phaseCard2");
+        await fetchAction("compile-test");
+        await refreshState();
+        await sleep(1600);
+
+        // Step 3 of 4: Rogue Egress Probes
+        showStepper(3, 4, "Firing 3 Rogue Egress Probes Against Total Airgap (External Telemetry, Compile-Time Mirror, 169.254.169.254)...", 75, "airgap");
+        highlightExecutingCard("phaseCard2");
+        await fetchAction("test-rogue");
+        await refreshState();
+        await sleep(1800);
+
+        // Step 4 of 4: Phase 3 Artifact Publish & Clean Suspend
+        showStepper(4, 4, "Hot-Swapping EgressPolicy to Artifact Registry Only, Publishing Signed SLSA L3 Release & Suspending Actor to GCS...", 95, "active");
+        highlightExecutingCard("phaseCard3");
+        await fetchAction("publish");
+        await refreshState();
+        await sleep(1200);
+
+        // Suspend actor to GCS ($0/hr compute)
+        await fetchAction("suspend");
+        await refreshState();
+
+        // Final Completed State Banner
+        showStepper(4, 4, "Pipeline Completed: SLSA L3 Provenance Published • Actor Suspended to GCS ($0/hr Idle Compute)", 100, "completed");
+        highlightExecutingCard(null);
+
+        // Auto-hide stepper after 7 seconds
+        setTimeout(() => {
+          if (!isPipelineRunning) hideStepper();
+        }, 7000);
+      } catch (err) {
+        console.error("Pipeline runner error:", err);
+        showStepper(0, 0, "Pipeline Execution Failed: " + err.message, 100, "airgap");
+      } finally {
+        isPipelineRunning = false;
+        disableActionButtons(false);
+      }
+    }
+
+    async function executeSingleAction(actionName, cardId, stepLabel, type) {
+      if (isPipelineRunning) return;
+      isPipelineRunning = true;
+      disableActionButtons(true);
+
+      try {
+        if (stepLabel) {
+          showStepper(1, 1, stepLabel, 100, type || "active");
+        }
+        if (cardId) highlightExecutingCard(cardId);
+
+        await fetchAction(actionName);
+        await refreshState();
+        await sleep(400);
+
+        if (stepLabel) {
+          setTimeout(hideStepper, 2500);
+        }
       } catch (err) {
         console.error("Action error:", err);
+      } finally {
+        highlightExecutingCard(null);
+        isPipelineRunning = false;
+        disableActionButtons(false);
+      }
+    }
+
+    function triggerAction(action) {
+      switch (action) {
+        case "autorun":
+          runFullPipeline();
+          break;
+        case "fetch-deps":
+          executeSingleAction("fetch-deps", "phaseCard1", "Fetching Dependencies into Go Heap RAM via Package Mirror...", "active");
+          break;
+        case "compile-test":
+          executeSingleAction("compile-test", "phaseCard2", "Locking Airgap (0 Rules) & Compiling Hermetically in RAM...", "airgap");
+          break;
+        case "test-rogue":
+          executeSingleAction("test-rogue", "phaseCard2", "Firing 3 Rogue Egress Probes Against Total Airgap...", "airgap");
+          break;
+        case "publish":
+          executeSingleAction("publish", "phaseCard3", "Hot-Swapping Policy & Publishing Signed Release to Artifact Registry...", "active");
+          break;
+        case "suspend":
+          executeSingleAction("suspend", null, "Suspending Actor Heap RAM to GCS ($0/hr Idle Compute)...", "completed");
+          break;
+        case "reset":
+          executeSingleAction("reset", null, "Resetting Current Job State...", "active");
+          break;
+        case "reset-stage":
+          executeSingleAction("reset-stage", null, "Resetting All Stage Jobs...", "active");
+          break;
+        default:
+          executeSingleAction(action, null, `Executing ${action}...`, "active");
       }
     }
 
