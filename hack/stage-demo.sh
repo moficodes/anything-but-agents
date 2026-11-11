@@ -2044,6 +2044,8 @@ act8_canvas() {
   local cv_port="${CANVAS_PORT:-8089}"
   local cv_url="http://localhost:${cv_port}"
   local cluster_lb_ip=""
+  local presenter_token=""
+  presenter_token="$(kubectl get secret canvas-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' 2>/dev/null | base64 -d || true)"
   cluster_lb_ip="$(kubectl get svc canvas-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
 
   if [[ -n "${cluster_lb_ip}" ]] && curl -s -o /dev/null --connect-timeout 2 "http://${cluster_lb_ip}/readyz" 2>/dev/null; then
@@ -2052,18 +2054,18 @@ act8_canvas() {
   fi
 
   echo ""
-  echo "  Canvas Document Rooms UI : ${cv_url}/dashboard"
+  echo "  Canvas Document Rooms UI : ${cv_url}/dashboard?key=${presenter_token}"
   echo ""
 
   step "1. Unauthorized principal 'user:charlie' attempts to open sleeping 'doc-merger-acquisition' -> 403 Denied at Perimeter (Actor NOT Woken)"
-  run_cmd curl -s "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
+  run_cmd curl -s -H "X-Presenter-Key: ${presenter_token}" "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
 
   step "2. Owner 'user:alice' opens 'doc-merger-acquisition' (wakes actor from GCS) and grants 'viewer' tuple to 'user:charlie'"
-  run_cmd curl -fsS "${cv_url}/api/state?principal=user:alice&doc=doc-merger-acquisition"
-  run_cmd curl -fsS -X POST "${cv_url}/api/policy/grant" -H "Content-Type: application/json" -d '{"principal":"user:alice","target_user":"user:charlie","role":"viewer","doc_id":"doc-merger-acquisition"}'
+  run_cmd curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${cv_url}/api/state?principal=user:alice&doc=doc-merger-acquisition"
+  run_cmd curl -fsS -X POST "${cv_url}/api/policy/grant" -H "X-Presenter-Key: ${presenter_token}" -H "Content-Type: application/json" -d '{"principal":"user:alice","target_user":"user:charlie","role":"viewer","doc_id":"doc-merger-acquisition"}'
 
   step "3. 'user:charlie' can now view 'doc-merger-acquisition' (200 OK), while mutations remain blocked"
-  run_cmd curl -fsS "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
+  run_cmd curl -fsS -H "X-Presenter-Key: ${presenter_token}" "${cv_url}/api/state?principal=user:charlie&doc=doc-merger-acquisition"
 
   free_workers '^doc-'
 }

@@ -370,13 +370,14 @@ func TestViewerReadOnlyEnforcement(t *testing.T) {
 
 func TestGatewayHTTP(t *testing.T) {
 	backend := NewLocalSimulatorBackend("anything-but-agents", "canvas")
-	gw := NewGatewayServer(backend, "test-secret-presenter-token")
+	token := "test-secret-presenter-token"
+	gw := NewGatewayServer(backend, token)
 	srv := httptest.NewServer(gw.Mux())
 	defer srv.Close()
 
 	client := srv.Client()
 
-	// 1. GET /readyz and /healthz
+	// 1. GET /readyz and /healthz (always public)
 	for _, path := range []string{"/readyz", "/healthz"} {
 		res, err := client.Get(srv.URL + path)
 		if err != nil {
@@ -387,8 +388,36 @@ func TestGatewayHTTP(t *testing.T) {
 		}
 	}
 
-	// 2. GET / (Dashboard UI)
-	res, err := client.Get(srv.URL + "/")
+	// 1b. Unauthenticated GET /dashboard and GET /api/state must return 401
+	unauthRes, err := client.Get(srv.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("failed unauth GET /dashboard: %v", err)
+	}
+	if unauthRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on unauthenticated /dashboard, got %d", unauthRes.StatusCode)
+	}
+	unauthAPI, err := client.Get(srv.URL + "/api/state")
+	if err != nil {
+		t.Fatalf("failed unauth GET /api/state: %v", err)
+	}
+	if unauthAPI.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on unauthenticated /api/state, got %d", unauthAPI.StatusCode)
+	}
+
+	doAuthReq := func(method, urlStr string, body io.Reader) (*http.Response, error) {
+		req, err := http.NewRequest(method, urlStr, body)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-Presenter-Key", token)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return client.Do(req)
+	}
+
+	// 2. GET / (Dashboard UI with presenter auth)
+	res, err := doAuthReq(http.MethodGet, srv.URL+"/", nil)
 	if err != nil {
 		t.Fatalf("failed GET /: %v", err)
 	}
@@ -402,9 +431,12 @@ func TestGatewayHTTP(t *testing.T) {
 	if !strings.Contains(string(body), "Projector Light Mode") {
 		t.Fatalf("dashboard HTML missing Projector Light Mode toggle")
 	}
+	if !strings.Contains(string(body), "/api/auth/presenter.js") || !strings.Contains(string(body), "btnLogout") {
+		t.Fatalf("dashboard HTML missing presenter.js or btnLogout")
+	}
 
 	// 3. GET /api/state for Alice (Allowed)
-	resAlice, err := client.Get(srv.URL + "/api/state?principal=user:alice&doc=doc-merger-acquisition")
+	resAlice, err := doAuthReq(http.MethodGet, srv.URL+"/api/state?principal=user:alice&doc=doc-merger-acquisition", nil)
 	if err != nil {
 		t.Fatalf("failed GET /api/state: %v", err)
 	}
@@ -418,7 +450,7 @@ func TestGatewayHTTP(t *testing.T) {
 	}
 
 	// 4. GET /api/state for Charlie on doc-merger-acquisition (Denied before wakeup -> 403)
-	resCharlie, err := client.Get(srv.URL + "/api/state?principal=user:charlie&doc=doc-merger-acquisition")
+	resCharlie, err := doAuthReq(http.MethodGet, srv.URL+"/api/state?principal=user:charlie&doc=doc-merger-acquisition", nil)
 	if err != nil {
 		t.Fatalf("failed GET /api/state for Charlie: %v", err)
 	}
@@ -439,7 +471,7 @@ func TestGatewayHTTP(t *testing.T) {
 		"role":        RoleViewer,
 	}
 	grantBody, _ := json.Marshal(grantReq)
-	resGrant, err := client.Post(srv.URL+"/api/policy/grant", "application/json", bytes.NewReader(grantBody))
+	resGrant, err := doAuthReq(http.MethodPost, srv.URL+"/api/policy/grant", bytes.NewReader(grantBody))
 	if err != nil {
 		t.Fatalf("failed POST /api/policy/grant: %v", err)
 	}
@@ -448,7 +480,7 @@ func TestGatewayHTTP(t *testing.T) {
 	}
 
 	// 6. GET /api/policy/yaml
-	resYAML, err := client.Get(srv.URL + "/api/policy/yaml?doc=doc-merger-acquisition")
+	resYAML, err := doAuthReq(http.MethodGet, srv.URL+"/api/policy/yaml?doc=doc-merger-acquisition", nil)
 	if err != nil {
 		t.Fatalf("failed GET /api/policy/yaml: %v", err)
 	}
@@ -462,7 +494,7 @@ func TestGatewayHTTP(t *testing.T) {
 	}
 
 	// 7. POST /api/reset
-	resReset, err := client.Post(srv.URL+"/api/reset", "application/json", nil)
+	resReset, err := doAuthReq(http.MethodPost, srv.URL+"/api/reset", nil)
 	if err != nil {
 		t.Fatalf("failed POST /api/reset: %v", err)
 	}

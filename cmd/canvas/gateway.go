@@ -74,12 +74,19 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 
 	// Serve the interactive Web UI
 	serveWeb := func(w http.ResponseWriter, r *http.Request) {
+		if g.authGate.HandleUnlockOrGate(w, r, "/dashboard") {
+			return
+		}
 		content, err := webFS.ReadFile("web/index.html")
 		if err != nil {
 			http.Error(w, "web dashboard asset not found", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(content)
 	}
@@ -94,7 +101,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 	mux.HandleFunc("/dashboard", serveWeb)
 
 	// API: Get canvas state with OpenFGA perimeter check
-	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/state", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		principal := r.URL.Query().Get("principal")
 		if principal == "" {
 			principal = PrincipalAlice
@@ -117,10 +124,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, resp)
-	})
+	}))
 
 	// API: Mutate canvas
-	mux.HandleFunc("/api/mutate", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/mutate", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -174,10 +181,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, resp)
-	})
+	}))
 
 	// API: Grant OpenFGA relationship role
-	mux.HandleFunc("/api/policy/grant", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/policy/grant", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -206,10 +213,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, entry)
-	})
+	}))
 
 	// API: Revoke OpenFGA relationship role
-	mux.HandleFunc("/api/policy/revoke", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/policy/revoke", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -237,10 +244,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, entry)
-	})
+	}))
 
 	// API: Suspend document actor to GCS
-	mux.HandleFunc("/api/actor/suspend", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/actor/suspend", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -270,10 +277,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, entry)
-	})
+	}))
 
 	// API: Wake document actor
-	mux.HandleFunc("/api/actor/wake", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/actor/wake", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -299,10 +306,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		}
 
 		writeJSON(w, http.StatusOK, resp)
-	})
+	}))
 
 	// API: Reset demo
-	mux.HandleFunc("/api/reset", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/reset", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -317,10 +324,10 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 			"status":  "reset_complete",
 			"message": "Demo reset: default catalog loaded, OpenFGA AccessPolicy restored, metrics cleared",
 		})
-	})
+	}))
 
 	// API: Get live OpenFGA AccessPolicy YAML
-	mux.HandleFunc("/api/policy/yaml", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/policy/yaml", g.authGate.RequireAPI(func(w http.ResponseWriter, r *http.Request) {
 		docID := r.URL.Query().Get("doc")
 		if docID == "" {
 			docID = DocMergerAcquisition
@@ -335,7 +342,7 @@ func (g *GatewayServer) Mux() *http.ServeMux {
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, yamlStr)
-	})
+	}))
 
 	return mux
 }
