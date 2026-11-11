@@ -169,7 +169,43 @@ resolve_gke_version() {
 }
 
 allowed_ingress_spiffe_ids() {
-  echo "spiffe://cluster.local/ns/anything-but-agents/sa/default,spiffe://cluster.local/ns/anything-but-agents/sa/slides-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/dungeon2d-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/coldstart-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/tenantdb-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/honeypot-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/timewarp-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/buildbox-gateway"
+  echo "spiffe://cluster.local/ns/anything-but-agents/sa/default,spiffe://cluster.local/ns/anything-but-agents/sa/slides-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/dungeon2d-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/coldstart-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/tenantdb-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/honeypot-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/timewarp-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/buildbox-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/billing-gateway,spiffe://cluster.local/ns/anything-but-agents/sa/canvas-gateway"
+}
+
+ensure_router_ingress_spiffe_ids() {
+  if ! kubectl get deployment atenet-router -n ate-system >/dev/null 2>&1; then
+    return 0
+  fi
+  local desired current_args patch_json
+  desired="$(allowed_ingress_spiffe_ids)"
+  current_args="$(kubectl get deployment atenet-router -n ate-system -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null || true)"
+  if [[ "${current_args}" == *"buildbox-gateway"* && "${current_args}" == *"billing-gateway"* && "${current_args}" == *"canvas-gateway"* ]]; then
+    return 0
+  fi
+  echo "Updating deployment/atenet-router --ingress-allowed-spiffe-ids for all 9 gateways..."
+  patch_json="$(CURRENT_ARGS="${current_args}" DESIRED="${desired}" python3 - <<'PY'
+import json, os
+args = json.loads(os.environ["CURRENT_ARGS"])
+desired = os.environ["DESIRED"]
+new_args = []
+replaced = False
+for a in args:
+    if a.startswith("--ingress-allowed-spiffe-ids="):
+        existing = [x for x in a.split("=", 1)[1].split(",") if x]
+        for item in desired.split(","):
+            if item and item not in existing:
+                existing.append(item)
+        new_args.append("--ingress-allowed-spiffe-ids=" + ",".join(existing))
+        replaced = True
+    else:
+        new_args.append(a)
+if not replaced:
+    new_args.append("--ingress-allowed-spiffe-ids=" + desired)
+print(json.dumps([{"op": "replace", "path": "/spec/template/spec/containers/0/args", "value": new_args}]))
+PY
+)"
+  kubectl patch deployment atenet-router -n ate-system --type=json -p="${patch_json}" >/dev/null
+  kubectl rollout status deployment/atenet-router -n ate-system --timeout=120s
 }
 
 sync_substrate_root_version() {
@@ -371,7 +407,7 @@ EOF
     --from-env-file="${tmp_secret_env}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-  for gw_sec in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway; do
+  for gw_sec in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway billing-gateway canvas-gateway; do
     kubectl create secret generic "${gw_sec}" \
       -n anything-but-agents \
       --from-env-file="${tmp_gw_env}" \
@@ -429,6 +465,9 @@ required = [
     f"tenantdb.{demo_domain}",
     f"honeypot.{demo_domain}",
     f"timewarp.{demo_domain}",
+    f"buildbox.{demo_domain}",
+    f"billing.{demo_domain}",
+    f"canvas.{demo_domain}",
 ]
 missing = [d for d in required if d and d not in existing]
 if missing:
@@ -691,7 +730,7 @@ wait_for_template_golden_snapshot() {
   return 1
 }
 
-WORKER_POOLS=(wp-slides wp-dungeon wp-coldstart wp-tenantdb wp-honeypot wp-timewarp wp-buildbox)
+WORKER_POOLS=(wp-slides wp-dungeon wp-coldstart wp-tenantdb wp-honeypot wp-timewarp wp-buildbox wp-billing wp-canvas)
 
 template_actor_pattern() {
   case "${1:-}" in
@@ -702,6 +741,8 @@ template_actor_pattern() {
     honeypot)                 echo '^honeypot-' ;;
     timewarp)                 echo '^raft-' ;;
     buildbox)                 echo '^build-' ;;
+    billing)                  echo '^sub-' ;;
+    canvas)                   echo '^doc-' ;;
     *)                        echo '' ;;
   esac
 }
@@ -765,17 +806,18 @@ deploy_all() {
   echo "Using KO_DOCKER_REPO=${KO_DOCKER_REPO:-}"
 
   ensure_workerpools_ready
+  ensure_router_ingress_spiffe_ids
 
   ensure_presenter_auth
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
 
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 build-pr-104 build-release-v2 build-hotfix-88; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 build-pr-104 build-release-v2 build-hotfix-88 sub-acme sub-globex sub-initech doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
 
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp buildbox; do
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp buildbox billing canvas; do
     echo ""
     echo "--- Building & registering ActorTemplate: ${tmpl} ---"
     free_workers "$(template_actor_pattern "${tmpl}")"
@@ -803,8 +845,13 @@ deploy_all() {
     --from-literal=token="decoysupersecret-payroll-vault-2026" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
+  kubectl create secret generic billing-vault-api \
+    -n anything-but-agents \
+    --from-literal=token="sk_live_vault_v1_9988776655443322" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
   resolve_kubectl_ate_image
-  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway; do
+  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway billing-gateway canvas-gateway; do
     if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
       local gw_manifest="manifests/${gw}.yaml.tmpl"
       if [[ "${gw}" == "coldstart-gateway" ]]; then
@@ -820,7 +867,7 @@ deploy_all() {
       kubectl rollout restart "deployment/${gw}" -n anything-but-agents >/dev/null
     fi
   done
-  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway; do
+  for gw in slides-gateway dungeon2d-gateway coldstart-gateway tenantdb-gateway honeypot-gateway timewarp-gateway buildbox-gateway billing-gateway canvas-gateway; do
     if kubectl get deployment "${gw}" -n anything-but-agents >/dev/null 2>&1; then
       kubectl rollout status "deployment/${gw}" -n anything-but-agents --timeout=120s
     fi
@@ -1777,6 +1824,9 @@ deploy_gateway_tls() {
   echo "  3. TenantDB Storage X-Ray    : https://tenantdb.${DEMO_DOMAIN}/dashboard"
   echo "  4. Truman Show Honeypot      : https://honeypot.${DEMO_DOMAIN}/"
   echo "  5. Chronos Time-Warp Lab     : https://timewarp.${DEMO_DOMAIN}/dashboard"
+  echo "  6. Hermetic Build Pipeline   : https://buildbox.${DEMO_DOMAIN}/dashboard"
+  echo "  7. 30-Day Billing & Escrow   : https://billing.${DEMO_DOMAIN}/dashboard"
+  echo "  8. Multiplayer Canvas Rooms  : https://canvas.${DEMO_DOMAIN}/dashboard"
   echo "     Fallback Token Query      : ?key=\$(kubectl get secret presenter-auth -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
   echo ""
 }
@@ -1866,6 +1916,7 @@ deploy_buildbox_gateway() {
   free_workers '^build-'
 
   kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  ensure_router_ingress_spiffe_ids
   ensure_presenter_auth
   ensure_template_ready buildbox
   resolve_kubectl_ate_image
@@ -1917,6 +1968,106 @@ run_all_acts() {
   act6_buildbox
 }
 
+deploy_billing_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Billing Subscription & Egress Credential Vault Gateway & LoadBalancer"
+  reset_act_resources sub-acme sub-globex sub-initech
+  free_workers '^sub-'
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  ensure_router_ingress_spiffe_ids
+  ensure_presenter_auth
+
+  kubectl create secret generic billing-vault-api \
+    -n anything-but-agents \
+    --from-literal=token="sk_live_vault_v1_9988776655443322" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+  ensure_template_ready billing
+  resolve_kubectl_ate_image
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/billing-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/billing-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc billing-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Billing Vault Console (HTTPS) : https://billing.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret billing-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Billing Vault Console (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret billing-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+}
+
+cleanup_billing_gateway() {
+  banner "Cleaning up Billing Gateway Deployment & Actors"
+  for act in sub-acme sub-globex sub-initech; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+    kubectl ate delete egress-policy "${act}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount billing-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding billing-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding billing-gateway-ate-client --ignore-not-found
+  free_workers '^sub-'
+}
+
+deploy_canvas_gateway() {
+  detect_cluster_defaults
+  banner "Deploying In-Cluster Canvas Collaborative Document Rooms Gateway & LoadBalancer"
+
+  kubectl ate create atespace "${ATESPACE}" 2>/dev/null || true
+  reset_act_resources doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem
+  free_workers '^doc-'
+  ensure_router_ingress_spiffe_ids
+  ensure_presenter_auth
+
+  ensure_template_ready canvas
+  resolve_kubectl_ate_image
+
+  (
+    cd "${REPO_ROOT}"
+    envsubst < "manifests/canvas-gateway.yaml.tmpl" \
+      | ko resolve --platform=linux/amd64 -f - \
+      | kubectl apply -f -
+  )
+  kubectl rollout status deployment/canvas-gateway -n anything-but-agents --timeout=120s
+
+  local lb_ip=""
+  for _ in {1..30}; do
+    lb_ip="$(kubectl get svc canvas-gateway -n anything-but-agents -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${lb_ip}" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  echo ""
+  echo "  Canvas Document Rooms (HTTPS) : https://canvas.${DEMO_DOMAIN}/dashboard?key=\$(kubectl get secret canvas-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo "  Canvas Document Rooms (LB IP) : http://${lb_ip:-<pending>}/dashboard?key=\$(kubectl get secret canvas-gateway -n anything-but-agents -o jsonpath='{.data.PRESENTER_TOKEN}' | base64 -d)"
+  echo ""
+}
+
+cleanup_canvas_gateway() {
+  banner "Cleaning up Canvas Gateway Deployment & Actors"
+  for act in doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
+    kubectl ate delete actor "${act}" -a "${ATESPACE}" 2>/dev/null || true
+  done
+  kubectl delete deployment,service,secret,serviceaccount canvas-gateway -n anything-but-agents --ignore-not-found
+  kubectl delete role,rolebinding canvas-gateway-token-minter -n ate-system --ignore-not-found
+  kubectl delete clusterrole,clusterrolebinding canvas-gateway-ate-client --ignore-not-found
+  free_workers '^doc-'
+}
+
 cleanup_all() {
   banner "Cleaning up 'Anything But Agents' resources"
   cleanup_slides_gateway
@@ -1926,9 +2077,11 @@ cleanup_all() {
   cleanup_honeypot_gateway
   cleanup_timewarp_gateway
   cleanup_buildbox_gateway
+  cleanup_billing_gateway
+  cleanup_canvas_gateway
   cleanup_gateway_tls
   kubectl delete configmap,secret presenter-auth -n anything-but-agents --ignore-not-found
-  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 build-pr-104 build-release-v2 build-hotfix-88; do
+  for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 build-pr-104 build-release-v2 build-hotfix-88 sub-acme sub-globex sub-initech doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
   for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16; do
@@ -1936,8 +2089,8 @@ cleanup_all() {
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true
   kubectl ate delete tag tag-honeypot-forensic -a "${ATESPACE}" 2>/dev/null || true
-  kubectl delete secret payroll-vault-api -n anything-but-agents --ignore-not-found
-  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp buildbox; do
+  kubectl delete secret payroll-vault-api billing-vault-api -n anything-but-agents --ignore-not-found
+  for tmpl in slides dungeon dungeon2d coldstart tenantdb tenantdb-volumes honeypot timewarp buildbox billing canvas; do
     kubectl ate delete actor-template "${tmpl}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete atespace "${ATESPACE}" 2>/dev/null || true
@@ -1963,6 +2116,10 @@ case "${1:-}" in
   cleanup-timewarp)      cleanup_timewarp_gateway ;;
   deploy-buildbox)       deploy_buildbox_gateway ;;
   cleanup-buildbox)      cleanup_buildbox_gateway ;;
+  deploy-billing)        deploy_billing_gateway ;;
+  cleanup-billing)       cleanup_billing_gateway ;;
+  deploy-canvas)         deploy_canvas_gateway ;;
+  cleanup-canvas)        cleanup_canvas_gateway ;;
   deploy-gateway-tls)    deploy_gateway_tls ;;
   cleanup-gateway-tls)   cleanup_gateway_tls ;;
   run-all)               run_all_acts ;;
@@ -1976,7 +2133,7 @@ case "${1:-}" in
   act6-buildbox)         act6_buildbox ;;
   cleanup)               cleanup_all ;;
   *)
-    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-buildbox|cleanup-buildbox|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|act6-buildbox|cleanup}" >&2
+    echo "Usage: $0 {bootstrap-gke|upgrade-substrate|deploy|deploy-slides|cleanup-slides|deploy-dungeon2d|reset-dungeon2d|cleanup-dungeon2d|deploy-coldstart-hpa|cleanup-coldstart-hpa|deploy-tenantdb|cleanup-tenantdb|deploy-honeypot|cleanup-honeypot|deploy-timewarp|cleanup-timewarp|deploy-buildbox|cleanup-buildbox|deploy-billing|cleanup-billing|deploy-canvas|cleanup-canvas|deploy-gateway-tls|cleanup-gateway-tls|run-all|act0-slides|act1-dungeon|act1b-dungeon2d|act2-coldstart|act3-tenantdb|act4-honeypot|act5-timewarp|act6-buildbox|cleanup}" >&2
     exit 1
     ;;
 esac

@@ -17,6 +17,7 @@ Without AI/LLM frameworks, **Agent Substrate (`ate`)** is a **Kubernetes-native,
 5. **`cmd/timewarp` ("Don't Try This at Home")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **Wall-Clock Time-Jump Shock**, **Zombie Leader Raft Split-Brain**, and **Naive Rate-Limiter Burst Overflow** across a 3-node cluster (`raft-node-1..3`), paired with the **Chronos Split-Brain & Dual-Clock Lab** Web UI (`:8085` / `/dashboard`) and an optional **Wakeup Clock-Jump Guardrail** (`?guard=true`).
 6. **`cmd/buildbox` ("The 3-Stage Hermetic CI/CD Build Pipeline")**: Multi-mode binary (`--mode=actor|gateway|local`) showcasing **`ActorEgressPolicy` dynamic per-actor L7 HTTP & DNS airgapping** without container restarts across a 3-phase SLSA L3 build pipeline (`build-pr-104`, `build-release-v2`, `build-hotfix-88`). Phase 1 (`DEPENDENCY_FETCH`) allows only an internal package mirror (`GET /api/mirror/pkgs/*`), populating a warm in-memory compiler cache in Go heap RAM; Phase 2 (`HERMETIC_COMPILE_AND_TEST`) locks the actor into **Total Airgap (0 allowed rules)** where in-memory compilation runs with a 100% cache hit rate and a "Test Rogue Egress" trigger proves that external CI telemetry, compile-time mirror fetches, and link-local cloud metadata (`169.254.169.254`) are 100% refused (`NXDOMAIN` / blocked); Phase 3 (`ARTIFACT_PUBLISH`) updates the policy to allow only release publishing (`POST /api/registry/releases`) to the internal artifact registry before cleanly suspending to GCS ($0/hr idle compute).
 7. **`cmd/billing` ("Demo 7: The 30-Day Sleeping Billing & Escrow Engine")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **`ate-secret://` Egress Credential Injection**, **`actorJwt` identity minting**, and **zero-downtime secret rotation across frozen GCS memory snapshots** (`SNAPSHOT_FIDELITY_MEMORY`) for enterprise recurring subscriptions (`sub-acme`, `sub-globex`, `sub-initech`) sleeping in GCS between 30-day turns with zero database or disk I/O, paired with the **Payment Vault & Egress Credential X-Ray Console** (`:8088` / `/dashboard`, with icon-only Moon/Sun Projector Light Mode toggle).
+8. **`cmd/canvas` ("Demo 8: Figma-Style Multiplayer Collaborative Canvas & Document Rooms")**: Multi-mode binary (`--mode=actor|gateway|local`) demonstrating **`OpenFGA AccessPolicy` fine-grained per-actor relationship authorization enforced before actor wakeup** across isolated in-memory document rooms (`doc-merger-acquisition`, `doc-q4-roadmap`, `doc-incident-postmortem`), paired with the **Collaborative Architecture Canvas & OpenFGA Tuple Graph Console** (`:8089` / `/dashboard`, with icon-only Moon/Sun Projector Light Mode toggle).
 
 ## Repository Structure
 
@@ -31,6 +32,7 @@ cmd/
   timewarp/                     # Demo 5: 3-node Raft split-brain & Dual-Clock Time-Jump Lab (actor, gateway, local)
   buildbox/                     # Demo 6: 3-stage Hermetic CI/CD Pipeline & EgressPolicy airgapping (actor, gateway, local)
   billing/                      # Demo 7: 30-Day Sleeping Billing & Escrow Engine (actor, gateway, local)
+  canvas/                       # Demo 8: Figma-Style Multiplayer Collaborative Canvas & OpenFGA AccessPolicy (actor, gateway, local)
 internal/
   presenterauth/                # Zero-dep Google Workspace/event Sign-In + cross-subdomain SSO + PRESENTER_TOKEN gate
 manifests/
@@ -53,6 +55,8 @@ manifests/
   billing-template.yaml.tmpl    # ActorTemplate (FULL pause/commit, ate-secret:// egress injection)
   billing-egress-policy.yaml.tmpl # EgressPolicy (replaceHeaders Authorization + actorJwt)
   billing-gateway.yaml.tmpl     # K8s RBAC, Deployment & LoadBalancer Service for billing-gateway
+  canvas-template.yaml.tmpl     # ActorTemplate (Collaborative document room actor, SNAPSHOT_FIDELITY_MEMORY)
+  canvas-gateway.yaml.tmpl      # K8s RBAC, Deployment & LoadBalancer Service for canvas-gateway
   gateway-tls.yaml.tmpl         # GKE Gateway API + Certificate Manager TLS + HTTPRoutes + HealthCheckPolicies
 hack/
   stage-demo.sh                 # GKE bootstrapper, ko/ate deployer, and interactive 5-act runner

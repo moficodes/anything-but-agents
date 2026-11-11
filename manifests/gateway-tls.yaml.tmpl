@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Global External Application Load Balancer (GKE Gateway API) with Google Cloud
-# Certificate Manager TLS for all 5 interactive demos + Demo 0 slides:
+# Certificate Manager TLS for all 8 interactive demos + Demo 0 slides:
 #   - https://${SLIDES_DOMAIN}         -> svc/slides-gateway:80
 #   - https://slides.${DEMO_DOMAIN}    -> svc/slides-gateway:80
 #   - https://dungeon.${DEMO_DOMAIN}   -> svc/dungeon2d-gateway:80
@@ -21,6 +21,9 @@
 #   - https://tenantdb.${DEMO_DOMAIN}  -> svc/tenantdb-gateway:80
 #   - https://honeypot.${DEMO_DOMAIN}  -> svc/honeypot-gateway:80
 #   - https://timewarp.${DEMO_DOMAIN}  -> svc/timewarp-gateway:80
+#   - https://buildbox.${DEMO_DOMAIN}  -> svc/buildbox-gateway:80
+#   - https://billing.${DEMO_DOMAIN}   -> svc/billing-gateway:80
+#   - https://canvas.${DEMO_DOMAIN}    -> svc/canvas-gateway:80
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -160,6 +163,54 @@ spec:
     - name: timewarp-gateway
       port: 80
 ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: buildbox-https-route
+  namespace: anything-but-agents
+spec:
+  parentRefs:
+  - name: anything-but-agents-gateway
+    sectionName: https
+  hostnames:
+  - "buildbox.${DEMO_DOMAIN}"
+  rules:
+  - backendRefs:
+    - name: buildbox-gateway
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: billing-https-route
+  namespace: anything-but-agents
+spec:
+  parentRefs:
+  - name: anything-but-agents-gateway
+    sectionName: https
+  hostnames:
+  - "billing.${DEMO_DOMAIN}"
+  rules:
+  - backendRefs:
+    - name: billing-gateway
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canvas-https-route
+  namespace: anything-but-agents
+spec:
+  parentRefs:
+  - name: anything-but-agents-gateway
+    sectionName: https
+  hostnames:
+  - "canvas.${DEMO_DOMAIN}"
+  rules:
+  - backendRefs:
+    - name: canvas-gateway
+      port: 80
+---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
 metadata:
@@ -285,3 +336,66 @@ spec:
     group: ""
     kind: Service
     name: timewarp-gateway
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: buildbox-gateway-healthcheck
+  namespace: anything-but-agents
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_SERVING_PORT
+        requestPath: /readyz
+  targetRef:
+    group: ""
+    kind: Service
+    name: buildbox-gateway
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: billing-gateway-healthcheck
+  namespace: anything-but-agents
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_SERVING_PORT
+        requestPath: /readyz
+  targetRef:
+    group: ""
+    kind: Service
+    name: billing-gateway
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: canvas-gateway-healthcheck
+  namespace: anything-but-agents
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_SERVING_PORT
+        requestPath: /readyz
+  targetRef:
+    group: ""
+    kind: Service
+    name: canvas-gateway

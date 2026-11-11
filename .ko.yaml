@@ -25,6 +25,7 @@ baseImageOverrides:
   github.com/moficodes/anything-but-agents/cmd/billing: gcr.io/distroless/base-debian13:latest
   github.com/moficodes/anything-but-agents/cmd/slides: gcr.io/distroless/base-debian13:latest
   github.com/moficodes/anything-but-agents/cmd/buildbox: gcr.io/distroless/base-debian13:latest
+  github.com/moficodes/anything-but-agents/cmd/canvas: gcr.io/distroless/base-debian13:latest
 
 defaultPlatforms:
   - linux/amd64
