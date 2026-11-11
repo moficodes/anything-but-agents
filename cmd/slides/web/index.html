@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Running Anything But Agents on Agent Substrate | Agent Substrate Day</title>
+  <title>Running Anything But Agents on Agent Substrate | Agent Substrate</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&family=Ubuntu:ital,wght@0,400;0,500;0,700;1,700&display=swap" rel="stylesheet" />
@@ -780,7 +780,7 @@
     .asd-closing-grid {
       flex: 1;
       display: grid;
-      grid-template-columns: 58% 38%;
+      grid-template-columns: 62% 34%;
       gap: 4%;
       align-items: center;
       min-height: 0;
@@ -790,6 +790,12 @@
       display: flex;
       flex-direction: column;
       gap: calc(0.72 * var(--u));
+    }
+
+    .asd-agenda-list.asd-agenda-grid-2col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: calc(0.55 * var(--u));
     }
 
     .asd-agenda-row {
@@ -802,11 +808,20 @@
       padding: calc(0.62 * var(--u)) calc(1.1 * var(--u));
     }
 
+    .asd-agenda-list.asd-agenda-grid-2col .asd-agenda-row {
+      grid-template-columns: calc(2.6 * var(--u)) 1fr;
+      padding: calc(0.48 * var(--u)) calc(0.85 * var(--u));
+    }
+
     .asd-agenda-num {
       font-family: "Ubuntu", sans-serif;
       font-size: calc(1.72 * var(--u));
       font-weight: 700;
       color: var(--asd-green);
+    }
+
+    .asd-agenda-list.asd-agenda-grid-2col .asd-agenda-num {
+      font-size: calc(1.38 * var(--u));
     }
 
     .asd-agenda-topic {
@@ -815,11 +830,20 @@
       color: var(--asd-white);
     }
 
+    .asd-agenda-list.asd-agenda-grid-2col .asd-agenda-topic {
+      font-size: calc(1.22 * var(--u));
+      line-height: 1.22;
+    }
+
     .asd-agenda-detail {
       font-family: "Ubuntu Mono", monospace;
       font-size: calc(1.16 * var(--u));
       color: var(--asd-muted);
       margin-top: calc(0.14 * var(--u));
+    }
+
+    .asd-agenda-list.asd-agenda-grid-2col .asd-agenda-detail {
+      font-size: calc(0.95 * var(--u));
     }
 
     .asd-thankyou-card {
@@ -2867,6 +2891,138 @@
       color: var(--asd-muted);
     }
 
+    /* Slide 13: Buildbox 3-Stage Hermetic Pipeline & Airgap Stepper */
+    .s13-phases {
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.45 * var(--u));
+    }
+
+    .s13-phase-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(0.6 * var(--u));
+      padding: calc(0.52 * var(--u)) calc(0.72 * var(--u));
+      border-radius: calc(0.55 * var(--u));
+      background: var(--asd-canvas-bg);
+      border: 1px solid var(--asd-frame-border);
+      font-family: "Ubuntu Mono", monospace;
+      font-size: calc(0.78 * var(--u));
+      color: var(--asd-muted);
+      transition: border-color 0.25s ease, background 0.25s ease, color 0.25s ease;
+    }
+
+    .s13-phase-row.active-allow {
+      border-color: var(--asd-green);
+      background: var(--asd-green-soft);
+      color: var(--asd-white);
+    }
+
+    .s13-phase-row.active-airgap {
+      border-color: var(--asd-rose);
+      background: rgba(244, 63, 94, 0.14);
+      color: var(--asd-white);
+    }
+
+    .s13-probe-box {
+      background: var(--asd-code-bg);
+      border: 1px solid var(--asd-frame-border);
+      border-radius: calc(0.55 * var(--u));
+      padding: calc(0.55 * var(--u)) calc(0.72 * var(--u));
+      font-family: "Ubuntu Mono", monospace;
+      font-size: calc(0.76 * var(--u));
+      color: #C9F8CA;
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.24 * var(--u));
+    }
+
+    /* Slide 15: Billing ate-secret:// Egress MITM Proxy X-Ray */
+    .s15-xray-stack {
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.48 * var(--u));
+    }
+
+    .s15-xray-box {
+      background: var(--asd-canvas-bg);
+      border: 1px solid var(--asd-frame-border);
+      border-radius: calc(0.6 * var(--u));
+      padding: calc(0.55 * var(--u)) calc(0.75 * var(--u));
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.22 * var(--u));
+      font-family: "Ubuntu Mono", monospace;
+      font-size: calc(0.76 * var(--u));
+    }
+
+    .s15-xray-box.proxy {
+      border-color: var(--asd-green);
+      background: var(--asd-green-soft);
+    }
+
+    .s15-xray-top {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 700;
+      color: var(--asd-white);
+    }
+
+    /* Slide 17: Multiplayer ReactFlow Canvas & OpenFGA Perimeter Shield */
+    .s17-canvas-box {
+      background: var(--asd-canvas-bg);
+      border: 1px solid var(--asd-frame-border);
+      border-radius: calc(0.65 * var(--u));
+      padding: calc(0.62 * var(--u)) calc(0.75 * var(--u));
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.45 * var(--u));
+    }
+
+    .s17-nodes-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: calc(0.42 * var(--u));
+    }
+
+    .s17-node-card {
+      background: var(--asd-surface);
+      border: 1px solid var(--asd-card-border);
+      border-radius: calc(0.45 * var(--u));
+      padding: calc(0.4 * var(--u)) calc(0.48 * var(--u));
+      font-family: "Ubuntu Mono", monospace;
+      font-size: calc(0.72 * var(--u));
+      color: var(--asd-white);
+      display: flex;
+      flex-direction: column;
+      gap: calc(0.18 * var(--u));
+    }
+
+    .s17-tuple-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: calc(0.42 * var(--u)) calc(0.62 * var(--u));
+      border-radius: calc(0.45 * var(--u));
+      background: var(--asd-surface);
+      border: 1px solid var(--asd-frame-border);
+      font-family: "Ubuntu Mono", monospace;
+      font-size: calc(0.75 * var(--u));
+    }
+
+    .s17-tuple-row.denied {
+      border-color: var(--asd-rose);
+      background: rgba(244, 63, 94, 0.14);
+      color: #FDA4AF;
+    }
+
+    .s17-tuple-row.granted {
+      border-color: var(--asd-green);
+      background: var(--asd-green-soft);
+      color: var(--asd-green);
+    }
+
     /* =====================================================================
        RECAP KINETIC PROOFS (SLIDES 03, 05, 07, 09, 11)
        ===================================================================== */
@@ -3102,7 +3258,7 @@
       fill: none;
       stroke: var(--asd-green);
       pointer-events: none;
-      animation: pzShockwave 1.05s cubic-bezier(0.16, 1, 0.3, 1) 4.55s both;
+      animation: pzShockwave 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.98s both;
     }
 
     /* =====================================================================
@@ -3282,8 +3438,8 @@
   <header class="top-bar">
     <div class="brand-section">
       <img src="/assets/mascot.png" alt="Agent Substrate" class="brand-mascot" />
-      <div class="brand-title">Agent Substrate Day</div>
-      <div class="brand-tag">ATECon • Sky SLC</div>
+      <div class="brand-title">Agent Substrate</div>
+      <div class="brand-tag">Google Cloud Booth • Nov 11, 2026</div>
     </div>
 
     <div class="top-actions">
@@ -3428,7 +3584,7 @@
     </div>
 
     <div class="hud-nav-controls">
-      <span class="hud-slide-counter" id="slideCounter" title="Current slide (Press G for Grid, L for Shortcuts)">01 / 16</span>
+      <span class="hud-slide-counter" id="slideCounter" title="Current slide (Press G for Grid, L for Shortcuts)">01 / 22</span>
       <button class="hud-nav-btn" id="btnPrev" type="button" title="Previous Slide (Left Arrow)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
@@ -3457,7 +3613,7 @@
   <div class="grid-modal" id="gridModal">
     <div class="grid-container">
       <div class="grid-header">
-        <h2 class="grid-title">Agent Substrate Day • Slide Overview</h2>
+        <h2 class="grid-title">Agent Substrate • Slide Overview</h2>
         <button class="top-btn" id="btnCloseGrid" type="button">Close (Esc)</button>
       </div>
       <div class="grid-cards" id="gridCards"></div>
@@ -3497,11 +3653,8 @@
   <script>
     function buildStaticPuzzlePieces(stage) {
       const demoFace = (stage === "epiphany" || stage === "complete") ? "agent" : "rebel";
-      const fillExtras = stage === "complete";
+      const fillKeystone = stage === "complete";
       const emptyCenter = stage === "epiphany" ? "What drives the loop?" : "Missing centerpiece";
-      const emptyS1 = stage === "epiphany" ? "Outbound network guard?" : "Unclaimed slot";
-      const emptyS2 = stage === "epiphany" ? "Keep API keys out of RAM?" : "Unclaimed slot";
-      const emptyS3 = stage === "epiphany" ? "Tenant authz & VM options?" : "Unclaimed slot";
 
       return [
         {
@@ -3556,7 +3709,7 @@
           slot: 4,
           code: "AI",
           kind: "keystone",
-          filled: fillExtras,
+          filled: fillKeystone,
           face: "keystone",
           badge: "YOU BRING THIS",
           agent_title: "Model + agent loop",
@@ -3577,36 +3730,39 @@
         },
         {
           slot: 6,
-          code: "S1",
-          kind: "substrate",
-          filled: fillExtras,
-          face: "extra",
-          badge: "ALSO IN SUBSTRATE",
+          code: "06",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 06 • BUILDBOX",
+          rebel_title: "Airgap compiler mid-pipeline",
+          rebel_detail: "ActorEgressPolicy • 0-rule compile phase",
           agent_title: "ActorEgressPolicy firewall",
-          agent_detail: "Deny-by-default L7 & DNS egress rules",
-          empty_label: emptyS1
+          agent_detail: "Deny-by-default L7 & DNS egress rules"
         },
         {
           slot: 7,
-          code: "S2",
-          kind: "substrate",
-          filled: fillExtras,
-          face: "extra",
-          badge: "ALSO IN SUBSTRATE",
+          code: "07",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 07 • BILLING",
+          rebel_title: "30-day invoice, 0 keys in RAM",
+          rebel_detail: "ate-secret:// MITM • actorJwt • key rotate",
           agent_title: "ate-secret:// MITM auth",
-          agent_detail: "Inject API keys on egress, 0 keys in RAM",
-          empty_label: emptyS2
+          agent_detail: "Inject API keys on egress, 0 keys in RAM"
         },
         {
           slot: 8,
-          code: "S3",
-          kind: "substrate",
-          filled: fillExtras,
-          face: "extra",
-          badge: "ALSO IN SUBSTRATE",
-          agent_title: "OpenFGA, microVM & CSI",
-          agent_detail: "Per-tenant AccessPolicy, Kata & volumes",
-          empty_label: emptyS3
+          code: "08",
+          kind: "demo",
+          filled: true,
+          face: demoFace,
+          badge: "PIECE 08 • CANVAS",
+          rebel_title: "Multiplayer room perimeter gate",
+          rebel_detail: "OpenFGA AccessPolicy • 403 before wake",
+          agent_title: "OpenFGA per-actor authz",
+          agent_detail: "Verify user-to-actor tuples before wake"
         }
       ];
     }
@@ -3616,51 +3772,51 @@
       {
         id: "slide-01",
         index: 1,
-        total: 16,
+        total: 22,
         layout: "asd-title",
-        kicker: "AGENT SUBSTRATE DAY",
+        kicker: "AGENT SUBSTRATE",
         chapter: "Welcome",
-        badge: "AGENT SUBSTRATE DAY",
+        badge: "AGENT SUBSTRATE",
         title: "Running anything *but* agents on Agent Substrate",
         subtitle: "",
         kind: "title",
         highlight_phrases: ["*but*"],
         speaker_byline: "Mofi Rahman  •  Lead DevRel GKE, Google Cloud",
-        event_footer: "ATECon  •  Monday, November 9, 2026  •  Sky SLC",
+        event_footer: "Google Cloud Booth  •  Wednesday, November 11, 2026",
         points: [
           "Running anything *but* agents on Agent Substrate",
           "Mofi Rahman, Lead DevRel GKE, Google Cloud",
-          "ATECon • Monday, November 9, 2026 • Sky SLC"
+          "Google Cloud Booth • Wednesday, November 11, 2026"
         ],
         substrate_features: ["Agent Substrate", "Kubernetes-Native Actors", "gVisor Sandbox"],
-        speaker_notes: "Welcome slide while taking the stage. Introduce yourself and the talk title with Yolo on screen, then advance to Slide 2 to set up the five non-agent demos."
+        speaker_notes: "Welcome slide while taking the stage. Introduce yourself and the talk title with Yolo on screen, then advance to Slide 2 to set up the eight non-agent demos."
       },
       {
         id: "slide-02",
         index: 2,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
-        kicker: "AGENT SUBSTRATE DAY  •  REBEL TRACK",
+        kicker: "AGENT SUBSTRATE  •  REBEL TRACK",
         chapter: "Cold open",
         badge: "REBEL TRACK",
         title: "Every talk is about agents, so let's run *anything else*",
-        subtitle: "Every session today covers agents or how Substrate runs them. Let's run five non-AI workloads instead.",
+        subtitle: "Every session today covers agents or how Substrate runs them. Let's run eight non-AI workloads instead.",
         kind: "chapter",
         highlight_phrases: ["*anything else*", "3-pod WorkerPool"],
         points: [
-          "A 2D game, HPA cold-start race, customer DBs, SSH honeypot, and Raft cluster.",
-          "All five workloads share one 3-pod WorkerPool with 1 vCPU per pod.",
+          "A 2D game, HPA race, customer DBs, honeypot, Raft cluster, CI/CD runner, billing engine, and Figma canvas.",
+          "Each workload runs on a 3-pod WorkerPool with 1 vCPU per pod and sleeps in Cloud Storage when idle.",
           "After each demo, we keep the Substrate feature that made it work."
         ],
         demo_name: "Open Dungeon 2D dashboard",
         demo_url: "https://dungeon.substrate.learngke.dev/dashboard",
         substrate_features: ["WorkerPool (ate.dev/v1)", "Pod-Decoupled Identity", "gVisor Sandbox", "atenet Wake-on-HTTP"],
-        speaker_notes: "Open as the conference rebel: every other session today is about agents or how Agent Substrate runs agents, so let's build five workloads that have nothing to do with AI. Keep the surprise that this slide deck is also running on Substrate until the end! Press Q to pop the audience QR code."
+        speaker_notes: "Open as the conference rebel: every other session today is about agents or how Agent Substrate runs agents, so let's build eight workloads that have nothing to do with AI. Keep the surprise that this slide deck is also running on Substrate until the end! Press Q to pop the audience QR code."
       },
       {
         id: "slide-03",
         index: 3,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
         kicker: "LIVE DEMO 01  •  DUNGEON 2D",
         chapter: "Demo 01 • Setup",
@@ -3682,11 +3838,11 @@
       {
         id: "slide-04",
         index: 4,
-        total: 16,
+        total: 22,
         layout: "asd-cards",
-        kicker: "PUZZLE PIECE 01 / 05  •  MEMORY SNAPSHOTS",
+        kicker: "PUZZLE PIECE 01 / 08  •  MEMORY SNAPSHOTS",
         chapter: "Piece 01 • Memory",
-        badge: "PIECE 01 / 05",
+        badge: "PIECE 01 / 08",
         title: "Checkpoint RAM, undo mistakes, and branch state",
         subtitle: "Durable process memory lets lifecycle commands replace custom save and rollback code.",
         kind: "recap",
@@ -3721,7 +3877,7 @@
       {
         id: "slide-05",
         index: 5,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
         kicker: "LIVE DEMO 02  •  COLDSTART HPA RACE",
         chapter: "Demo 02 • Setup",
@@ -3743,11 +3899,11 @@
       {
         id: "slide-06",
         index: 6,
-        total: 16,
+        total: 22,
         layout: "asd-two-col",
-        kicker: "PUZZLE PIECE 02 / 05  •  GOLDEN SNAPSHOTS",
+        kicker: "PUZZLE PIECE 02 / 08  •  GOLDEN SNAPSHOTS",
         chapter: "Piece 02 • Warm Clone",
-        badge: "PIECE 02 / 05",
+        badge: "PIECE 02 / 08",
         title: "Build the index once, clone warm RAM in ~100ms",
         subtitle: "ActorTemplate snapshots post-warmup memory once so scale-out replicas skip cold init.",
         kind: "recap",
@@ -3783,7 +3939,7 @@
       {
         id: "slide-07",
         index: 7,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
         kicker: "LIVE DEMO 03  •  ONE DB PER CUSTOMER",
         chapter: "Demo 03 • Setup",
@@ -3805,11 +3961,11 @@
       {
         id: "slide-08",
         index: 8,
-        total: 16,
+        total: 22,
         layout: "asd-big-stat",
-        kicker: "PUZZLE PIECE 03 / 05  •  DURABLEDIR & TIERING",
+        kicker: "PUZZLE PIECE 03 / 08  •  DURABLEDIR & TIERING",
         chapter: "Piece 03 • Workspaces",
-        badge: "PIECE 03 / 05",
+        badge: "PIECE 03 / 08",
         title: "Snapshot bytes saved by dropping cache RAM on sleep",
         subtitle: "Private /data volumes keep hot caches in RAM during bursts and commit compact logs overnight.",
         kind: "recap",
@@ -3829,7 +3985,7 @@
       {
         id: "slide-09",
         index: 9,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
         kicker: "LIVE DEMO 04  •  GVISOR HONEYPOT",
         chapter: "Demo 04 • Setup",
@@ -3851,11 +4007,11 @@
       {
         id: "slide-10",
         index: 10,
-        total: 16,
+        total: 22,
         layout: "asd-code",
-        kicker: "PUZZLE PIECE 04 / 05  •  GVISOR & FORENSICS",
+        kicker: "PUZZLE PIECE 04 / 08  •  GVISOR & FORENSICS",
         chapter: "Piece 04 • Sandbox",
-        badge: "PIECE 04 / 05",
+        badge: "PIECE 04 / 08",
         title: "Isolate untrusted shells and rewind deleted files",
         subtitle: "Run real /bin/sh inside gVisor, recover wiped evidence, and clone a live sandbox.",
         kind: "recap",
@@ -3880,12 +4036,12 @@
         demo_name: "Revisit Honeypot console",
         demo_url: "https://honeypot.substrate.learngke.dev/",
         substrate_features: ["gVisor Application Kernel", "Rootfs Overlay Snapshots", "kubectl ate revert", "Forensic Tag Cloning (--tag)"],
-        speaker_notes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. (Q&A tip: SOC Director View also has Crash PID 1 -> STATE=CRASHED revert and Preset #5 Egress Block + ate-secret://.) Next, let's see what breaks when we freeze Raft."
+        speaker_notes: "Pocket Piece #4: gVisor sandboxing and rootfs rollback. Notice the rose attacker command inside the sandbox versus our green defender commands on the cluster. Next, let's see what breaks when we freeze Raft."
       },
       {
         id: "slide-11",
         index: 11,
-        total: 16,
+        total: 22,
         layout: "asd-demo",
         kicker: "LIVE DEMO 05  •  TESTING THE LIMITS",
         chapter: "Demo 05 • Setup",
@@ -3907,11 +4063,11 @@
       {
         id: "slide-12",
         index: 12,
-        total: 16,
+        total: 22,
         layout: "asd-two-col",
-        kicker: "PUZZLE PIECE 05 / 05  •  TURN-BASED EXECUTION",
+        kicker: "PUZZLE PIECE 05 / 08  •  TURN-BASED EXECUTION",
         chapter: "Piece 05 • Turn-Based",
-        badge: "PIECE 05 / 05",
+        badge: "PIECE 05 / 08",
         title: "Built for discrete turns, not continuous heartbeats",
         subtitle: "Freezing Raft shows the workload shape Substrate fits best, short turns with long idle waits.",
         kind: "recap",
@@ -3942,105 +4098,283 @@
         demo_name: "Revisit Timewarp lab",
         demo_url: "https://timewarp.substrate.learngke.dev/dashboard",
         substrate_features: ["atenet Wake-on-HTTP", "Request Parking", "Indefinite Idle Sleep"],
-        speaker_notes: "Pocket Piece #5: Substrate is not for continuous heartbeat daemons; it is built for turn-based workloads that do a unit of work and then wait indefinitely until the next request arrives. Now let's put all five pieces on the board."
+        speaker_notes: "Pocket Piece #5: Substrate is built for turn-based workloads that do a unit of work and then wait indefinitely until the next request arrives. Next: how do we lock down outbound network access mid-turn without losing warm RAM?"
       },
       {
         id: "slide-13",
         index: 13,
-        total: 16,
-        layout: "asd-puzzle",
-        kicker: "THE REBEL LOOT  •  FIVE NON-AI DEMOS",
-        chapter: "Finale 1 • Rebel Loot",
-        badge: "5 PIECES COLLECTED",
-        title: "Five Substrate features we used without a single agent",
-        subtitle: "Put all five features from our demos on the board, and ask what else needs all five at once.",
-        kind: "puzzle",
-        puzzle_stage: "loot",
-        puzzle_pieces: buildStaticPuzzlePieces("loot"),
-        highlight_phrases: ["Five Substrate features", "all five at once"],
+        total: 22,
+        layout: "asd-demo",
+        kicker: "LIVE DEMO 06  •  HERMETIC CI/CD BUILDBOX",
+        chapter: "Demo 06 • Setup",
+        badge: "LIVE DEMO 06",
+        title: "Airgapping a CI/CD compiler mid-pipeline without restarting",
+        subtitle: "One build actor fetches packages, locks into a zero-egress airgap to compile in RAM, and opens one port to publish.",
+        kind: "chapter",
+        highlight_phrases: ["ActorEgressPolicy", "0 egress rules", "34.8 MB"],
         points: [
-          "Dungeon 2D used SNAPSHOT_FIDELITY_MEMORY, revert, and tag branching.",
-          "Coldstart used ActorTemplate Golden Snapshots to clone warm RAM in ~100ms.",
-          "TenantDB used isolated DurableDir /data volumes and tiered suspend.",
-          "Honeypot used gVisor syscall isolation and rootfs rollback.",
-          "Timewarp showed that Substrate fits turn-based workloads that wait indefinitely between requests."
+          "Phase 1 allows only the internal package mirror and warms a 34.8 MB compiler cache in Go RAM.",
+          "Phase 2 hot-swaps ActorEgressPolicy to 0 egress rules so rogue scripts and metadata probes fail.",
+          "Phase 3 opens only POST /api/registry/releases to publish the signed binary before sleeping in GCS."
         ],
-        substrate_features: ["SNAPSHOT_FIDELITY_MEMORY", "Golden Snapshots", "DurableDir + gVisor + atenet"],
-        speaker_notes: "Pause before the punchline. Read off the five features we pulled from our non-agent demos, including our realization from Timewarp that this runtime is built for turn-based workloads with indefinite waits between turns. Ask the room: what workload needs all five of these together?"
+        demo_name: "Open Buildbox CI/CD console",
+        demo_url: "https://buildbox.substrate.learngke.dev/",
+        substrate_features: ["ActorEgressPolicy", "Dynamic L7 & DNS Airgap", "Warm RAM Build Cache"],
+        speaker_notes: "In traditional CI/CD, changing network permissions between dependency fetch and compilation means spinning up a separate container and serializing the build cache to disk. Here one actor hot-swaps its L7 egress firewall between phases while keeping its 34.8 MB compiler cache hot in RAM."
       },
       {
         id: "slide-14",
         index: 14,
-        total: 16,
+        total: 22,
+        layout: "asd-cards",
+        kicker: "PUZZLE PIECE 06 / 08  •  ACTOREGRESSPOLICY",
+        chapter: "Piece 06 • Airgap",
+        badge: "PIECE 06 / 08",
+        title: "Hot-swap L7 and DNS firewall rules on a running actor",
+        subtitle: "ActorEgressPolicy updates outbound network rules per phase without restarting the process or losing warm RAM.",
+        kind: "recap",
+        highlight_phrases: ["ActorEgressPolicy", "0 allowed rules", "169.254.169.254"],
+        points: [
+          "Phase 1 permits only GET /api/mirror/pkgs/* while hydrating the 34.8 MB Go AST cache in heap memory.",
+          "Phase 2 applies an ActorEgressPolicy with 0 allowed rules so telemetry and 169.254.169.254 are blocked.",
+          "Phase 3 grants only POST /api/registry/releases for artifact upload before suspending to Cloud Storage."
+        ],
+        cards: [
+          {
+            number: "01",
+            title: "Scoped dependency fetch",
+            body: "Allow only GET /api/mirror/pkgs/* during Phase 1 while hydrating the 34.8 MB compiler cache in Go heap RAM."
+          },
+          {
+            number: "02",
+            title: "Zero-rule compile airgap",
+            body: "Hot-swap ActorEgressPolicy to 0 allowed rules in Phase 2 so supply-chain telemetry and 169.254.169.254 are blocked."
+          },
+          {
+            number: "03",
+            title: "Scoped publish & sleep",
+            body: "Grant only POST /api/registry/releases for Phase 3 artifact upload, then suspend the runner to Cloud Storage."
+          }
+        ],
+        demo_name: "Revisit Buildbox pipeline",
+        demo_url: "https://buildbox.substrate.learngke.dev/",
+        substrate_features: ["ActorEgressPolicy", "Deny-by-Default Egress", "L7 HTTP & DNS Rules", "Zero-Restart Policy Swap"],
+        speaker_notes: "Pocket Piece #6: ActorEgressPolicy dynamic per-actor L7 HTTP and DNS firewalling. Next: what happens when a sleeping actor needs to call an authenticated external API like Stripe without storing API keys in its memory snapshot?"
+      },
+      {
+        id: "slide-15",
+        index: 15,
+        total: 22,
+        layout: "asd-demo",
+        kicker: "LIVE DEMO 07  •  30-DAY SLEEPING BILLING",
+        chapter: "Demo 07 • Setup",
+        badge: "LIVE DEMO 07",
+        title: "Sleeping 30 days between invoices with zero API keys in RAM",
+        subtitle: "Per-customer subscription actors wake once a month to charge the payment vault while the egress proxy injects secrets on the wire.",
+        kind: "chapter",
+        highlight_phrases: ["ate-secret://", "0 raw keys", "Rotate Key"],
+        points: [
+          "Each enterprise subscription sleeps in Cloud Storage for 30 days between monthly invoice turns.",
+          "Actor memory holds only ate-secret://billing-vault-api/token so GCS snapshots contain 0 raw keys.",
+          "Rotating the Kubernetes Secret updates the next invoice turn without restarting or redeploying actors."
+        ],
+        demo_name: "Open Billing & Vault X-Ray",
+        demo_url: "https://billing.substrate.learngke.dev/dashboard",
+        substrate_features: ["ate-secret:// Injection", "actorJwt Identity", "Zero-Key GCS Snapshots"],
+        speaker_notes: "If you freeze process memory to Cloud Storage for 30 days, any API key in an environment variable or heap struct gets written into the snapshot bucket. Watch how ate-secret:// keeps zero raw secrets in actor RAM while allowing instant key rotation."
+      },
+      {
+        id: "slide-16",
+        index: 16,
+        total: 22,
+        layout: "asd-two-col",
+        kicker: "PUZZLE PIECE 07 / 08  •  EGRESS SECRET INJECTION",
+        chapter: "Piece 07 • Zero-Key RAM",
+        badge: "PIECE 07 / 08",
+        title: "Inject credentials on the wire, never inside the snapshot",
+        subtitle: "ate-secret:// placeholders keep live API keys out of process memory and GCS dumps while enabling instant key rotation.",
+        kind: "recap",
+        highlight_phrases: ["ate-secret://", "actorJwt", "GCS memory snapshots"],
+        points: [
+          "Actor RAM holds only ate-secret://billing-vault-api/token placeholders so memory dumps stay secret-free.",
+          "The egress proxy substitutes the live secret and mints actorJwt only for authorized destination hosts.",
+          "Rotating the Kubernetes Secret takes effect on the next outbound request with zero actor restarts."
+        ],
+        columns: [
+          {
+            heading: "Env Vars & In-Process Secrets",
+            bullets: [
+              "Raw API keys sit in process memory and get frozen into GCS memory snapshots.",
+              "Rotating a credential requires restarting pods or invalidating saved actor state.",
+              "Compromised code can read os.Environ() and exfiltrate keys to any host."
+            ]
+          },
+          {
+            heading: "Substrate ate-secret:// Egress Proxy",
+            bullets: [
+              "Actor RAM holds only ate-secret://billing-vault-api/token placeholders.",
+              "Egress proxy substitutes the real secret and mints actorJwt only for allowed hosts.",
+              "Rotating the Kubernetes Secret takes effect on the next wake with zero restarts."
+            ]
+          }
+        ],
+        demo_name: "Revisit Billing Vault X-Ray",
+        demo_url: "https://billing.substrate.learngke.dev/dashboard",
+        substrate_features: ["ate-secret:// MITM Proxy", "Host-Bound Substitution", "actorJwt Minting", "Zero-Downtime Key Rotation"],
+        speaker_notes: "Pocket Piece #7: ate-secret:// egress credential injection and actorJwt identity minting. That protects outbound calls—now how do we protect inbound calls before an unauthorized user even wakes a sleeping actor?"
+      },
+      {
+        id: "slide-17",
+        index: 17,
+        total: 22,
+        layout: "asd-demo",
+        kicker: "LIVE DEMO 08  •  MULTIPLAYER CANVAS & OPENFGA",
+        chapter: "Demo 08 • Setup",
+        badge: "LIVE DEMO 08",
+        title: "A Figma canvas where unauthorized users can't even wake the actor",
+        subtitle: "Each collaborative architecture room is a sleeping actor guarded at the router perimeter by OpenFGA relationship tuples.",
+        kind: "chapter",
+        highlight_phrases: ["OpenFGA AccessPolicy", "before actor wakeup", "HTTP 403"],
+        points: [
+          "Every document room holds its live ReactFlow node graph and collaborator cursors in Go heap RAM.",
+          "OpenFGA AccessPolicy checks user-to-actor relationship tuples at atenet-router before actor wakeup.",
+          "Unauthorized requests get HTTP 403 at the perimeter while the room stays asleep in Cloud Storage."
+        ],
+        demo_name: "Open Multiplayer Canvas",
+        demo_url: "https://canvas.substrate.learngke.dev/dashboard",
+        substrate_features: ["OpenFGA AccessPolicy", "Pre-Wake Perimeter Authz", "Per-Actor Tuple Graph"],
+        speaker_notes: "In our final non-agent demo, every multiplayer architecture canvas is its own sleeping actor. When Mallory tries to open the M&A room without an OpenFGA relationship tuple, atenet-router rejects the call at the perimeter before the actor even wakes from Cloud Storage."
+      },
+      {
+        id: "slide-18",
+        index: 18,
+        total: 22,
+        layout: "asd-cards",
+        kicker: "PUZZLE PIECE 08 / 08  •  OPENFGA ACCESSPOLICY",
+        chapter: "Piece 08 • Perimeter Authz",
+        badge: "PIECE 08 / 08",
+        title: "Enforce fine-grained relationship authz before waking compute",
+        subtitle: "OpenFGA AccessPolicy evaluates per-actor tuples at the router perimeter so denied calls cost zero compute.",
+        kind: "recap",
+        highlight_phrases: ["OpenFGA AccessPolicy", "atenet-router", "0ms actor wake"],
+        points: [
+          "Each collaborative document room keeps its graph state in isolated Go heap RAM without shared tables.",
+          "atenet-router verifies OpenFGA user, relation, and actor tuples before resuming a snapshot from GCS.",
+          "Granting or revoking viewer and editor tuples takes effect immediately at the router perimeter."
+        ],
+        cards: [
+          {
+            number: "01",
+            title: "One actor per room",
+            body: "Each collaborative canvas keeps its node graph and presence in isolated Go heap RAM without shared database tables."
+          },
+          {
+            number: "02",
+            title: "Block at the perimeter",
+            body: "atenet-router checks OpenFGA user, relation, and actor tuples before resuming a sleeping snapshot from Cloud Storage."
+          },
+          {
+            number: "03",
+            title: "Instant tuple revocation",
+            body: "Granting or revoking editor and viewer tuples takes effect at the L7 proxy immediately with 0ms actor wake on deny."
+          }
+        ],
+        demo_name: "Revisit Multiplayer Canvas",
+        demo_url: "https://canvas.substrate.learngke.dev/dashboard",
+        substrate_features: ["OpenFGA AccessPolicy", "Pre-Wake Router Enforcement", "Relationship Tuples", "Zero-Compute 403 Deny"],
+        speaker_notes: "Pocket Piece #8: OpenFGA per-actor relationship authorization enforced at the router perimeter before wakeup. We now have all eight pieces from our eight non-agent demos—let's put them on the board!"
+      },
+      {
+        id: "slide-19",
+        index: 19,
+        total: 22,
+        layout: "asd-puzzle",
+        kicker: "THE REBEL LOOT  •  EIGHT NON-AI DEMOS",
+        chapter: "Finale 1 • Rebel Loot",
+        badge: "8 PIECES COLLECTED",
+        title: "Eight Substrate features we used without a single agent",
+        subtitle: "Put all eight features from our demos on the board, and ask what else needs all eight at once.",
+        kind: "puzzle",
+        puzzle_stage: "loot",
+        puzzle_pieces: buildStaticPuzzlePieces("loot"),
+        highlight_phrases: ["Eight Substrate features", "all eight at once"],
+        points: [
+          "Dungeon 2D, Coldstart, TenantDB, and Honeypot gave us RAM checkpoints, 100ms warm clones, DurableDir, and gVisor.",
+          "Timewarp, Buildbox, Billing, and Canvas gave us turn-based wakeups, ActorEgressPolicy, ate-secret://, and OpenFGA.",
+          "All 8 outer puzzle slots are filled from our non-AI demos—only the center slot is still empty."
+        ],
+        substrate_features: ["SNAPSHOT_FIDELITY_MEMORY", "Golden Snapshots + DurableDir", "gVisor + Egress + OpenFGA"],
+        speaker_notes: "Pause before the punchline. All 8 outer slots of the board are now filled with the exact features we used across our 8 non-agent demos. Ask the room: what single workload needs all eight of these primitives at the same time?"
+      },
+      {
+        id: "slide-20",
+        index: 20,
+        total: 22,
         layout: "asd-puzzle",
         kicker: "THE EPIPHANY  •  FLIP THE BOARD",
         chapter: "Finale 2 • Epiphany",
         badge: "WAIT A SECOND...",
         title: "Hold on... every piece we used is what an *agent* needs",
-        subtitle: "Flip those five non-AI features over. Each one solves a core problem in running production agents.",
+        subtitle: "Flip all eight non-AI demo pieces over. Each one solves a core problem in running production agents.",
         kind: "puzzle",
         puzzle_stage: "epiphany",
         puzzle_pieces: buildStaticPuzzlePieces("epiphany"),
         highlight_phrases: ["*agent*"],
         points: [
-          "Checkpointing and branching let an agent undo a failed tool call or test two plans in parallel.",
-          "Golden Snapshots boot Python, Node, browsers, and repo indexes in ~100ms on Turn 1.",
-          "DurableDir gives each session an isolated /workspace that costs nothing while idle.",
-          "gVisor contains untrusted bash commands and recovers files after a bad rm -rf.",
-          "Agents are turn-based workloads that can wait minutes or days for a human reply."
+          "Checkpointing, 100ms Golden Snapshots, DurableDir, and gVisor give agents working memory, warm toolchains, and safe code execution.",
+          "Turn-based wakeups, ActorEgressPolicy, ate-secret://, and OpenFGA give agents human-paced turns, L7 airgaps, secret-free RAM, and tenant authz."
         ],
-        substrate_features: ["Agent Working Memory", "100ms Warm Toolchains", "Turn-Based Sandboxes"],
-        speaker_notes: "Watch the five tiles flip over! Checkpointed working memory, 100ms warm toolchains, a private /workspace per session, untrusted bash inside gVisor, and a turn-based lifecycle that can wait indefinitely for a human reply. That is an AI agent! Now look at the four empty slots."
+        substrate_features: ["Agent Working Memory", "100ms Warm Toolchains", "Zero-Trust Sandboxes"],
+        speaker_notes: "Watch all eight tiles flip over in a 3D domino wave! Checkpointed working memory, 100ms warm toolchains, a private /workspace per session, untrusted bash inside gVisor, human-paced turn-based sleep, per-turn L7 egress firewalling, zero API keys in memory snapshots, and pre-wake OpenFGA tenant authorization. Now look at the one empty slot in the center."
       },
       {
-        id: "slide-15",
-        index: 15,
-        total: 16,
+        id: "slide-21",
+        index: 21,
+        total: 22,
         layout: "asd-puzzle",
         kicker: "COMPLETE PUZZLE  •  SUBSTRATE + YOUR MODEL",
         chapter: "Finale 3 • Complete",
         badge: "PUZZLE COMPLETE",
-        title: "Add Substrate's security layer and a *model* to get an agent",
+        title: "Drop a *model* and agent loop into the center to get an agent",
         subtitle: "Agent Substrate ships all 8 outer pieces out of the box. You bring the model and agent loop in the center.",
         kind: "puzzle",
         puzzle_stage: "complete",
         puzzle_pieces: buildStaticPuzzlePieces("complete"),
         highlight_phrases: ["*model*", "8 outer pieces"],
         points: [
-          "ActorEgressPolicy enforces deny-by-default L7 HTTP and DNS outbound rules.",
-          "ate-secret:// injects API keys at the egress proxy so credentials never enter actor RAM or snapshots.",
-          "OpenFGA AccessPolicy, Kata microVMs, and CSI volumes cover multi-tenant auth and storage.",
-          "Drop your model and tool loop into the center slot to complete the agent."
+          "Every outer piece we tested on games, databases, compilers, and canvases is built into Agent Substrate.",
+          "Drop Gemini, Claude, or open weights plus your tool loop into the center slot to complete the agent."
         ],
-        substrate_features: ["ActorEgressPolicy", "ate-secret:// MITM Secrets", "OpenFGA + microVM + Model"],
-        speaker_notes: "Let the three remaining Substrate pieces animate in one by one: ActorEgressPolicy outbound firewall, ate-secret:// proxy credential injection so API keys never land in GCS memory dumps, and OpenFGA authz plus microVM and CSI options. Pause on the empty center slot, then watch the Model + agent loop drop in! (Q&A tip: Honeypot Preset #5 demonstrates ActorEgressPolicy + ate-secret:// live.)"
+        substrate_features: ["8 Substrate Primitives", "Model + Agent Loop", "Complete Agent Runtime"],
+        speaker_notes: "Pause on the center slot for one beat—then watch the Model + agent loop keystone drop into the bullseye and send a shockwave across all eight Substrate pieces!"
       },
       {
-        id: "slide-16",
-        index: 16,
-        total: 16,
+        id: "slide-22",
+        index: 22,
+        total: 22,
         layout: "asd-closing",
-        kicker: "AGENT SUBSTRATE DAY  •  THANK YOU",
+        kicker: "AGENT SUBSTRATE  •  THANK YOU",
         chapter: "Closer • Sign-off",
-        badge: "ATECON 2026",
+        badge: "GOOGLE CLOUD BOOTH",
         title: "Come for the weird demos, stay for the *agents*",
-        subtitle: "All five demos, the Kubernetes manifests, and this 16-actor slide deck are open source.",
+        subtitle: "All eight demos, the Kubernetes manifests, and this 22-actor slide deck are open source.",
         kind: "closer",
-        event_footer: "ATECon  •  Monday, November 9, 2026  •  Sky SLC",
+        event_footer: "Google Cloud Booth  •  Wednesday, November 11, 2026",
         highlight_phrases: ["*agents*"],
         points: [
-          "Dungeon 2D: working memory that checkpoints, reverts, and branches into parallel timelines.",
-          "Coldstart: heavy 12-second runtimes cloned in ~100ms from Golden Snapshots.",
-          "TenantDB: isolated per-session /data volumes that burst and then sleep.",
-          "Honeypot: untrusted /bin/sh inside gVisor with rootfs rollback.",
-          "Timewarp + Egress: turn-based wakeups, indefinite idle waits, ActorEgressPolicy, and ate-secret://."
+          "Dungeon 2D & Coldstart: checkpointed RAM with undo/branching and 100ms Golden Snapshot clones.",
+          "TenantDB & Honeypot: isolated per-session DurableDir volumes and gVisor sandboxes with rootfs rollback.",
+          "Timewarp, Buildbox, Billing & Canvas: turn-based wakeups, ActorEgressPolicy, ate-secret://, and OpenFGA."
         ],
         agenda_items: [
           { number: "01", topic: "Working memory with undo & branching", detail: "Dungeon 2D  •  SNAPSHOT_FIDELITY_MEMORY, revert, --tag" },
           { number: "02", topic: "Heavy runtimes cloned in ~100ms", detail: "Coldstart  •  ActorTemplate Golden Snapshots" },
           { number: "03", topic: "Isolated /data volumes per session", detail: "TenantDB  •  DurableDir & tiered suspend" },
           { number: "04", topic: "Untrusted /bin/sh inside gVisor", detail: "Honeypot  •  Syscall isolation & rootfs revert" },
-          { number: "05", topic: "Turn-based wake + egress security + model", detail: "Timewarp + Egress  •  atenet, ActorEgressPolicy & ate-secret://" }
+          { number: "05", topic: "Turn-based wake & indefinite waits", detail: "Timewarp  •  atenet request parking & sleep" },
+          { number: "06", topic: "Per-phase L7 & DNS egress airgap", detail: "Buildbox  •  Dynamic ActorEgressPolicy firewall" },
+          { number: "07", topic: "Zero API keys in RAM snapshots", detail: "Billing  •  ate-secret:// MITM & actorJwt" },
+          { number: "08", topic: "Relationship authz before wakeup", detail: "Canvas  •  OpenFGA AccessPolicy at router" }
         ],
         sign_off_lines: [
           "Mofi Rahman  •  Lead DevRel GKE, Google Cloud",
@@ -4049,8 +4383,8 @@
         ],
         demo_name: "View repo on GitHub",
         demo_url: "https://github.com/moficodes/anything-but-agents",
-        substrate_features: ["Memory Checkpointing", "Golden Snapshots", "DurableDir Volumes", "gVisor + Egress MITM", "Turn-Based Wake"],
-        speaker_notes: "Press H to reveal the top bar and live Substrate telemetry footer if hidden! Even this 16-slide presentation deck has been running as 16 sleeping gVisor actors on that same 3-pod WorkerPool. Thank the audience and share the GitHub repo."
+        substrate_features: ["Memory Checkpointing", "Golden Snapshots", "DurableDir & gVisor", "Egress MITM & OpenFGA", "Turn-Based Wake"],
+        speaker_notes: "Press H to reveal the top bar and live Substrate telemetry footer if hidden! Even this 22-slide presentation deck has been running as 22 sleeping gVisor actors on that same 3-pod WorkerPool. Thank the audience and share the GitHub repo."
       }
     ];
 
@@ -4244,15 +4578,15 @@
       const left = el("div", "asd-footer-left");
 
       if (isCoverOrClosing) {
-        left.appendChild(el("span", "asd-footer-cover-text", def.event_footer || "ATECon  •  Monday, November 9, 2026  •  Sky SLC"));
+        left.appendChild(el("span", "asd-footer-cover-text", def.event_footer || "Google Cloud Booth  •  Wednesday, November 11, 2026"));
       } else {
         const img = document.createElement("img");
         img.src = "/assets/mascot.png";
-        img.alt = "ATECon";
+        img.alt = "Agent Substrate";
         img.className = "asd-footer-mascot";
         left.appendChild(img);
-        left.appendChild(el("span", "asd-footer-brand", "ATECon"));
-        left.appendChild(el("span", "asd-footer-meta", "NOV 9, 2026  •  SKY SLC"));
+        left.appendChild(el("span", "asd-footer-brand", "Google Cloud Booth"));
+        left.appendChild(el("span", "asd-footer-meta", "NOV 11, 2026"));
       }
 
       const right = el("div", "asd-footer-right");
@@ -4610,9 +4944,9 @@
       const TOTAL_ACTORS = 120;
       const dotNodes = [];
       const actorNames = [
-        "d2d-paladin", "coldstart-1", "db-acme", "honeypot-1", "raft-node-1", "d2d-cleric",
-        "d2d-wizard", "coldstart-2", "db-globex", "honeypot-2", "raft-node-2", "d2d-rogue",
-        "d2d-ranger", "coldstart-3", "db-initech", "db-umbrella", "raft-node-3", "honeypot-3"
+        "d2d-paladin", "coldstart-1", "db-acme", "honeypot-1", "raft-node-1", "build-pr-104",
+        "sub-acme", "doc-q4-roadmap", "d2d-wizard", "coldstart-2", "db-globex", "honeypot-2",
+        "raft-node-2", "build-release-v2", "sub-globex", "doc-merger-acquisition", "coldstart-3", "db-initech"
       ];
       for (let i = 0; i < TOTAL_ACTORS; i++) {
         const d = el("span", i % 3 === 0 ? "as-viz__dot as-viz__dot--snapshot" : "as-viz__dot");
@@ -5244,6 +5578,177 @@
       return card;
     }
 
+    // Slide 13: 3-Phase SLSA L3 Hermetic Buildbox & EgressPolicy Airgap
+    function buildBuildboxScene() {
+      const card = el("div", "asd-scene-card asd-enter-2");
+      const head = el("div", "asd-scene-head");
+      head.appendChild(el("span", "asd-scene-label", "SLSA L3 EgressPolicy State Machine"));
+      const statusPill = el("span", "asd-scene-status warn", "PHASE 2: TOTAL AIRGAP");
+      head.appendChild(statusPill);
+
+      const stage = el("div", "asd-scene-stage");
+      const phasesWrap = el("div", "s13-phases");
+
+      const phaseDefs = [
+        { title: "Phase 1 · DEPENDENCY_FETCH", badge: "MIRROR ONLY", rule: "allow: GET /api/mirror/pkgs/* -> RAM cache" },
+        { title: "Phase 2 · HERMETIC_COMPILE", badge: "0 EGRESS RULES", rule: "deny: * (169.254.169.254 & telemetry NXDOMAIN)" },
+        { title: "Phase 3 · ARTIFACT_PUBLISH", badge: "REGISTRY ONLY", rule: "allow: POST /api/registry/releases -> suspend" }
+      ];
+
+      const rows = phaseDefs.map((p) => {
+        const row = el("div", "s13-phase-row");
+        const top = el("div", "s13-phase-top");
+        top.appendChild(el("span", "", p.title));
+        const b = el("span", "s13-phase-badge", p.badge);
+        top.appendChild(b);
+        const r = el("div", "s13-phase-rule", p.rule);
+        row.append(top, r);
+        phasesWrap.appendChild(row);
+        return { row, badge: b };
+      });
+      stage.appendChild(phasesWrap);
+
+      const foot = el("div", "asd-scene-foot");
+      foot.appendChild(el("span", "", "ActorEgressPolicy (L7 + DNS)"));
+      foot.appendChild(el("span", "", "0 container restarts"));
+
+      card.append(head, stage, foot);
+
+      function paintBuildPhase(activeIdx) {
+        rows.forEach((item, idx) => {
+          item.row.className = "s13-phase-row";
+          if (idx === activeIdx) {
+            item.row.classList.add(idx === 1 ? "airgap" : "active");
+          }
+        });
+        if (activeIdx === 0) {
+          statusPill.textContent = "PHASE 1: WARMING RAM CACHE";
+          statusPill.classList.remove("warn");
+        } else if (activeIdx === 1) {
+          statusPill.textContent = "PHASE 2: TOTAL AIRGAP (0 RULES)";
+          statusPill.classList.add("warn");
+        } else {
+          statusPill.textContent = "PHASE 3: SIGNED & SUSPENDED";
+          statusPill.classList.remove("warn");
+        }
+      }
+
+      paintBuildPhase(1);
+      if (!REDUCED_MOTION) {
+        let cur = 1;
+        setManagedInterval(() => {
+          cur = (cur + 1) % 3;
+          paintBuildPhase(cur);
+        }, 1650);
+      }
+
+      return card;
+    }
+
+    // Slide 15: 30-Day Sleeping Billing & Egress Credential Proxy X-Ray
+    function buildBillingScene() {
+      const card = el("div", "asd-scene-card asd-enter-2");
+      const head = el("div", "asd-scene-head");
+      head.appendChild(el("span", "asd-scene-label", "Egress Proxy Secret & JWT Injection"));
+      const statusPill = el("span", "asd-scene-status", "0 SECRETS IN RAM");
+      head.appendChild(statusPill);
+
+      const stage = el("div", "asd-scene-stage");
+      const stack = el("div", "s15-xray-stack");
+
+      const boxActor = el("div", "s15-xray-box");
+      const actorTitle = el("div", "s15-xray-title");
+      actorTitle.append(el("span", "", "1. Actor Heap (sub-acme)"), el("span", "", "Cycle #4"));
+      const actorCode = el("div", "s15-xray-code", "Authorization: Bearer ate-secret://stripe-key");
+      boxActor.append(actorTitle, actorCode);
+
+      const boxProxy = el("div", "s15-xray-box proxy");
+      const proxyTitle = el("div", "s15-xray-title");
+      proxyTitle.append(el("span", "", "2. atenet Egress Proxy"), el("span", "", "K8s Secret"));
+      const proxyCode = el("div", "s15-xray-code", "Injects sk_live_v1 + X-Actor-JWT (spiffe://...)");
+      boxProxy.append(proxyTitle, proxyCode);
+
+      const boxVault = el("div", "s15-xray-box");
+      const vaultTitle = el("div", "s15-xray-title");
+      vaultTitle.append(el("span", "", "3. Payment Vault + GCS"), el("span", "", "$0/hr sleep"));
+      const vaultCode = el("div", "s15-xray-code", "200 OK Charged $4,900 -> sleeps 30 days in GCS");
+      boxVault.append(vaultTitle, vaultCode);
+
+      stack.append(boxActor, boxProxy, boxVault);
+      stage.appendChild(stack);
+
+      const foot = el("div", "asd-scene-foot");
+      foot.appendChild(el("span", "", "ate-secret:// + actorJwt"));
+      foot.appendChild(el("span", "", "Zero-downtime key rotation"));
+
+      card.append(head, stage, foot);
+
+      if (!REDUCED_MOTION) {
+        let keyVer = 1;
+        setManagedInterval(() => {
+          keyVer = (keyVer % 3) + 1;
+          proxyCode.textContent = `Injects sk_live_v${keyVer} + X-Actor-JWT (spiffe://...)`;
+          statusPill.textContent = keyVer > 1 ? `ROTATED -> KEY V${keyVer} (FROZEN)` : "0 SECRETS IN RAM";
+        }, 1800);
+      }
+
+      return card;
+    }
+
+    // Slide 17: Figma-Style Multiplayer Canvas & OpenFGA Pre-Wake Gate
+    function buildCanvasScene() {
+      const card = el("div", "asd-scene-card asd-enter-2");
+      const head = el("div", "asd-scene-head");
+      head.appendChild(el("span", "asd-scene-label", "OpenFGA Pre-Wake Gate + Room Heap"));
+      const statusPill = el("span", "asd-scene-status", "ALICE: EDITOR (200 OK)");
+      head.appendChild(statusPill);
+
+      const stage = el("div", "asd-scene-stage");
+      const wrap = el("div", "s17-canvas-box");
+
+      const graph = el("div", "s17-node-graph");
+      const n1 = el("div", "s17-rf-node", "API Gateway");
+      const edge1 = el("span", "s17-rf-edge", "->");
+      const n2 = el("div", "s17-rf-node selected", "atenet + OpenFGA");
+      const edge2 = el("span", "s17-rf-edge", "->");
+      const n3 = el("div", "s17-rf-node", "doc-q4-roadmap");
+      graph.append(n1, edge1, n2, edge2, n3);
+
+      const tuples = el("div", "s17-tuple-strip");
+      const tAlice = el("div", "s17-tuple-row allowed");
+      tAlice.append(el("span", "", "user:alice · editor"), el("span", "", "ALLOW -> WAKE ACTOR"));
+      const tMallory = el("div", "s17-tuple-row denied");
+      tMallory.append(el("span", "", "user:mallory · revoked"), el("span", "", "403 AT ROUTER (ASLEEP)"));
+      tuples.append(tAlice, tMallory);
+
+      wrap.append(graph, tuples);
+      stage.appendChild(wrap);
+
+      const foot = el("div", "asd-scene-foot");
+      foot.appendChild(el("span", "", "OpenFGA AccessPolicy"));
+      foot.appendChild(el("span", "", "Denied requests never wake actor"));
+
+      card.append(head, stage, foot);
+
+      if (!REDUCED_MOTION) {
+        let malloryProbe = false;
+        setManagedInterval(() => {
+          malloryProbe = !malloryProbe;
+          if (malloryProbe) {
+            statusPill.textContent = "MALLORY: 403 BEFORE WAKE";
+            statusPill.classList.add("warn");
+            n3.textContent = "doc-q4 (ASLEEP IN GCS)";
+          } else {
+            statusPill.textContent = "ALICE: EDITOR (200 OK)";
+            statusPill.classList.remove("warn");
+            n3.textContent = "doc-q4 (HOT IN RAM)";
+          }
+        }, 1750);
+      }
+
+      return card;
+    }
+
     function buildHeroRightVisual(def) {
       switch (def.id) {
         case "slide-01": {
@@ -5265,6 +5770,12 @@
           return buildHoneypotScene();
         case "slide-11":
           return buildTimewarpScene();
+        case "slide-13":
+          return buildBuildboxScene();
+        case "slide-15":
+          return buildBillingScene();
+        case "slide-17":
+          return buildCanvasScene();
         default: {
           const mascot = document.createElement("img");
           mascot.src = "/assets/mascot.png";
@@ -5386,6 +5897,16 @@
           : [
               { label: "atenet Wake-on-HTTP", val: "~100 ms", pct: "10%", cls: "good" },
               { label: "Idle Wait Between Turns", val: "Indefinite (0 / 3 Pods)", pct: "100%", cls: "good" }
+            ];
+      } else if (def.id === "slide-16") {
+        specs = colIdx === 0
+          ? [
+              { label: "Raw Keys Stored in Heap / GCS", val: "0 bytes (ate-secret://)", pct: "4%", cls: "good" },
+              { label: "Actors Woken on Key Rotation", val: "0 / 3 (rotated while frozen)", pct: "4%", cls: "good" }
+            ]
+          : [
+              { label: "Egress Token Verification", val: "100% (Secret + actorJwt)", pct: "100%", cls: "good" },
+              { label: "30-Day Idle Compute Cost", val: "$0 / hr in GCS", pct: "100%", cls: "good" }
             ];
       } else {
         return null;
@@ -5678,9 +6199,9 @@
 
       const flipAllBtn = el("button", "asd-pz-flip-btn");
       flipAllBtn.type = "button";
-      flipAllBtn.title = "Flip the 5 demo jigsaw pieces between non-AI Rebel and Agent Superpower faces";
+      flipAllBtn.title = "Flip the 8 demo jigsaw pieces between non-AI Rebel and Agent Superpower faces";
       flipAllBtn.appendChild(buildPuzzleIcon("flip"));
-      const flipBtnLabel = el("span", "", stage === "loot" ? "Preview agent flip" : "Flip 5 demo pieces");
+      const flipBtnLabel = el("span", "", stage === "loot" ? "Preview agent flip" : "Flip 8 demo pieces");
       flipAllBtn.appendChild(flipBtnLabel);
       legend.appendChild(flipAllBtn);
 
@@ -5827,7 +6348,7 @@
               });
               emptyLayer.appendChild(emptyBackdrop);
             }
-            const keystoneDelay = "4.42s";
+            const keystoneDelay = "0.85s";
             pathCls += " asd-pz-keystone-snap";
             pathNode.style.animationDelay = keystoneDelay;
             cell.classList.add("asd-pz-keystone-snap");
@@ -6147,8 +6668,9 @@
         header.appendChild(h1);
 
         const grid = el("div", "asd-closing-grid");
-        const agendaList = el("div", "asd-agenda-list asd-enter-2");
-        (def.agenda_items || []).forEach(item => {
+        const agendaItems = def.agenda_items || [];
+        const agendaList = el("div", "asd-agenda-list asd-enter-2" + (agendaItems.length > 5 ? " asd-agenda-grid-2col" : ""));
+        agendaItems.forEach(item => {
           const row = el("div", "asd-agenda-row");
           row.appendChild(el("div", "asd-agenda-num", item.number));
           const info = el("div", "");
@@ -6499,7 +7021,7 @@
       const items = [
         { icon: "next", label: "Next slide", desc: "Wake next slide actor & async-suspend previous", keys: ["→", "Space"], action: () => nextSlide() },
         { icon: "prev", label: "Previous slide", desc: "Return to the previous slide actor", keys: ["←", "PgUp"], action: () => prevSlide() },
-        { icon: "grid", label: "Slide overview grid", desc: "Browse and jump to any of the 16 slides", keys: ["G"], action: () => toggleGrid() },
+        { icon: "grid", label: "Slide overview grid", desc: "Browse and jump to any of the 22 slides", keys: ["G"], action: () => toggleGrid() },
         { icon: "notes", label: "Speaker notes", desc: "Toggle bottom presenter notes drawer", keys: ["N"], action: () => toggleNotes() },
         { icon: "heap", label: "Live actor heap RAM", desc: "Inspect pod hops, save RAM notes & revert memory", keys: ["M"], action: () => toggleHeap() },
         { icon: "qr", label: "Audience QR code", desc: "Show scannable Dungeon 2D game QR code", keys: ["Q"], action: () => toggleQR() },

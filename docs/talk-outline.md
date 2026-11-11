@@ -10,12 +10,12 @@
 
 ## Stage Philosophy (20 Minutes Total)
 
-1. **Welcome (`slide-01`) + Conference Rebel Hook (`slide-02`):** Greet the room on a clean `ATECon` cover slide with the **Yolo** mascot, talk title, and speaker byline (`slide-01`), then advance to `slide-02` to note that every other talk today is about agents or how Agent Substrate works for agents, so we are running **five non-AI workloads** on a single **3-pod WorkerPool** (`manifests/workerpool.yaml.tmpl`) and keeping the surprise that this slide deck itself runs on Substrate until the end.
-2. **Collect One Puzzle Piece Per Demo:** Keep a tight, repeatable 3-beat rhythm for all 5 demos:
-   - **Setup Slide (`slide-03, 05, 07, 09, 11`, ~15s):** Why a lazy/rebellious systems engineer built this non-agent app.
-   - **Live Show-Don't-Tell (~2m):** Click through the live UI so the room sees the behavior firsthand.
-   - **Puzzle Piece Recap Slide (`slide-04, 06, 08, 10, 12`, ~35s):** Name the exact Agent Substrate feature we just pocketed (`PUZZLE PIECE 01 / 05` .. `05 / 05`).
-3. **The 3-Stage Jigsaw Epiphany (`slide-13` .. `slide-16`):** Put all 5 non-agent features on a `3×3` interlocking jigsaw board (`slide-13`), flip those 5 pieces over to reveal that each one solves a core agent runtime requirement (`slide-14`), animate in the **3 built-in Agent Substrate security/platform pieces** (`ActorEgressPolicy`, `ate-secret://`, `OpenFGA` + `microVM`/CSI) one by one before pausing and dropping the **center keystone (`Model + agent loop`)** into place (`slide-15`), and close with the reveal that even the 16-slide presentation deck ran on those same 3 pods (`slide-16`).
+1. **Welcome (`slide-01`) + Conference Rebel Hook (`slide-02`):** Greet the room on a clean `ATECon` cover slide with the **Yolo** mascot, talk title, and speaker byline (`slide-01`), then advance to `slide-02` to note that every other talk today is about agents or how Agent Substrate works for agents, so we are running **eight non-AI workloads** on 3-pod `WorkerPool`s (`manifests/workerpool.yaml.tmpl`) and keeping the surprise that this 22-slide deck itself runs on Substrate until the end.
+2. **Collect One Puzzle Piece Per Demo:** Keep a tight, repeatable 3-beat rhythm for all 8 demos:
+   - **Setup Slide (`slide-03, 05, 07, 09, 11, 13, 15, 17`, ~15s):** Why a lazy/rebellious systems engineer built this non-agent app.
+   - **Live Show-Don't-Tell (~1.5–2m):** Click through the live UI so the room sees the behavior firsthand.
+   - **Puzzle Piece Recap Slide (`slide-04, 06, 08, 10, 12, 14, 16, 18`, ~30s):** Name the exact Agent Substrate feature we just pocketed (`PUZZLE PIECE 01 / 08` .. `08 / 08`).
+3. **The 3-Stage Jigsaw Epiphany (`slide-19` .. `slide-22`):** Put all 8 non-agent demo features around the outer ring of a `3×3` interlocking jigsaw board (`slide-19`), flip all 8 outer pieces over to reveal that each one solves a core agent runtime requirement (`slide-20`), drop the **center keystone (`Model + agent loop`)** into place (`slide-21`), and close with the reveal that even the 22-slide presentation deck ran as sleeping gVisor actors (`slide-22`).
 
 ```mermaid
 flowchart LR
@@ -34,24 +34,30 @@ flowchart LR
 
 | Time | Segment | Duration | Slides & Live Screen | Puzzle Piece / Substrate Primitives |
 |---|---|---|---|---|
-| `00:00` | **Welcome & Rebel Cold Open: Five Non-Agent Workloads** (`cmd/slides`) | `1.5 min` | `slide-01` (Yolo Welcome) → `slide-02` + QR | 3-pod `WorkerPool` multiplexing (save the 16-slide deck reveal for `slide-16`!) |
-| `01:30` | **Demo 1: "I Was Too Lazy to Set Up Postgres"** (`cmd/dungeon2d`) | `3.2 min` | `slide-03` → `dungeon.substrate.learngke.dev` → `slide-04` | **Piece 01/05:** `SNAPSHOT_FIDELITY_MEMORY`, `revert`, `create tag` (`--tag`) |
-| `04:45` | **Demo 2: "Racing Kubernetes HPA on a 12s Cold Start"** (`cmd/coldstart`) | `3.2 min` | `slide-05` → `coldstart.substrate.learngke.dev` → `slide-06` | **Piece 02/05:** `ActorTemplate` + `wakeupProbe` `goldenTag` (~100ms clone) |
-| `08:00` | **Demo 3: "Giving Every Customer Their Own DB Process"** (`cmd/tenantdb`) | `3.0 min` | `slide-07` → `tenantdb.substrate.learngke.dev` → `slide-08` | **Piece 03/05:** `DurableDir` (`/data`), async vs. sync suspend, `delete actor` |
-| `11:00` | **Demo 4: "A Disposable Linux Sandbox Per Attacker IP"** (`cmd/honeypot`) | `3.5 min` | `slide-09` → `honeypot.substrate.learngke.dev` → `slide-10` | **Piece 04/05:** `gVisor` Sentry sandbox, rootfs overlay + forensic `revert`/`--tag` |
-| `14:30` | **Demo 5: "Putting a Raft Leader in the Freezer"** (`cmd/timewarp`) | `3.2 min` | `slide-11` → `timewarp.substrate.learngke.dev` → `slide-12` | **Piece 05/05:** Turn-based `atenet` Wake-on-HTTP, request parking & indefinite wait |
-| `17:45` | **The Jigsaw Epiphany: "Wait... We Built an Agent"** (`cmd/slides`) | `2.2 min` | `slide-13` (Loot) → `slide-14` (Flip) → `slide-15` (9/9) → `slide-16` | `+ ActorEgressPolicy` + `ate-secret://` + `OpenFGA`/`microVM` + `Model & Loop` |
+| `00:00` | **Welcome & Rebel Cold Open: Eight Non-Agent Workloads** (`cmd/slides`) | `1.5 min` | `slide-01` (Yolo Welcome) → `slide-02` + QR | 3-pod `WorkerPool` multiplexing (save the 22-slide deck reveal for `slide-22`!) |
+| `01:30` | **Demo 1: "I Was Too Lazy to Set Up Postgres"** (`cmd/dungeon2d`) | `2.2 min` | `slide-03` → `dungeon.substrate.learngke.dev` → `slide-04` | **Piece 01/08:** `SNAPSHOT_FIDELITY_MEMORY`, `revert`, `create tag` (`--tag`) |
+| `03:45` | **Demo 2: "Racing Kubernetes HPA on a 12s Cold Start"** (`cmd/coldstart`) | `2.2 min` | `slide-05` → `coldstart.substrate.learngke.dev` → `slide-06` | **Piece 02/08:** `ActorTemplate` + `wakeupProbe` `goldenTag` (~100ms clone) |
+| `06:00` | **Demo 3: "Giving Every Customer Their Own DB Process"** (`cmd/tenantdb`) | `2.0 min` | `slide-07` → `tenantdb.substrate.learngke.dev` → `slide-08` | **Piece 03/08:** `DurableDir` (`/data`), async vs. sync suspend, `delete actor` |
+| `08:00` | **Demo 4: "A Disposable Linux Sandbox Per Attacker IP"** (`cmd/honeypot`) | `2.2 min` | `slide-09` → `honeypot.substrate.learngke.dev` → `slide-10` | **Piece 04/08:** `gVisor` Sentry sandbox, rootfs overlay + forensic `revert`/`--tag` |
+| `10:15` | **Demo 5: "Putting a Raft Leader in the Freezer"** (`cmd/timewarp`) | `2.0 min` | `slide-11` → `timewarp.substrate.learngke.dev` → `slide-12` | **Piece 05/08:** Turn-based `atenet` Wake-on-HTTP, request parking & indefinite wait |
+| `12:15` | **Demo 6: "A 3-Stage Hermetic Buildbox That Airgaps Mid-Run"** (`cmd/buildbox`) | `2.0 min` | `slide-13` → `buildbox.substrate.learngke.dev` → `slide-14` | **Piece 06/08:** Dynamic `ActorEgressPolicy` L7 HTTP & DNS airgapping |
+| `14:15` | **Demo 7: "A 30-Day Billing Engine That Never Touches API Keys"** (`cmd/billing`) | `2.0 min` | `slide-15` → `billing.substrate.learngke.dev` → `slide-16` | **Piece 07/08:** `ate-secret://` egress injection & `actorJwt` identity minting |
+| `16:15` | **Demo 8: "Multiplayer Document Rooms with Pre-Wake OpenFGA"** (`cmd/canvas`) | `1.5 min` | `slide-17` → `canvas.substrate.learngke.dev` → `slide-18` | **Piece 08/08:** `OpenFGA AccessPolicy` enforced at router before actor wakeup |
+| `17:45` | **The Jigsaw Epiphany: "Wait... We Built an Agent"** (`cmd/slides`) | `2.2 min` | `slide-19` (Loot) → `slide-20` (Flip) → `slide-21` (9/9) → `slide-22` | 8 demo pieces flip to Agent Superpowers + center `Model + agent loop` keystone |
 
 ## Pre-Stage Setup Checklist
 
 1. **Cluster & Golden Snapshots (`v1.0.0`):** Confirm `kubectl get workerpool anything-but-agents -n anything-but-agents` shows `3/3` ready `ateworker-gvisor` pods and `kubectl ate get actor-templates -a anything-but-agents` has `goldenTag` populated on all templates.
-2. **Browser tabs pre-opened left-to-right (sign in once with Google on Tab 0 to unlock all 6 tabs via cross-subdomain SSO, click the top-right Sun icon for Projector Light Mode if the room is bright, and press `H` on Tab 0 to hide the top bar and bottom Substrate HUD until the `slide-16` reveal):**
+2. **Browser tabs pre-opened left-to-right (sign in once with Google on Tab 0 to unlock all 9 tabs via cross-subdomain SSO, click the top-right Sun icon for Projector Light Mode if the room is bright, and press `H` on Tab 0 to hide the top bar and bottom Substrate HUD until the `slide-22` reveal):**
    - Tab 0: `https://abs.slides.substrate.learngke.dev/deck` (Live Slide Deck)
    - Tab 1: `https://dungeon.substrate.learngke.dev/dashboard` (with QR modal open!) + mobile `/play` tab
    - Tab 2: `https://coldstart.substrate.learngke.dev/dashboard`
    - Tab 3: `https://tenantdb.substrate.learngke.dev/dashboard`
    - Tab 4: `https://honeypot.substrate.learngke.dev/`
    - Tab 5: `https://timewarp.substrate.learngke.dev/dashboard`
+   - Tab 6: `https://buildbox.substrate.learngke.dev/`
+   - Tab 7: `https://billing.substrate.learngke.dev/dashboard`
+   - Tab 8: `https://canvas.substrate.learngke.dev/dashboard`
 3. **Clear stuck actors before walking on stage:** Run `./hack/stage-demo.sh act1-dungeon` once or check `kubectl ate get actors -a anything-but-agents` so all 3 worker slots start free.
 
 ## Minute-by-Minute Show Flow
@@ -197,7 +203,7 @@ sequenceDiagram
 
 | Demo | What the Demo Does | Features We Get from Substrate (`v1.0.0`) |
 |---|---|---|
-| **0. `cmd/slides`** | Presentation deck where each slide (`slide-01..16`) is an actor sleeping in GCS | 16 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` + `asd-puzzle` finale |
+| **0. `cmd/slides`** | Presentation deck where each slide (`slide-01..22`) is an actor sleeping in GCS | 22 sleeping slide actors, 0/3 workers held when idle, `SNAPSHOT_FIDELITY_MEMORY` heap views + `kubectl ate revert` + `asd-puzzle` finale |
 | **1. `cmd/dungeon2d`** | Multi-player 8-floor browser roguelike with zero DB code | `WorkerPool` (`ate.dev/v1`), `atenet` Wake-on-HTTP, `SNAPSHOT_FIDELITY_MEMORY`, `save` / `--snapshot-version`, `revert`, `create tag` + `--tag` |
 | **2. `cmd/coldstart`** | 50k-doc in-memory search engine in a `60 QPS` HPA race | `ActorTemplate` + `wakeupProbe` (`/readyz` -> `goldenTag` Golden Snapshot), ~100ms Copy-on-Write heap restore, pod-decoupled scaling |
 | **3. `cmd/tenantdb`** | 1 isolated DB + 16 MB cache per customer across 3 pods | `DurableDir` (`/data`), `SNAPSHOT_FIDELITY_MEMORY` (`--mode=async`) vs. native `SNAPSHOT_FIDELITY_VOLUMES` (`tenantdb-volumes` / `--mode=sync`, `99.997%` GCS saved), 1-cmd `delete actor` |

@@ -26,8 +26,8 @@ import (
 
 func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 	slides := AllSlideDefs()
-	if len(slides) != 16 {
-		t.Fatalf("expected 16 slides, got %d", len(slides))
+	if len(slides) != 22 {
+		t.Fatalf("expected 22 slides, got %d", len(slides))
 	}
 
 	validLayouts := map[string]bool{
@@ -54,8 +54,8 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 		if s.Index != i+1 {
 			t.Errorf("slide %s has index %d, expected %d", s.ID, s.Index, i+1)
 		}
-		if s.Total != 16 {
-			t.Errorf("slide %s has total %d, expected 16", s.ID, s.Total)
+		if s.Total != 22 {
+			t.Errorf("slide %s has total %d, expected 22", s.ID, s.Total)
 		}
 		if !validLayouts[s.Layout] {
 			t.Errorf("slide %s has unexpected layout %q", s.ID, s.Layout)
@@ -116,7 +116,7 @@ func TestAllSlideDefsCompletenessAndStructure(t *testing.T) {
 			if s.PuzzlePieces[4].Kind != "keystone" {
 				t.Errorf("slide %s expected keystone at center slot 4, got %q", s.ID, s.PuzzlePieces[4].Kind)
 			}
-			expectedFilled := 5
+			expectedFilled := 8
 			if s.PuzzleStage == "complete" {
 				expectedFilled = 9
 			}
@@ -228,8 +228,8 @@ func TestLocalSimulatorBackendLifecycleAndRevert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSlides failed: %v", err)
 	}
-	if len(summaries) != 16 {
-		t.Fatalf("expected 16 summaries, got %d", len(summaries))
+	if len(summaries) != 22 {
+		t.Fatalf("expected 22 summaries, got %d", len(summaries))
 	}
 
 	// GetSlide
@@ -356,8 +356,8 @@ func TestGatewayServerEndpointsAndPresenterAuth(t *testing.T) {
 	if err := json.Unmarshal(sRec.Body.Bytes(), &slidesResp); err != nil {
 		t.Fatalf("failed to unmarshal /api/slides: %v", err)
 	}
-	if len(slidesResp.Slides) != 16 || slidesResp.Total != 16 || !slidesResp.IsPresenter {
-		t.Errorf("expected 16 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
+	if len(slidesResp.Slides) != 22 || slidesResp.Total != 22 || !slidesResp.IsPresenter {
+		t.Errorf("expected 22 slides and IsPresenter=true, got total=%d presenter=%v", slidesResp.Total, slidesResp.IsPresenter)
 	}
 
 	// 5. GET /api/slide/slide-01 with cookie -> 200
@@ -484,8 +484,8 @@ func TestIndexHTMLDesignAndConventions(t *testing.T) {
 		"#56FD5A",
 		"Ubuntu",
 		"Ubuntu Mono",
-		"ATECon",
-		"AGENT SUBSTRATE DAY",
+		"Google Cloud Booth",
+		"AGENT SUBSTRATE",
 		"btnLogout",
 		"/api/auth/presenter.js",
 		"asd-puzzle",

@@ -2189,7 +2189,7 @@ cleanup_all() {
   for actor in hero-mofi hero-timeline-b d2d-mofi d2d-mofi-timeline-b clone-1 clone-2 clone-3 coldstart-1 coldstart-2 coldstart-3 db-acme db-globex db-initech db-umbrella honeypot-203-0-113-5 honeypot-198-51-100-9 honeypot-forensic-lab raft-leader-1 raft-node-1 raft-node-2 raft-node-3 build-pr-104 build-release-v2 build-hotfix-88 sub-acme sub-globex sub-initech doc-merger-acquisition doc-q4-roadmap doc-incident-postmortem; do
     kubectl ate delete actor "${actor}" -a "${ATESPACE}" 2>/dev/null || true
   done
-  for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16; do
+  for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22; do
     kubectl ate delete actor "slide-${i}" -a "${ATESPACE}" 2>/dev/null || true
   done
   kubectl ate delete tag before-dragon -a "${ATESPACE}" 2>/dev/null || true

@@ -64,7 +64,7 @@ func NewGatewayServer(backend SlidesBackend, presenterToken string) *GatewayServ
 		backend: backend,
 		authGate: presenterauth.NewGate(presenterauth.GateConfig{
 			Title:            "Demo 0: Slides on Substrate",
-			Subtitle:         "Sign in with an authorized Google Workspace or event account to present the live 16-slide Agent Substrate Day deck and control sleeping slide actors.",
+			Subtitle:         "Sign in with an authorized Google Workspace or event account to present the live 22-slide Agent Substrate deck and control sleeping slide actors.",
 			SecretName:       "slides-gateway",
 			LegacyCookieName: PresenterCookieName,
 			PresenterToken:   token,
